@@ -109,6 +109,16 @@ export default defineSchema({
     .index("by_writeKey_and_timestamp", ["writeKey", "timestamp"])
     .index("by_writeKey_and_path", ["writeKey", "path"]),
 
+  // -------------------------------------------------------------------------
+  // Rate limiting (simple fixed-window counters)
+  // -------------------------------------------------------------------------
+
+  rateLimits: defineTable({
+    key: v.string(),
+    window: v.number(),
+    count: v.number(),
+  }).index("by_key_and_window", ["key", "window"]),
+
   // Materialized 7-day rolling stats per project.
   // NOTE: Currently computed but NOT read by dashboard queries (they scan raw data).
   // TODO: Either switch queries to use this table, or remove the cron.

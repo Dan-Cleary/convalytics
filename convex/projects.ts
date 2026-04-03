@@ -241,7 +241,7 @@ export const finalizeClaim = internalMutation({
     if (teamIds.length === 0) throw new Error("No team found — sign in first");
 
     const teamId = teamIds[0];
-    await ctx.db.patch(project._id, {
+    await ctx.db.patch("projects", project._id, {
       teamId,
       claimed: true,
       ...(args.convexProjectId ? { convexProjectId: args.convexProjectId } : {}),

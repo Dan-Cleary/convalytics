@@ -49,6 +49,15 @@ http.route({
       return new Response("Invalid write key", { status: 401 });
     }
 
+    // Rate limit: 1000 events per minute per write key
+    const allowed: boolean = await ctx.runMutation(internal.rateLimit.check, {
+      key: `ingest:${writeKey}`,
+      limit: 1000,
+    });
+    if (!allowed) {
+      return new Response("Rate limit exceeded", { status: 429 });
+    }
+
     // Clean props — only ASCII printable keys, scalar values
     // Convex record keys: nonempty, ASCII, must not start with $ or _
     const cleanProps: Record<string, string | number | boolean> = {};
@@ -307,6 +316,18 @@ http.route({
         status: 400,
         headers: { "Content-Type": "application/json" },
       });
+    }
+
+    // Rate limit: 10 provisions per minute globally
+    const allowed: boolean = await ctx.runMutation(internal.rateLimit.check, {
+      key: "provision:global",
+      limit: 10,
+    });
+    if (!allowed) {
+      return new Response(
+        JSON.stringify({ error: "Rate limit exceeded. Try again in a minute." }),
+        { status: 429, headers: { "Content-Type": "application/json" } },
+      );
     }
 
     const { name, convexDeploymentSlug } = body as Record<string, unknown>;
