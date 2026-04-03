@@ -207,7 +207,7 @@ export function ProjectSetup({
         {convexProjects === null || teams === undefined ? (
           <p className="text-xs" style={{ color: "#9b9488" }}>Loading your projects...</p>
         ) : showManual ? (
-          <form className="flex flex-col gap-3" onSubmit={handleManualCreate}>
+          <form className="flex flex-col gap-3" onSubmit={(e) => void handleManualCreate(e)}>
             <input
               className="text-xs px-3 py-2 focus:outline-none"
               style={{ border: "2px solid #1a1814", background: "#fff", color: "#1a1814" }}
@@ -284,7 +284,7 @@ export function ProjectSetup({
             })}
 
             <button
-              onClick={handleConnect}
+              onClick={() => void handleConnect()}
               disabled={selected.size === 0 || submitting || !teamId}
               className="mt-2 py-2.5 text-xs font-bold uppercase tracking-wider transition-colors disabled:opacity-40 cursor-pointer"
               style={{ background: "#e8651c", color: "#fff", border: "2px solid #e8651c" }}

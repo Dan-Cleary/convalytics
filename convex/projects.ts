@@ -148,7 +148,7 @@ export const listTeams = query({
 
     const teams = [];
     for (const membership of memberships) {
-      const team = await ctx.db.get(membership.teamId);
+      const team = await ctx.db.get("teams", membership.teamId);
       if (team) {
         teams.push({
           ...team,

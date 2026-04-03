@@ -16,41 +16,42 @@ export function OAuthCallback({ onSuccess }: OAuthCallbackProps) {
     if (ran.current) return;
     ran.current = true;
 
-    const params = new URLSearchParams(window.location.search);
-    const code = params.get("code");
-    const returnedState = params.get("state");
-    const pkce = getStoredPkce();
+    void (async () => {
+      const params = new URLSearchParams(window.location.search);
+      const code = params.get("code");
+      const returnedState = params.get("state");
+      const pkce = getStoredPkce();
 
-    if (!code || !returnedState || !pkce) {
-      const missing = [
-        !code && "code (not in URL)",
-        !returnedState && "state (not in URL)",
-        !pkce && "PKCE verifier (not in localStorage)",
-      ]
-        .filter(Boolean)
-        .join(", ");
-      setError(`Missing: ${missing}. URL: ${window.location.href}`);
-      return;
-    }
+      if (!code || !returnedState || !pkce) {
+        const missing = [
+          !code && "code (not in URL)",
+          !returnedState && "state (not in URL)",
+          !pkce && "PKCE verifier (not in localStorage)",
+        ]
+          .filter(Boolean)
+          .join(", ");
+        setError(`Missing: ${missing}. URL: ${window.location.href}`);
+        return;
+      }
 
-    if (returnedState !== pkce.state) {
-      setError("State mismatch — possible CSRF. Please try signing in again.");
-      return;
-    }
+      if (returnedState !== pkce.state) {
+        setError("State mismatch — possible CSRF. Please try signing in again.");
+        return;
+      }
 
-    const redirectUri = `${window.location.origin}/oauth/callback`;
+      const redirectUri = `${window.location.origin}/oauth/callback`;
 
-    exchangeCode({ code, codeVerifier: pkce.verifier, redirectUri })
-      .then((sessionToken) => {
+      try {
+        const sessionToken = await exchangeCode({ code, codeVerifier: pkce.verifier, redirectUri });
         clearPkce();
         setSessionToken(sessionToken);
         window.history.replaceState({}, "", "/");
         onSuccess();
-      })
-      .catch((err: Error) => {
+      } catch (err) {
         clearPkce();
-        setError(err.message ?? "Sign-in failed. Please try again.");
-      });
+        setError((err as Error).message ?? "Sign-in failed. Please try again.");
+      }
+    })();
   }, [exchangeCode, onSuccess]);
 
   const bg = { background: "#e9e6db" };

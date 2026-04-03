@@ -80,14 +80,19 @@ export const createSession = internalMutation({
     const now = Date.now();
 
     // 1. Find or create the team (by Convex team ID)
-    let team = await ctx.db
+    const existingTeam = await ctx.db
       .query("teams")
       .withIndex("by_convexTeamId", (q) => q.eq("convexTeamId", args.convexTeamId))
       .unique();
 
-    const isNewTeam = !team;
-    if (!team) {
-      const teamId = await ctx.db.insert("teams", {
+    let teamId: import("./_generated/dataModel").Id<"teams">;
+    let isNewTeam: boolean;
+
+    if (existingTeam) {
+      teamId = existingTeam._id;
+      isNewTeam = false;
+    } else {
+      teamId = await ctx.db.insert("teams", {
         convexTeamId: args.convexTeamId,
         name: `Team ${args.convexTeamId}`, // Default name, user can change later
         slug: `team-${args.convexTeamId}`,
@@ -95,7 +100,7 @@ export const createSession = internalMutation({
         usageLimitEventsPerMonth: 10000, // Free tier default
         createdAt: now,
       });
-      team = (await ctx.db.get(teamId))!;
+      isNewTeam = true;
     }
 
     // 2. Upsert user — permanent record, created on first login
@@ -115,13 +120,13 @@ export const createSession = internalMutation({
     const existingMembership = await ctx.db
       .query("teamMembers")
       .withIndex("by_teamId_and_userId", (q) =>
-        q.eq("teamId", team!._id).eq("userId", args.userId),
+        q.eq("teamId", teamId).eq("userId", args.userId),
       )
       .unique();
 
     if (!existingMembership) {
       await ctx.db.insert("teamMembers", {
-        teamId: team._id,
+        teamId,
         userId: args.userId,
         role: isNewTeam ? "owner" : "member", // First user is owner, rest are members
         joinedAt: now,
@@ -135,7 +140,7 @@ export const createSession = internalMutation({
       .unique();
 
     if (existingSession) {
-      await ctx.db.patch(existingSession._id, {
+      await ctx.db.patch("sessions", existingSession._id, {
         sessionToken: args.sessionToken,
         managementToken: args.managementToken,
         expiresAt: args.expiresAt,

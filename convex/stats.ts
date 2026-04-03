@@ -21,7 +21,7 @@ export const cleanupExpiredSessions = internalMutation({
     const sessions = await ctx.db.query("sessions").collect();
     for (const session of sessions) {
       if (!session.expiresAt || session.expiresAt < now) {
-        await ctx.db.delete(session._id);
+        await ctx.db.delete("sessions", session._id);
         deleted++;
       }
     }
@@ -80,7 +80,7 @@ export const computeStats = internalMutation({
       const pvSessions = new Set(pvs.map((pv) => pv.sessionId)).size;
 
       if (existing) {
-        await ctx.db.patch(existing._id, {
+        await ctx.db.patch("dailyStats", existing._id, {
           activeUsers: visitorSet.size,
           totalEvents: events.length,
           pageViews: pvs.length,
