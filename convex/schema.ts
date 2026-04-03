@@ -1,0 +1,119 @@
+import { defineSchema, defineTable } from "convex/server";
+import { v } from "convex/values";
+
+export default defineSchema({
+  // -------------------------------------------------------------------------
+  // Teams & Users (multi-tenant SaaS model)
+  // -------------------------------------------------------------------------
+
+  // Teams are the unit of ownership and billing. Users auto-join a team based
+  // on their Convex OAuth team. Future: invite flow for non-Convex users.
+  teams: defineTable({
+    convexTeamId: v.number(), // from Convex OAuth
+    name: v.string(),
+    slug: v.string(), // URL-friendly identifier
+    // Billing (future)
+    plan: v.union(v.literal("free"), v.literal("pro"), v.literal("enterprise")),
+    stripeCustomerId: v.optional(v.string()),
+    stripeSubscriptionId: v.optional(v.string()),
+    usageLimitEventsPerMonth: v.number(),
+    createdAt: v.number(),
+  })
+    .index("by_convexTeamId", ["convexTeamId"])
+    .index("by_slug", ["slug"]),
+
+  // Links users to teams. A user can be on multiple teams (future).
+  teamMembers: defineTable({
+    teamId: v.id("teams"),
+    userId: v.string(), // ref: users.userId
+    role: v.union(v.literal("owner"), v.literal("admin"), v.literal("member")),
+    joinedAt: v.number(),
+  })
+    .index("by_teamId", ["teamId"])
+    .index("by_userId", ["userId"])
+    .index("by_teamId_and_userId", ["teamId", "userId"]),
+
+  // Individual users. Created on first login via Convex OAuth.
+  // Future: also created via invite flow (Convex Auth with email/password).
+  users: defineTable({
+    userId: v.string(), // stable ID: "convex:{teamId}" for OAuth users
+    email: v.optional(v.string()), // future: for invited users
+    name: v.optional(v.string()),
+    createdAt: v.number(),
+  }).index("by_userId", ["userId"]),
+
+  // Ephemeral auth tokens. Rotated on each login, expire after 30 days.
+  // managementToken is the Convex OAuth access token — used to call
+  // api.convex.dev on behalf of the user. Expires independently (~1 hour).
+  sessions: defineTable({
+    sessionToken: v.string(),
+    userId: v.string(), // ref: users.userId
+    managementToken: v.string(),
+    expiresAt: v.optional(v.number()), // epoch ms — optional for migration
+  })
+    .index("by_sessionToken", ["sessionToken"])
+    .index("by_userId", ["userId"])
+    .index("by_expiresAt", ["expiresAt"]),
+
+  // -------------------------------------------------------------------------
+  // Projects (analytics projects owned by teams)
+  // -------------------------------------------------------------------------
+
+  projects: defineTable({
+    teamId: v.id("teams"), // team ownership (was: ownerId)
+    name: v.string(),
+    writeKey: v.string(), // secret key sent with each event
+    convexProjectId: v.optional(v.string()), // Convex Management API project id
+  })
+    .index("by_teamId", ["teamId"])
+    .index("by_writeKey", ["writeKey"])
+    .index("by_teamId_and_convexProjectId", ["teamId", "convexProjectId"]),
+
+  // -------------------------------------------------------------------------
+  // Analytics data (collected from end-user websites)
+  //
+  // NOTE: visitorId and sessionId are anonymous identifiers generated in the
+  // browser. They are NOT related to users/sessions tables above (which are
+  // for dashboard authentication).
+  // -------------------------------------------------------------------------
+
+  events: defineTable({
+    writeKey: v.string(),
+    name: v.string(),
+    visitorId: v.string(), // anonymous browser-generated UUID
+    sessionId: v.string(), // browser session UUID
+    timestamp: v.number(),
+    props: v.record(
+      v.string(),
+      v.union(v.string(), v.number(), v.boolean()),
+    ),
+  }).index("by_writeKey_and_timestamp", ["writeKey", "timestamp"]),
+
+  pageviews: defineTable({
+    writeKey: v.string(),
+    visitorId: v.string(), // anonymous browser-generated UUID
+    sessionId: v.string(), // browser session UUID
+    timestamp: v.number(),
+    path: v.string(),
+    referrer: v.string(),
+    referrerHost: v.string(),
+    title: v.string(),
+    utm_source: v.optional(v.string()),
+    utm_medium: v.optional(v.string()),
+    utm_campaign: v.optional(v.string()),
+  })
+    .index("by_writeKey_and_timestamp", ["writeKey", "timestamp"])
+    .index("by_writeKey_and_path", ["writeKey", "path"]),
+
+  // Materialized 7-day rolling stats per project.
+  // NOTE: Currently computed but NOT read by dashboard queries (they scan raw data).
+  // TODO: Either switch queries to use this table, or remove the cron.
+  dailyStats: defineTable({
+    writeKey: v.string(),
+    date: v.string(), // YYYY-MM-DD (snapshot date)
+    activeUsers: v.number(),
+    totalEvents: v.number(),
+    pageViews: v.optional(v.number()),
+    sessions: v.optional(v.number()),
+  }).index("by_writeKey_and_date", ["writeKey", "date"]),
+});
