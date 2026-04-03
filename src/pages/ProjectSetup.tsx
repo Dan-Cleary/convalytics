@@ -29,7 +29,6 @@ export function ProjectSetup({
   const teams = useQuery(api.projects.listTeams, { sessionToken });
   const listConvexProjects = useAction(api.projects.listConvexProjects);
   const createFromConvex = useMutation(api.projects.createFromConvex);
-  const createProject = useMutation(api.projects.create);
 
   const [convexProjects, setConvexProjects] = useState<ConvexProject[] | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -37,26 +36,17 @@ export function ProjectSetup({
   const [submitting, setSubmitting] = useState(false);
   const [created, setCreated] = useState<CreatedProject[] | null>(null);
 
-  const [showManual, setShowManual] = useState(false);
-  const [manualName, setManualName] = useState("");
-  const [manualLoading, setManualLoading] = useState(false);
-
-  // Get the user's primary team (first team they're on)
   const teamId: Id<"teams"> | undefined = teams?.[0]?._id;
 
   useEffect(() => {
     listConvexProjects({ sessionToken })
-      .then((projects) => {
-        setConvexProjects(projects);
-      })
+      .then((projects) => setConvexProjects(projects))
       .catch((err: Error) => {
         setLoadError(err.message);
         setConvexProjects([]);
-        setShowManual(true);
       });
   }, [sessionToken, listConvexProjects]);
 
-  // Projects not yet connected
   const available = (convexProjects ?? []).filter(
     (p) => !existingConvexProjectIds.includes(p.id),
   );
@@ -88,18 +78,6 @@ export function ProjectSetup({
       setCreated(results);
     } finally {
       setSubmitting(false);
-    }
-  }
-
-  async function handleManualCreate(e: React.FormEvent) {
-    e.preventDefault();
-    if (!manualName.trim() || !teamId) return;
-    setManualLoading(true);
-    try {
-      const key = await createProject({ sessionToken, teamId, name: manualName.trim() });
-      setCreated([{ name: manualName.trim(), writeKey: key }]);
-    } finally {
-      setManualLoading(false);
     }
   }
 
@@ -200,56 +178,16 @@ export function ProjectSetup({
             className="text-xs px-3 py-2.5 mb-4 leading-relaxed"
             style={{ background: "#fff3ef", border: "1px solid #e8651c", color: "#b84a0e" }}
           >
-            Could not load your Convex projects. Enter a project name manually below.
+            Could not load your Convex projects: {loadError}
           </div>
         )}
 
         {convexProjects === null || teams === undefined ? (
           <p className="text-xs" style={{ color: "#9b9488" }}>Loading your projects...</p>
-        ) : showManual ? (
-          <form className="flex flex-col gap-3" onSubmit={(e) => void handleManualCreate(e)}>
-            <input
-              className="text-xs px-3 py-2 focus:outline-none"
-              style={{ border: "2px solid #1a1814", background: "#fff", color: "#1a1814" }}
-              type="text"
-              placeholder="Project name (e.g. my-saas-app)"
-              value={manualName}
-              onChange={(e) => setManualName(e.target.value)}
-              required
-              autoFocus
-            />
-            <button
-              className="py-2.5 text-xs font-bold uppercase tracking-wider transition-colors disabled:opacity-50 cursor-pointer"
-              style={{ background: "#1a1814", color: "#e9e6db", border: "2px solid #1a1814" }}
-              type="submit"
-              disabled={manualLoading || !manualName.trim() || !teamId}
-            >
-              {manualLoading ? "Creating..." : "Create project"}
-            </button>
-            {available.length > 0 && (
-              <button
-                type="button"
-                onClick={() => setShowManual(false)}
-                className="text-xs cursor-pointer"
-                style={{ color: "#9b9488" }}
-              >
-                ← Back to project list
-              </button>
-            )}
-          </form>
         ) : available.length === 0 ? (
-          <div>
-            <p className="text-xs mb-4" style={{ color: "#9b9488" }}>
-              All your Convex projects are already connected.
-            </p>
-            <button
-              onClick={() => setShowManual(true)}
-              className="text-xs cursor-pointer"
-              style={{ color: "#6b6456" }}
-            >
-              Create a project manually
-            </button>
-          </div>
+          <p className="text-xs" style={{ color: "#9b9488" }}>
+            All your Convex projects are already connected.
+          </p>
         ) : (
           <div className="flex flex-col gap-2">
             {available.map((project) => {
@@ -276,7 +214,7 @@ export function ProjectSetup({
                     {isSelected ? "✓" : ""}
                   </span>
                   <span className="flex-1 text-sm font-medium">{project.name}</span>
-                  <span className="text-[10px] shrink-0" style={{ color: isSelected ? "#9b9488" : "#9b9488" }}>
+                  <span className="text-[10px] shrink-0" style={{ color: "#9b9488" }}>
                     {project.slug}
                   </span>
                 </button>
@@ -294,14 +232,6 @@ export function ProjectSetup({
                 : selected.size === 0
                 ? "Select projects to connect"
                 : `Connect ${selected.size} project${selected.size > 1 ? "s" : ""}`}
-            </button>
-
-            <button
-              onClick={() => setShowManual(true)}
-              className="mt-1 text-xs cursor-pointer"
-              style={{ color: "#9b9488" }}
-            >
-              Set up manually instead
             </button>
           </div>
         )}

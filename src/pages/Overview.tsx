@@ -1,7 +1,7 @@
 import { useQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { getConvexSiteUrl } from "../lib/convex";
-import { useState } from "react";
+import { useState, useCallback } from "react";
 
 interface OverviewProps {
   sessionToken: string;
@@ -15,12 +15,27 @@ const CARD_STYLE = {
   boxShadow: "4px 4px 0px #1a1814",
 };
 
+const SETUP_DISMISSED_KEY = (writeKey: string) => `cnv_setup_dismissed_${writeKey}`;
+
 export function Overview({ sessionToken, writeKey, projectName }: OverviewProps) {
   const stats = useQuery(api.pageviews.stats, { sessionToken, writeKey });
   const topPages = useQuery(api.pageviews.topPages, { sessionToken, writeKey });
   const topSources = useQuery(api.pageviews.topSources, { sessionToken, writeKey });
   const liveEvents = useQuery(api.pageviews.listLatest, { sessionToken, writeKey });
   const realtimeVisitors = useQuery(api.pageviews.realtimeVisitors, { sessionToken, writeKey });
+  const eventStats = useQuery(api.events.stats7d, { sessionToken, writeKey });
+
+  const [setupDismissed, setSetupDismissed] = useState(() => {
+    try { return localStorage.getItem(SETUP_DISMISSED_KEY(writeKey)) === "1"; } catch { return false; }
+  });
+
+  const dismissSetup = useCallback(() => {
+    try { localStorage.setItem(SETUP_DISMISSED_KEY(writeKey), "1"); } catch { /* localStorage unavailable */ }
+    setSetupDismissed(true);
+  }, [writeKey]);
+
+  const hasData = (stats?.pageViews ?? 0) > 0 || (liveEvents?.length ?? 0) > 0;
+  const showSetup = !setupDismissed && stats !== undefined && liveEvents !== undefined && !hasData;
 
   return (
     <div className="flex flex-col min-h-screen" style={{ background: "#e9e6db" }}>
@@ -53,13 +68,18 @@ export function Overview({ sessionToken, writeKey, projectName }: OverviewProps)
         </div>
       </div>
 
+      {showSetup && (
+        <SetupGuide writeKey={writeKey} projectName={projectName} onDismiss={dismissSetup} />
+      )}
+
       <div className="p-6 flex flex-col gap-5">
-        {/* 4 stat cards */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        {/* Stat cards */}
+        <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
           <StatCard label="Page Views" value={stats?.pageViews} sub="this week" />
           <StatCard label="Unique Visitors" value={stats?.uniqueVisitors} sub="this week" />
           <StatCard label="Sessions" value={stats?.sessions} sub="this week" />
           <StatCard label="Bounce Rate" value={stats?.bounceRate} sub="% single-page" suffix="%" />
+          <StatCard label="Product Events" value={eventStats?.totalEvents} sub="this week" accent />
         </div>
 
         {/* Top pages + traffic sources */}
@@ -144,22 +164,145 @@ export function Overview({ sessionToken, writeKey, projectName }: OverviewProps)
           )}
         </div>
 
-        {/* Quick start */}
-        <div style={CARD_STYLE} className="p-4">
-          <SectionLabel>Quick Start</SectionLabel>
-          <p className="text-xs mb-2 leading-relaxed" style={{ color: "#6b6456" }}>
-            Add to your{" "}
-            <code className="px-1 py-0.5 text-[11px]" style={{ background: "#e9e6db", color: "#1a1814" }}>
-              &lt;head&gt;
-            </code>{" "}
-            for automatic page view tracking:
+      </div>
+    </div>
+  );
+}
+
+function SetupGuide({
+  writeKey,
+  projectName,
+  onDismiss,
+}: {
+  writeKey: string;
+  projectName: string;
+  onDismiss: () => void;
+}) {
+  const siteUrl = getConvexSiteUrl();
+  const scriptTag = `<script defer src="${siteUrl}/script.js?key=${writeKey}"></script>`;
+  const [copied, setCopied] = useState<"script" | "prompt" | null>(null);
+
+  function copy(text: string, which: "script" | "prompt") {
+    void navigator.clipboard.writeText(text).then(() => {
+      setCopied(which);
+      setTimeout(() => setCopied(null), 2000);
+    });
+  }
+
+  const agentPrompt = `Install Convalytics analytics in this Convex project (${projectName}).
+
+First, ask me: do I want (A) web analytics only — page views, sessions, bounce
+rate — or (B) web analytics + product analytics for signups, payments, etc.?
+
+## Option A — Web analytics only
+
+  npx convalytics init ${writeKey}
+
+This adds the script tag to index.html. Page views start flowing automatically.
+For non-Vite projects, add this to <head>:
+
+${scriptTag}
+
+Done — no further setup needed.
+
+## Option B — Web + product analytics
+
+  npx convalytics init ${writeKey}
+
+Same as above, plus installs the Convex component. Then read convex/schema.ts
+and all files in convex/. Propose a tracking plan:
+
+  1. event_name — file.ts → functionName — props: { key }
+
+Wait for me to approve, then instrument each with:
+
+  import { analytics } from "./analytics";
+  await analytics.track(ctx, { name: "event_name", userId: String(userId), props: {} });
+
+Verify: npx convalytics verify ${writeKey}
+
+Full reference: .claude/skills/convalytics/SKILL.md`;
+
+  return (
+    <div
+      className="mx-6 mt-6 p-5"
+      style={{ background: "#fff", border: "2px solid #1a1814", boxShadow: "4px 4px 0px #1a1814" }}
+    >
+      {/* Header */}
+      <div className="flex items-start justify-between mb-4">
+        <div>
+          <p className="text-[10px] font-bold uppercase tracking-widest mb-0.5" style={{ color: "#9b9488" }}>
+            Getting started
           </p>
-          <code
-            className="block text-[11px] px-3 py-2.5 break-all leading-relaxed"
-            style={{ background: "#1a1814", color: "#e8651c" }}
+          <h2 className="text-sm font-bold" style={{ color: "#1a1814" }}>
+            No data yet — install tracking on <span style={{ color: "#e8651c" }}>{projectName}</span>
+          </h2>
+        </div>
+        <button
+          onClick={onDismiss}
+          className="text-xs cursor-pointer ml-4 flex-shrink-0"
+          style={{ color: "#c4bfb2" }}
+          onMouseEnter={(e) => (e.currentTarget.style.color = "#1a1814")}
+          onMouseLeave={(e) => (e.currentTarget.style.color = "#c4bfb2")}
+        >
+          Dismiss
+        </button>
+      </div>
+
+      <div className="flex flex-col lg:flex-row gap-4">
+        {/* Step 1 — Web analytics */}
+        <div className="flex-1">
+          <p className="text-[10px] font-bold uppercase tracking-widest mb-2" style={{ color: "#9b9488" }}>
+            1 · Web Analytics
+          </p>
+          <p className="text-xs mb-2 leading-relaxed" style={{ color: "#6b6456" }}>
+            Add to your <code className="px-1 py-0.5 text-[11px]" style={{ background: "#e9e6db" }}>&lt;head&gt;</code> for automatic page views:
+          </p>
+          <div className="relative">
+            <code
+              className="block text-[11px] px-3 py-2.5 break-all leading-relaxed pr-16"
+              style={{ background: "#1a1814", color: "#e8651c" }}
+            >
+              {scriptTag}
+            </code>
+            <button
+              onClick={() => copy(scriptTag, "script")}
+              className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] font-bold uppercase tracking-wider px-2 py-1 cursor-pointer transition-all"
+              style={{
+                background: copied === "script" ? "#2d7a2d" : "#2e2a22",
+                color: copied === "script" ? "#fff" : "#9b9488",
+              }}
+            >
+              {copied === "script" ? "Copied" : "Copy"}
+            </button>
+          </div>
+        </div>
+
+        {/* Divider */}
+        <div className="hidden lg:block w-px self-stretch" style={{ background: "#e9e6db" }} />
+
+        {/* Step 2 — Product analytics */}
+        <div className="flex-1">
+          <p className="text-[10px] font-bold uppercase tracking-widest mb-2" style={{ color: "#9b9488" }}>
+            2 · Product Analytics
+          </p>
+          <p className="text-xs mb-3 leading-relaxed" style={{ color: "#6b6456" }}>
+            Paste this into your AI coding agent. It reads your codebase, proposes events to track, and instruments them after you approve.
+          </p>
+          <button
+            onClick={() => copy(agentPrompt, "prompt")}
+            className="flex items-center gap-2 px-3 py-2 text-xs font-bold uppercase tracking-wider cursor-pointer transition-all"
+            style={{
+              background: copied === "prompt" ? "#2d7a2d" : "#1a1814",
+              color: "#fff",
+              border: `2px solid ${copied === "prompt" ? "#2d7a2d" : "#1a1814"}`,
+            }}
           >
-            {`<script defer src="${getConvexSiteUrl()}/script.js?key=${writeKey}"></script>`}
-          </code>
+            <span>{copied === "prompt" ? "✓ Copied" : "Copy agent prompt"}</span>
+          </button>
+          <p className="text-[10px] mt-2" style={{ color: "#c4bfb2" }}>
+            One prompt — full setup, event discovery, and instrumentation.
+          </p>
         </div>
       </div>
     </div>
@@ -246,16 +389,21 @@ function StatCard({
   value,
   sub,
   suffix,
+  accent,
 }: {
   label: string;
   value: number | undefined;
   sub: string;
   suffix?: string;
+  accent?: boolean;
 }) {
   return (
     <div style={CARD_STYLE} className="p-5">
       <SectionLabel>{label}</SectionLabel>
-      <p className="text-4xl font-bold tracking-tight leading-none mt-2" style={{ color: "#1a1814" }}>
+      <p
+        className="text-4xl font-bold tracking-tight leading-none mt-2"
+        style={{ color: accent ? "#e8651c" : "#1a1814" }}
+      >
         {value === undefined ? (
           <span style={{ color: "#c4bfb2" }}>—</span>
         ) : (

@@ -8,36 +8,16 @@ const PROPS_VALIDATOR = v.record(
 );
 
 /**
- * Store the write key and ingest URL in the component's config table.
- * Call this once during app setup (e.g. in a setup mutation or init action).
- * Safe to call multiple times — upserts on repeat.
- */
-export const configure = mutation({
-  args: {
-    writeKey: v.string(),
-    ingestUrl: v.string(),
-  },
-  returns: v.null(),
-  handler: async (ctx, args) => {
-    const existing = await ctx.db.query("config").first();
-    if (existing) {
-      await ctx.db.patch(existing._id, args);
-    } else {
-      await ctx.db.insert("config", args);
-    }
-    return null;
-  },
-});
-
-/**
- * Track a server-side event. Reads config from the database, then schedules
- * an action to POST the event to the Convalytics ingest endpoint.
+ * Track a server-side event. writeKey and ingestUrl are passed directly from
+ * the Convalytics class — no separate configure() call required.
  *
- * Mutations cannot call fetch() directly — scheduling an action is the
- * idiomatic Convex pattern for fire-and-forget HTTP calls.
+ * Scheduling an internalAction is the idiomatic Convex pattern for
+ * fire-and-forget HTTP calls from mutations.
  */
 export const track = mutation({
   args: {
+    writeKey: v.string(),
+    ingestUrl: v.string(),
     name: v.string(),
     userId: v.string(),
     sessionId: v.optional(v.string()),
@@ -46,15 +26,9 @@ export const track = mutation({
   },
   returns: v.null(),
   handler: async (ctx, args) => {
-    const config = await ctx.db.query("config").first();
-    if (!config) {
-      throw new Error(
-        "[Convalytics] Not configured. Call analytics.configure(ctx) first.",
-      );
-    }
     await ctx.scheduler.runAfter(0, internal.lib.sendEvent, {
-      writeKey: config.writeKey,
-      ingestUrl: config.ingestUrl,
+      writeKey: args.writeKey,
+      ingestUrl: args.ingestUrl,
       name: args.name,
       userId: args.userId,
       sessionId: args.sessionId ?? crypto.randomUUID(),

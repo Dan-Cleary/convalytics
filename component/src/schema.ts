@@ -1,11 +1,4 @@
-import { defineSchema, defineTable } from "convex/server";
-import { v } from "convex/values";
+import { defineSchema } from "convex/server";
 
-export default defineSchema({
-  // Single-row config table — stores the project's write key and ingest endpoint.
-  // Populated by calling analytics.configure(ctx) once during app setup.
-  config: defineTable({
-    writeKey: v.string(),
-    ingestUrl: v.string(),
-  }),
-});
+// No tables needed — config is passed directly in track() args.
+export default defineSchema({});

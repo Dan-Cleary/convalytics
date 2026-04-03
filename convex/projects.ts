@@ -1,5 +1,5 @@
 import { v } from "convex/values";
-import { action, mutation, query, internalQuery } from "./_generated/server";
+import { action, mutation, query, internalQuery, internalMutation } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { validateSession, getUserTeamIds } from "./authHelpers";
 
@@ -68,19 +68,26 @@ export const listConvexProjects = action({
     const resp = await fetch(url, {
       headers: { Authorization: `Bearer ${session.managementToken}` },
     });
+
     if (!resp.ok) {
       const body = await resp.text().catch(() => "");
       throw new Error(`Failed to fetch Convex projects (${resp.status}): ${body}`);
     }
 
-    const data = (await resp.json()) as {
-      projects: Array<{ id: number; name: string; slug: string }>;
-    };
-    return (data.projects ?? []).map((p) => ({
-      id: String(p.id),
-      name: p.name,
-      slug: p.slug,
-    }));
+    const projects = (await resp.json()) as Array<{
+      id: number;
+      name: string;
+      slug: string;
+    }>;
+
+    // Filter out auto-generated project names and convalytics itself
+    return projects
+      .filter((p) => p.slug !== "convalytics" && !p.name.match(/^m5[0-9a-z]{30,}/))
+      .map((p) => ({
+        id: String(p.id),
+        name: p.name,
+        slug: p.slug,
+      }));
   },
 });
 
@@ -130,6 +137,139 @@ export const validateWriteKey = internalQuery({
     return await ctx.db
       .query("projects")
       .withIndex("by_writeKey", (q) => q.eq("writeKey", args.writeKey))
+      .unique();
+  },
+});
+
+// Agent-first: create an unclaimed project without auth.
+// Returns writeKey + claimToken. Human claims it later.
+export const provision = internalMutation({
+  args: {
+    name: v.string(),
+    convexDeploymentSlug: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const writeKey = crypto.randomUUID();
+    const claimToken = crypto.randomUUID();
+    await ctx.db.insert("projects", {
+      name: args.name,
+      writeKey,
+      claimToken,
+      claimed: false,
+      convexDeploymentSlug: args.convexDeploymentSlug,
+    });
+    return { writeKey, claimToken };
+  },
+});
+
+// Claim an unclaimed project: resolve deployment slug via Management API, then finalize.
+export const claim = action({
+  args: { sessionToken: v.string(), claimToken: v.string() },
+  handler: async (ctx, args): Promise<{ projectId: string; name: string; writeKey: string }> => {
+    const session = await ctx.runQuery(internal.oauth.getSessionByToken, {
+      sessionToken: args.sessionToken,
+    });
+    if (!session) throw new Error("Not authenticated");
+
+    // Look up the unclaimed project to get the deployment slug
+    const project: {
+      convexDeploymentSlug?: string;
+      claimed?: boolean;
+    } | null = await ctx.runQuery(internal.projects.getByClaimTokenInternal, {
+      claimToken: args.claimToken,
+    });
+    if (!project) throw new Error("Invalid or expired claim link");
+    if (project.claimed) throw new Error("This project has already been claimed");
+
+    // If we have a deployment slug, resolve it to a Management API project ID
+    let convexProjectId: string | undefined;
+    if (project.convexDeploymentSlug) {
+      const convexTeamId = session.userId.split(":")[1];
+      if (convexTeamId && convexTeamId !== "undefined") {
+        try {
+          const url = `https://api.convex.dev/v1/teams/${convexTeamId}/list_projects`;
+          const resp = await fetch(url, {
+            headers: { Authorization: `Bearer ${session.managementToken}` },
+          });
+          if (resp.ok) {
+            const apiProjects = (await resp.json()) as Array<{
+              id: number;
+              name: string;
+              slug: string;
+            }>;
+            const matched = apiProjects.find(
+              (p) => p.slug === project.convexDeploymentSlug,
+            );
+            if (matched) {
+              convexProjectId = String(matched.id);
+            }
+          }
+        } catch {
+          // Non-fatal — claim still works, just without the Management API link
+        }
+      }
+    }
+
+    return await ctx.runMutation(internal.projects.finalizeClaim, {
+      claimToken: args.claimToken,
+      sessionToken: args.sessionToken,
+      convexProjectId,
+    });
+  },
+});
+
+// Internal mutation to finalize the claim after the action resolves the slug
+export const finalizeClaim = internalMutation({
+  args: {
+    claimToken: v.string(),
+    sessionToken: v.string(),
+    convexProjectId: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const session = await validateSession(ctx, args.sessionToken);
+    if (!session) throw new Error("Not authenticated");
+
+    const project = await ctx.db
+      .query("projects")
+      .withIndex("by_claimToken", (q) => q.eq("claimToken", args.claimToken))
+      .unique();
+
+    if (!project) throw new Error("Invalid or expired claim link");
+    if (project.claimed) throw new Error("This project has already been claimed");
+
+    const teamIds = await getUserTeamIds(ctx, session.userId);
+    if (teamIds.length === 0) throw new Error("No team found — sign in first");
+
+    const teamId = teamIds[0];
+    await ctx.db.patch(project._id, {
+      teamId,
+      claimed: true,
+      ...(args.convexProjectId ? { convexProjectId: args.convexProjectId } : {}),
+    });
+
+    return { projectId: project._id, name: project.name, writeKey: project.writeKey };
+  },
+});
+
+// Lookup project by claim token (for the claim page UI)
+export const getByClaimToken = query({
+  args: { claimToken: v.string() },
+  handler: async (ctx, args) => {
+    const project = await ctx.db
+      .query("projects")
+      .withIndex("by_claimToken", (q) => q.eq("claimToken", args.claimToken))
+      .unique();
+    if (!project) return null;
+    return { name: project.name, claimed: project.claimed ?? false };
+  },
+});
+
+export const getByClaimTokenInternal = internalQuery({
+  args: { claimToken: v.string() },
+  handler: async (ctx, args) => {
+    return await ctx.db
+      .query("projects")
+      .withIndex("by_claimToken", (q) => q.eq("claimToken", args.claimToken))
       .unique();
   },
 });

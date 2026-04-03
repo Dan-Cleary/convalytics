@@ -49,27 +49,6 @@ npx convex env set CONVALYTICS_WRITE_KEY your_write_key_here
 
 Get your write key from the [Convalytics dashboard](https://convalytics.dev).
 
-### 4. Configure once
-
-Call `analytics.configure(ctx)` once at startup. Add this to a setup mutation or run it from an init action:
-
-```typescript
-import { internalMutation } from "./_generated/server";
-import { analytics } from "./analytics";
-
-export const setup = internalMutation({
-  args: {},
-  handler: async (ctx) => {
-    await analytics.configure(ctx);
-  },
-});
-```
-
-Run it once:
-```bash
-npx convex run --prod setup
-```
-
 ## Usage
 
 ### Track events from mutations
@@ -152,7 +131,12 @@ For browser page view tracking, add to your `<head>`:
 ## Quick setup via CLI
 
 ```bash
-npx convalytics init
+npx convalytics init YOUR_WRITE_KEY
 ```
 
-Installs the package, patches `convex.config.ts`, creates `convex/analytics.ts`, and inserts the script tag automatically.
+Installs the package, patches `convex.config.ts`, creates `convex/analytics.ts`, sets the env var, and inserts the script tag automatically. No configure() call or setup mutation needed.
+
+Verify the pipeline:
+```bash
+npx convalytics verify YOUR_WRITE_KEY
+```

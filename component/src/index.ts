@@ -16,13 +16,12 @@ type TrackArgs = {
 // TypeScript resolves this from the parent app's generated _generated/api.ts.
 type ConvalyticsComponent = {
   lib: {
-    configure: FunctionReference<
+    track: FunctionReference<
       "mutation",
       "public",
-      { writeKey: string; ingestUrl: string },
+      { writeKey: string; ingestUrl: string } & TrackArgs,
       null
     >;
-    track: FunctionReference<"mutation", "public", TrackArgs, null>;
   };
 };
 
@@ -37,6 +36,8 @@ export type { ConvalyticsComponent };
 /**
  * Server-side Convalytics analytics for Convex.
  *
+ * No setup mutation required — just instantiate and track.
+ *
  * @example
  * ```typescript
  * // convex/analytics.ts
@@ -45,6 +46,16 @@ export type { ConvalyticsComponent };
  *
  * export const analytics = new Convalytics(components.convalytics, {
  *   writeKey: process.env.CONVALYTICS_WRITE_KEY!,
+ * });
+ * ```
+ *
+ * @example
+ * ```typescript
+ * // In any mutation or action:
+ * await analytics.track(ctx, {
+ *   name: "user_signed_up",
+ *   userId: String(userId),
+ *   props: { plan: "pro" },
  * });
  * ```
  */
@@ -64,41 +75,31 @@ export class Convalytics {
   }
 
   /**
-   * Store config in the component's database.
-   * Call once during app setup — safe to call on every deploy.
-   *
-   * @example
-   * ```typescript
-   * export const setup = internalMutation({
-   *   handler: async (ctx) => {
-   *     await analytics.configure(ctx);
-   *   },
-   * });
-   * ```
-   */
-  async configure(ctx: RunMutationCtx): Promise<void> {
-    await ctx.runMutation(this.component.lib.configure, {
-      writeKey: this.options.writeKey,
-      ingestUrl: this.options.ingestUrl,
-    });
-  }
-
-  /**
    * Track a server-side event from any Convex mutation or action.
-   * The event is sent asynchronously — it never blocks or throws in the caller.
+   *
+   * Events are delivered asynchronously — this never blocks or throws in the caller.
+   * Analytics failures are logged but never propagate.
    *
    * @example
    * ```typescript
    * export const createUser = mutation({
    *   handler: async (ctx, args) => {
    *     const userId = await ctx.db.insert("users", args);
-   *     await analytics.track(ctx, { name: "user_signed_up", userId: String(userId) });
+   *     await analytics.track(ctx, {
+   *       name: "user_signed_up",
+   *       userId: String(userId),
+   *       props: { plan: args.plan },
+   *     });
    *     return userId;
    *   },
    * });
    * ```
    */
   async track(ctx: RunMutationCtx, event: TrackArgs): Promise<void> {
-    await ctx.runMutation(this.component.lib.track, event);
+    await ctx.runMutation(this.component.lib.track, {
+      writeKey: this.options.writeKey,
+      ingestUrl: this.options.ingestUrl,
+      ...event,
+    });
   }
 }

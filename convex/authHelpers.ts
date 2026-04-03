@@ -88,6 +88,7 @@ export async function validateProjectAccess(
     .unique();
 
   if (!project) return null;
+  if (!project.teamId) return null;
 
   // Check team membership
   const membership = await getTeamMembership(ctx, project.teamId, session.userId);

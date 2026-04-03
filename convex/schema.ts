@@ -60,14 +60,18 @@ export default defineSchema({
   // -------------------------------------------------------------------------
 
   projects: defineTable({
-    teamId: v.id("teams"), // team ownership (was: ownerId)
+    teamId: v.optional(v.id("teams")), // null until claimed by a human
     name: v.string(),
     writeKey: v.string(), // secret key sent with each event
-    convexProjectId: v.optional(v.string()), // Convex Management API project id
+    convexProjectId: v.optional(v.string()), // Convex Management API project id (set at claim)
+    convexDeploymentSlug: v.optional(v.string()), // e.g. "peaceful-bobcat-731" — set by CLI at provision
+    claimToken: v.optional(v.string()), // one-time token for claiming unclaimed projects
+    claimed: v.optional(v.boolean()), // false/undefined = unclaimed, true = claimed
   })
     .index("by_teamId", ["teamId"])
     .index("by_writeKey", ["writeKey"])
-    .index("by_teamId_and_convexProjectId", ["teamId", "convexProjectId"]),
+    .index("by_teamId_and_convexProjectId", ["teamId", "convexProjectId"])
+    .index("by_claimToken", ["claimToken"]),
 
   // -------------------------------------------------------------------------
   // Analytics data (collected from end-user websites)

@@ -7,6 +7,7 @@ import { EventsPage } from "./pages/EventsPage";
 import { PagesPage } from "./pages/PagesPage";
 import { ProjectSetup } from "./pages/ProjectSetup";
 import { OAuthCallback } from "./pages/OAuthCallback";
+import { ClaimPage } from "./pages/ClaimPage";
 import { useState, useCallback } from "react";
 import { clearSession, getSessionToken } from "./lib/auth";
 
@@ -29,6 +30,17 @@ export default function App() {
 
   if (window.location.pathname === "/oauth/callback") {
     return <OAuthCallback onSuccess={handleSignIn} />;
+  }
+
+  const claimMatch = window.location.pathname.match(/^\/claim\/(.+)$/);
+  if (claimMatch) {
+    return (
+      <ClaimPage
+        claimToken={claimMatch[1]}
+        sessionToken={sessionToken}
+        onSignIn={handleSignIn}
+      />
+    );
   }
 
   if (!sessionToken) {

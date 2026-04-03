@@ -1,148 +1,348 @@
 #!/usr/bin/env node
-import { execSync } from "child_process";
-import { existsSync, readFileSync, writeFileSync } from "fs";
-import { join } from "path";
+import { execSync, spawnSync } from "child_process";
+import { existsSync, readFileSync, writeFileSync, mkdirSync } from "fs";
+import { join, dirname } from "path";
+import { fileURLToPath } from "url";
 
-const INGEST_URL = "https://peaceful-bobcat-731.convex.site/ingest";
-const SCRIPT_URL = "https://peaceful-bobcat-731.convex.site/script.js";
+const __dirname = dirname(fileURLToPath(import.meta.url));
+import { createInterface } from "readline";
+
+// ─── Config ─────────────────────────────────────────────────────────────────
+
+const SITE_URL = "https://peaceful-bobcat-731.convex.site";
+const INGEST_URL = `${SITE_URL}/ingest`;
+const PROVISION_URL = `${SITE_URL}/api/provision`;
+const SCRIPT_URL = `${SITE_URL}/script.js`;
+const DASHBOARD_URL = "https://convalytics.dev";
+
+// ─── CLI entry ───────────────────────────────────────────────────────────────
 
 const args = process.argv.slice(2);
-const command = args[0] ?? "init";
+const command = args[0] ?? "help";
 
-if (command !== "init") {
-  console.error(`Unknown command: ${command}`);
-  console.error("Usage: npx convalytics init");
+const commands = { init, verify, help };
+
+if (!commands[command]) {
+  error(`Unknown command: ${command}`);
+  help();
   process.exit(1);
 }
 
-console.log("Convalytics setup\n");
+commands[command]();
 
-// 1. Verify this is a Convex project
-const pkgPath = join(process.cwd(), "package.json");
-if (!existsSync(pkgPath)) {
-  bail("No package.json found. Run this from your project root.");
-}
+// ─── Commands ────────────────────────────────────────────────────────────────
 
-const pkg = JSON.parse(readFileSync(pkgPath, "utf8"));
-const allDeps = { ...pkg.dependencies, ...pkg.devDependencies };
-if (!allDeps.convex) {
-  bail('No "convex" dependency found. Is this a Convex project?');
-}
+async function init() {
+  print("\n╔══════════════════════════════╗");
+  print("║   Convalytics · Setup        ║");
+  print("╚══════════════════════════════╝\n");
 
-const convexDir = join(process.cwd(), "convex");
-if (!existsSync(convexDir)) {
-  bail('No "convex/" directory found. Is this a Convex project?');
-}
+  // 1. Verify this is a Convex project
+  const pkgPath = join(process.cwd(), "package.json");
+  if (!existsSync(pkgPath)) bail("No package.json found. Run this from your project root.");
 
-// 2. Install the component package
-console.log("Installing @convalytics/convex...");
-try {
-  execSync("npm install @convalytics/convex", { stdio: "inherit" });
-} catch {
-  bail("npm install failed. Check your network connection and try again.");
-}
+  const pkg = JSON.parse(readFileSync(pkgPath, "utf8"));
+  const allDeps = { ...pkg.dependencies, ...pkg.devDependencies };
+  if (!allDeps.convex) bail('No "convex" dependency found. Is this a Convex project?');
 
-// 3. Patch convex/convex.config.ts
-const configPath = join(convexDir, "convex.config.ts");
-if (!existsSync(configPath)) {
-  // Create from scratch
-  writeFileSync(
-    configPath,
-    `import { defineApp } from "convex/server";
-import analytics from "@convalytics/convex/convex.config";
+  const convexDir = join(process.cwd(), "convex");
+  if (!existsSync(convexDir)) bail('No "convex/" directory found. Is this a Convex project?');
 
-const app = defineApp();
-app.use(analytics);
+  ok("Convex project detected");
 
-export default app;
-`,
-  );
-  console.log("Created convex/convex.config.ts");
-} else {
-  // File exists — check if already configured
-  const existing = readFileSync(configPath, "utf8");
-  if (existing.includes("@convalytics/convex")) {
-    console.log("convex/convex.config.ts already includes Convalytics — skipping.");
+  // 2. Read Convex deployment info from local config
+  let convexDeploymentSlug = null;
+  for (const envFile of [".env.local", ".env", ".env.development.local"]) {
+    const envPath = join(process.cwd(), envFile);
+    if (existsSync(envPath)) {
+      const envContent = readFileSync(envPath, "utf8");
+      const match = envContent.match(/CONVEX_DEPLOYMENT\s*=\s*\w+:([^\s#]+)/);
+      if (match) {
+        convexDeploymentSlug = match[1];
+        ok(`Convex deployment: ${convexDeploymentSlug}`);
+        break;
+      }
+    }
+  }
+  if (!convexDeploymentSlug) {
+    warn("Could not detect Convex deployment slug from .env.local");
+  }
+
+  // 3. Get or provision write key
+  let writeKey = args[1] ?? process.env.CONVALYTICS_WRITE_KEY ?? "";
+  let claimUrl = null;
+
+  if (writeKey) {
+    print(`  Write key: ${writeKey.slice(0, 8)}${"*".repeat(Math.max(0, writeKey.length - 8))}`);
   } else {
-    // Append usage instructions rather than auto-patching to avoid breaking existing config
-    console.log(
-      "\nconvex/convex.config.ts already exists. Add the following lines manually:\n",
-    );
-    console.log('  import analytics from "@convalytics/convex/convex.config";');
-    console.log("  app.use(analytics);");
-    console.log();
+    step("Provisioning analytics project...");
+    const projectName = pkg.name || "Untitled Project";
+    try {
+      const provisionBody = { name: projectName };
+      if (convexDeploymentSlug) provisionBody.convexDeploymentSlug = convexDeploymentSlug;
+
+      const resp = await fetch(PROVISION_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(provisionBody),
+      });
+      if (!resp.ok) {
+        const body = await resp.text().catch(() => "");
+        bail(`Provisioning failed (${resp.status}): ${body}`);
+      }
+      const data = await resp.json();
+      writeKey = data.writeKey;
+      claimUrl = data.claimUrl;
+      ok(`Project provisioned: ${projectName}`);
+      print(`  Write key: ${writeKey.slice(0, 8)}${"*".repeat(Math.max(0, writeKey.length - 8))}`);
+    } catch (e) {
+      bail(`Could not reach Convalytics: ${e.message}`);
+    }
   }
-}
 
-// 4. Create convex/analytics.ts
-const analyticsPath = join(convexDir, "analytics.ts");
-if (!existsSync(analyticsPath)) {
-  writeFileSync(
-    analyticsPath,
-    `import { components } from "./_generated/api";
-import { Convalytics } from "@convalytics/convex";
+  // 3. Install the component package
+  step("Installing @convalytics/convex...");
+  try {
+    execSync("npm install @convalytics/convex", { stdio: "inherit" });
+    ok("Installed @convalytics/convex");
+  } catch {
+    bail("npm install failed. Check your network connection and try again.");
+  }
 
-export const analytics = new Convalytics(components.convalytics, {
-  writeKey: process.env.CONVALYTICS_WRITE_KEY!,
-});
-`,
+  // 4. Patch convex/convex.config.ts
+  step("Configuring convex/convex.config.ts...");
+  const configPath = join(convexDir, "convex.config.ts");
+  if (!existsSync(configPath)) {
+    writeFileSync(configPath, [
+      `import { defineApp } from "convex/server";`,
+      `import analytics from "@convalytics/convex/convex.config";`,
+      ``,
+      `const app = defineApp();`,
+      `app.use(analytics);`,
+      ``,
+      `export default app;`,
+      ``,
+    ].join("\n"));
+    ok("Created convex/convex.config.ts");
+  } else {
+    const src = readFileSync(configPath, "utf8");
+    if (src.includes("@convalytics/convex")) {
+      ok("convex/convex.config.ts already includes Convalytics");
+    } else {
+      // Inject import after last import line, and app.use() before export default
+      let patched = src;
+
+      const importLine = `import analytics from "@convalytics/convex/convex.config";`;
+      // Insert import after the last existing import line
+      const lastImportIdx = [...patched.matchAll(/^import .+$/gm)].at(-1);
+      if (lastImportIdx !== undefined) {
+        const insertAt = lastImportIdx.index + lastImportIdx[0].length;
+        patched = patched.slice(0, insertAt) + "\n" + importLine + patched.slice(insertAt);
+      } else {
+        patched = importLine + "\n" + patched;
+      }
+
+      // Insert app.use(analytics); before export default
+      patched = patched.replace(
+        /(export default\s+app\s*;)/,
+        `app.use(analytics);\n\n$1`,
+      );
+
+      writeFileSync(configPath, patched);
+      ok("Patched convex/convex.config.ts");
+    }
+  }
+
+  // 5. Create convex/analytics.ts
+  step("Creating convex/analytics.ts...");
+  const analyticsPath = join(convexDir, "analytics.ts");
+  if (existsSync(analyticsPath)) {
+    ok("convex/analytics.ts already exists — skipping");
+  } else {
+    writeFileSync(analyticsPath, [
+      `import { components } from "./_generated/api";`,
+      `import { Convalytics } from "@convalytics/convex";`,
+      ``,
+      `// Singleton — import this wherever you need to track events.`,
+      `export const analytics = new Convalytics(components.convalytics, {`,
+      `  writeKey: process.env.CONVALYTICS_WRITE_KEY!,`,
+      `});`,
+      ``,
+    ].join("\n"));
+    ok("Created convex/analytics.ts");
+  }
+
+  // 6. Set the environment variable via Convex CLI
+  step("Setting CONVALYTICS_WRITE_KEY in Convex environment...");
+  const envResult = spawnSync(
+    "npx",
+    ["convex", "env", "set", "CONVALYTICS_WRITE_KEY", writeKey],
+    { stdio: "inherit", shell: true },
   );
-  console.log("Created convex/analytics.ts");
-} else {
-  console.log("convex/analytics.ts already exists — skipping.");
+  if (envResult.status === 0) {
+    ok("Set CONVALYTICS_WRITE_KEY in Convex environment");
+  } else {
+    warn("Could not set env var automatically. Run manually:");
+    warn(`  npx convex env set CONVALYTICS_WRITE_KEY ${writeKey}`);
+  }
+
+  // 7. Patch index.html if it exists
+  const htmlPath = join(process.cwd(), "index.html");
+  if (existsSync(htmlPath)) {
+    step("Adding script tag to index.html...");
+    const html = readFileSync(htmlPath, "utf8");
+    const scriptTag = `  <script defer src="${SCRIPT_URL}?key=${writeKey}"></script>`;
+    if (html.includes(SCRIPT_URL)) {
+      ok("Script tag already in index.html");
+    } else if (html.includes("</head>")) {
+      writeFileSync(htmlPath, html.replace("</head>", `${scriptTag}\n</head>`));
+      ok("Added script tag to index.html");
+    } else {
+      warn("Could not find </head> in index.html. Add the script tag manually:");
+      warn(`  ${scriptTag}`);
+    }
+  }
+
+  // 8. Install SKILL.md into project for AI agents
+  step("Installing agent skill file...");
+  const skillSrc = join(__dirname, "..", "node_modules", "@convalytics", "convex", "SKILL.md");
+  const skillDst = join(process.cwd(), ".claude", "skills", "convalytics", "SKILL.md");
+  try {
+    if (existsSync(skillSrc) && !existsSync(skillDst)) {
+      mkdirSync(join(process.cwd(), ".claude", "skills", "convalytics"), { recursive: true });
+      writeFileSync(skillDst, readFileSync(skillSrc, "utf8"));
+      ok("Installed SKILL.md → .claude/skills/convalytics/SKILL.md");
+    } else if (!existsSync(skillSrc)) {
+      // Fallback: write it inline if installed from local workspace
+      ok("Skill file: see https://github.com/convalytics/convalytics/blob/main/component/SKILL.md");
+    } else {
+      ok("Agent skill already installed");
+    }
+  } catch {
+    warn("Could not install skill file — add it manually from the docs");
+  }
+
+  // 9. Done
+  print("\n" + "─".repeat(50));
+  print("✅  Setup complete!\n");
+
+  if (claimUrl) {
+    print("╔══════════════════════════════════════════════════╗");
+    print("║  CLAIM YOUR PROJECT                             ║");
+    print("║                                                  ║");
+    print(`║  ${claimUrl}`);
+    print("║                                                  ║");
+    print("║  Share this link with the project owner to       ║");
+    print("║  connect analytics to their Convalytics account. ║");
+    print("╚══════════════════════════════════════════════════╝\n");
+  }
+
+  print("Next: add tracking to your mutations and actions:\n");
+  print(`  import { analytics } from "./analytics";`);
+  print(`  await analytics.track(ctx, {`);
+  print(`    name: "user_signed_up",`);
+  print(`    userId: String(userId),`);
+  print(`    props: { plan: "pro" },`);
+  print(`  });\n`);
+  print(`Verify events are flowing:`);
+  print(`  npx convalytics verify ${writeKey}\n`);
+  print(`Dashboard: ${DASHBOARD_URL}`);
+  print("─".repeat(50) + "\n");
 }
 
-// 5. Patch index.html if present
-const htmlPath = join(process.cwd(), "index.html");
-if (existsSync(htmlPath)) {
-  const html = readFileSync(htmlPath, "utf8");
-  if (html.includes(SCRIPT_URL)) {
-    console.log("Script tag already present in index.html — skipping.");
-  } else if (html.includes("</head>")) {
-    const scriptTag = `  <script defer src="${SCRIPT_URL}?key=CONVALYTICS_WRITE_KEY"></script>`;
-    const patched = html.replace("</head>", `${scriptTag}\n</head>`);
-    writeFileSync(htmlPath, patched);
-    console.log("Added script tag to index.html");
-    console.log(
-      "  Remember to replace CONVALYTICS_WRITE_KEY with your actual write key.",
-    );
+async function verify() {
+  print("\n╔══════════════════════════════╗");
+  print("║   Convalytics · Verify       ║");
+  print("╚══════════════════════════════╝\n");
+
+  let writeKey = args[1] ?? process.env.CONVALYTICS_WRITE_KEY ?? "";
+  if (!writeKey) {
+    writeKey = await prompt("Write key: ");
+    if (!writeKey) bail("Write key is required.");
+  }
+
+  const testEvent = {
+    writeKey,
+    name: "convalytics_verify",
+    userId: `cli-verify-${Date.now()}`,
+    sessionId: crypto.randomUUID(),
+    timestamp: Date.now(),
+    props: { source: "cli", version: "0.1.0" },
+  };
+
+  step(`Sending test event "convalytics_verify" to ${INGEST_URL}...`);
+
+  try {
+    const resp = await fetch(INGEST_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(testEvent),
+    });
+
+    if (resp.ok) {
+      ok(`Event delivered (HTTP ${resp.status})`);
+      print("\n  Check your Convalytics dashboard → Custom Events");
+      print(`  Look for: convalytics_verify\n`);
+      print(`  Dashboard: ${DASHBOARD_URL}\n`);
+    } else {
+      const body = await resp.text().catch(() => "");
+      const msg = body || `HTTP ${resp.status}`;
+      if (resp.status === 401) {
+        error(`Invalid write key. Get your key from ${DASHBOARD_URL}`);
+      } else {
+        error(`Ingest returned ${resp.status}: ${msg}`);
+      }
+      process.exit(1);
+    }
+  } catch (e) {
+    error(`Network error: ${e.message}`);
+    process.exit(1);
   }
 }
 
-// 6. Done — print next steps
-console.log(`
-Done! Next steps:
+function help() {
+  print(`
+Convalytics CLI
 
-  1. Get your write key from https://convalytics.dev
+USAGE
+  npx convalytics <command> [options]
 
-  2. Set the environment variable:
-       npx convex env set CONVALYTICS_WRITE_KEY your_write_key_here
+COMMANDS
+  init [write-key]    Set up Convalytics in a Convex project
+                      If no write key is provided, one is auto-provisioned.
+  verify [write-key]  Send a test event to confirm the pipeline works
+  help                Show this help
 
-  3. Call configure() once to store config in your deployment.
-     Add a setup mutation to convex/setup.ts:
+EXAMPLES
+  npx convalytics init                 Auto-provision (no account needed)
+  npx convalytics init wk_abc123       Use an existing write key
+  npx convalytics verify wk_abc123
 
-       import { internalMutation } from "./_generated/server";
-       import { analytics } from "./analytics";
+The write key can also be set via the CONVALYTICS_WRITE_KEY environment variable.
 
-       export const run = internalMutation({
-         handler: async (ctx) => { await analytics.configure(ctx); },
-       });
-
-     Then run it:
-       npx convex run --prod setup:run
-
-  4. Track events from your mutations and actions:
-
-       await analytics.track(ctx, {
-         name: "user_signed_up",
-         userId: String(userId),
-         props: { plan: "pro" },
-       });
-
-  5. Events appear in your Convalytics dashboard under Custom Events.
+Get your write key from ${DASHBOARD_URL} — or just run init and we'll create one.
 `);
+}
+
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+
+function print(msg) { process.stdout.write(msg + "\n"); }
+function step(msg) { process.stdout.write(`\n  · ${msg}\n`); }
+function ok(msg) { process.stdout.write(`  ✓ ${msg}\n`); }
+function warn(msg) { process.stdout.write(`  ⚠ ${msg}\n`); }
+function error(msg) { process.stderr.write(`  ✗ ${msg}\n`); }
 
 function bail(msg) {
-  console.error(`Error: ${msg}`);
+  error(msg);
   process.exit(1);
+}
+
+function prompt(question) {
+  const rl = createInterface({ input: process.stdin, output: process.stdout });
+  return new Promise((resolve) => {
+    rl.question(`  ${question}`, (answer) => {
+      rl.close();
+      resolve(answer.trim());
+    });
+  });
 }

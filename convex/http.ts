@@ -199,59 +199,45 @@ http.route({
 // Machine-readable setup instructions for AI agents (Claude Code, Cursor, etc.)
 const LLMS_TXT = `# Convalytics
 
-> Analytics for Convex apps. One script tag for web analytics. One npm package for server-side event tracking from mutations and actions.
+> Full-stack analytics for Convex apps. No account needed — agent sets up everything, human claims later.
 
-## Web analytics (browser)
+## How it works
 
-Add to <head> — tracks page views, sessions, bounce rate, referrers automatically:
+1. Run \`npx convalytics init\` — no write key needed, auto-provisions a project
+2. CLI returns a claim URL — share it with the human to connect to their account
+3. Agent reads convex/schema.ts and all mutations/actions to understand the data model
+4. Agent proposes a tracking plan (event names, files, functions, props)
+5. User approves → agent instruments the approved events
+6. Run \`npx convalytics verify\` to confirm
 
-    <script defer src="https://peaceful-bobcat-731.convex.site/script.js?key=WRITE_KEY"></script>
+Events flow immediately — no need to wait for claiming.
 
-## Server-side tracking (Convex component)
-
-Install the component for reliable server-side event tracking from mutations and actions.
-
-### Install
-
-    npm install @convalytics/convex
-
-Or run the init CLI (recommended — handles all steps automatically):
+## Zero-config setup
 
     npx convalytics init
 
-### Manual setup
+Auto-provisions a project, installs the SDK, patches config, sets the env var,
+adds the browser script tag, and installs the agent skill file.
 
-1. convex/convex.config.ts — register the component:
+If the user already has a write key:
 
-    import { defineApp } from "convex/server";
-    import analytics from "@convalytics/convex/convex.config";
-    const app = defineApp();
-    app.use(analytics);
-    export default app;
+    npx convalytics init WRITE_KEY
 
-2. convex/analytics.ts — create a singleton:
+## Event discovery
 
-    import { components } from "./_generated/api";
-    import { Convalytics } from "@convalytics/convex";
-    export const analytics = new Convalytics(components.convalytics, {
-      writeKey: process.env.CONVALYTICS_WRITE_KEY!,
-    });
+After install, read convex/schema.ts and every file in convex/. For each mutation/action
+that represents a user action, propose an event:
 
-3. Set the environment variable:
+- Event name: snake_case noun_verb (user_signed_up, payment_succeeded)
+- File and function where it should be added
+- Props to attach from existing args/data
 
-    npx convex env set CONVALYTICS_WRITE_KEY your_write_key_here
+Aim for 5-15 events covering the core user journey. Skip internal/admin functions.
+Wait for user approval before instrumenting.
 
-4. Configure once (call this mutation once on deploy):
+## Tracking
 
-    import { internalMutation } from "./_generated/server";
     import { analytics } from "./analytics";
-    export const setup = internalMutation({
-      handler: async (ctx) => { await analytics.configure(ctx); },
-    });
-
-    npx convex run --prod setup
-
-5. Track events from any mutation or action:
 
     await analytics.track(ctx, {
       name: "user_signed_up",
@@ -259,18 +245,31 @@ Or run the init CLI (recommended — handles all steps automatically):
       props: { plan: "pro" },
     });
 
-## Environment variables
+## track() API
 
-    CONVALYTICS_WRITE_KEY=<your write key from the Convalytics dashboard>
+    await analytics.track(ctx, {
+      name: string,       // required
+      userId: string,     // required — stable user ID
+      sessionId?: string, // optional
+      timestamp?: number, // optional — unix ms
+      props?: Record<string, string | number | boolean>,
+    });
 
-## Verify
+Works from mutations and actions. Never throws.
 
-Events appear in the Convalytics dashboard under Custom Events within a few seconds.
-Web page views appear under Overview and Pages.
+## Provision API (for programmatic setup)
 
-## Get a write key
+    POST /api/provision
+    Body: { "name": "my-project" }
+    Response: { writeKey, claimUrl, claimToken, ingestUrl, scriptUrl }
 
-Sign in at https://convalytics.dev with your Convex account.
+Creates an unclaimed project. No auth required. Human claims via claimUrl later.
+
+## CLI
+
+    npx convalytics init [write-key]    Full setup (auto-provisions if no key)
+    npx convalytics verify [write-key]  Confirm pipeline works
+    npx convalytics help               Show usage
 `;
 
 http.route({
@@ -282,6 +281,79 @@ http.route({
         "Content-Type": "text/plain; charset=utf-8",
         "Cache-Control": "public, max-age=3600",
         "Access-Control-Allow-Origin": "*",
+      },
+    });
+  }),
+});
+
+// Agent-first: provision an unclaimed project without auth.
+// Returns writeKey + claimUrl. Agent can start tracking immediately.
+http.route({
+  path: "/api/provision",
+  method: "POST",
+  handler: httpAction(async (ctx, req) => {
+    let body: unknown;
+    try {
+      body = await req.json();
+    } catch {
+      return new Response(JSON.stringify({ error: "Invalid JSON" }), {
+        status: 400,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+
+    if (typeof body !== "object" || body === null) {
+      return new Response(JSON.stringify({ error: "Invalid body" }), {
+        status: 400,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+
+    const { name, convexDeploymentSlug } = body as Record<string, unknown>;
+    const projectName = typeof name === "string" && name.trim()
+      ? name.trim().slice(0, 100)
+      : "Untitled Project";
+
+    const result = await ctx.runMutation(internal.projects.provision, {
+      name: projectName,
+      convexDeploymentSlug:
+        typeof convexDeploymentSlug === "string" && convexDeploymentSlug.trim()
+          ? convexDeploymentSlug.trim()
+          : undefined,
+    });
+
+    const siteUrl = new URL(req.url).origin;
+    const dashboardUrl = process.env.CONVALYTICS_DASHBOARD_URL ?? "https://convalytics.dev";
+
+    return new Response(
+      JSON.stringify({
+        writeKey: result.writeKey,
+        claimUrl: `${dashboardUrl}/claim/${result.claimToken}`,
+        claimToken: result.claimToken,
+        ingestUrl: `${siteUrl}/ingest`,
+        scriptUrl: `${siteUrl}/script.js?key=${result.writeKey}`,
+      }),
+      {
+        status: 200,
+        headers: {
+          "Content-Type": "application/json",
+          "Access-Control-Allow-Origin": "*",
+        },
+      },
+    );
+  }),
+});
+
+http.route({
+  path: "/api/provision",
+  method: "OPTIONS",
+  handler: httpAction(async () => {
+    return new Response(null, {
+      status: 204,
+      headers: {
+        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Allow-Methods": "POST, OPTIONS",
+        "Access-Control-Allow-Headers": "Content-Type",
       },
     });
   }),
