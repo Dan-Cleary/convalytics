@@ -1,6 +1,7 @@
 const SESSION_KEY = "convalytics_session";
 const PKCE_VERIFIER_KEY = "convalytics_pkce_verifier";
 const OAUTH_STATE_KEY = "convalytics_oauth_state";
+const RETURN_TO_KEY = "convalytics_return_to";
 
 // Session token storage
 export function getSessionToken(): string | null {
@@ -37,13 +38,16 @@ async function generateCodeChallenge(verifier: string): Promise<string> {
 const CLIENT_ID = "a89dda460f9b4d42";
 const AUTHORIZE_URL = "https://dashboard.convex.dev/oauth/authorize/team";
 
-export async function startOAuthFlow() {
+export async function startOAuthFlow(returnTo?: string) {
   const verifier = await generateCodeVerifier();
   const challenge = await generateCodeChallenge(verifier);
   const state = crypto.randomUUID();
 
   localStorage.setItem(PKCE_VERIFIER_KEY, verifier);
   localStorage.setItem(OAUTH_STATE_KEY, state);
+  if (returnTo) {
+    localStorage.setItem(RETURN_TO_KEY, returnTo);
+  }
 
   const redirectUri = `${window.location.origin}/oauth/callback`;
 
@@ -69,4 +73,10 @@ export function getStoredPkce(): { verifier: string; state: string } | null {
 export function clearPkce() {
   localStorage.removeItem(PKCE_VERIFIER_KEY);
   localStorage.removeItem(OAUTH_STATE_KEY);
+}
+
+export function getReturnTo(): string | null {
+  const val = localStorage.getItem(RETURN_TO_KEY);
+  localStorage.removeItem(RETURN_TO_KEY);
+  return val;
 }

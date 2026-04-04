@@ -178,7 +178,7 @@ export function ClaimPage({
                   e.currentTarget.style.background = "#1a1814";
                   e.currentTarget.style.borderColor = "#1a1814";
                 }}
-                onClick={() => void startOAuthFlow()}
+                onClick={() => void startOAuthFlow(`/claim/${claimToken}`)}
               >
                 <img
                   src="https://www.convex.dev/favicon.ico"

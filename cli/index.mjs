@@ -102,9 +102,14 @@ async function init() {
 
   // 3. Install the component package
   step("Installing @convalytics/convex...");
+  const localComponentPath = join(__dirname, "..", "component");
+  const useLocal = existsSync(join(localComponentPath, "package.json"));
   try {
-    execSync("npm install @convalytics/convex", { stdio: "inherit" });
-    ok("Installed @convalytics/convex");
+    const installTarget = useLocal
+      ? `file:${localComponentPath}`
+      : "@convalytics/convex";
+    execSync(`npm install ${installTarget}`, { stdio: "inherit" });
+    ok(`Installed @convalytics/convex${useLocal ? " (local)" : ""}`);
   } catch {
     bail("npm install failed. Check your network connection and try again.");
   }
@@ -205,15 +210,16 @@ async function init() {
 
   // 8. Install SKILL.md into project for AI agents
   step("Installing agent skill file...");
-  const skillSrc = join(__dirname, "..", "node_modules", "@convalytics", "convex", "SKILL.md");
+  const skillSrcNpm = join(process.cwd(), "node_modules", "@convalytics", "convex", "SKILL.md");
+  const skillSrcLocal = join(localComponentPath, "SKILL.md");
+  const skillSrc = existsSync(skillSrcNpm) ? skillSrcNpm : existsSync(skillSrcLocal) ? skillSrcLocal : null;
   const skillDst = join(process.cwd(), ".claude", "skills", "convalytics", "SKILL.md");
   try {
-    if (existsSync(skillSrc) && !existsSync(skillDst)) {
+    if (skillSrc && !existsSync(skillDst)) {
       mkdirSync(join(process.cwd(), ".claude", "skills", "convalytics"), { recursive: true });
       writeFileSync(skillDst, readFileSync(skillSrc, "utf8"));
       ok("Installed SKILL.md → .claude/skills/convalytics/SKILL.md");
-    } else if (!existsSync(skillSrc)) {
-      // Fallback: write it inline if installed from local workspace
+    } else if (!skillSrc) {
       ok("Skill file: see https://github.com/convalytics/convalytics/blob/main/component/SKILL.md");
     } else {
       ok("Agent skill already installed");

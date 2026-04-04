@@ -34,8 +34,8 @@ export function Overview({ sessionToken, writeKey, projectName }: OverviewProps)
     setSetupDismissed(true);
   }, [writeKey]);
 
-  const hasData = (stats?.pageViews ?? 0) > 0 || (liveEvents?.length ?? 0) > 0;
-  const showSetup = !setupDismissed && stats !== undefined && liveEvents !== undefined && !hasData;
+  const hasData = (stats?.pageViews ?? 0) > 0 || (liveEvents?.length ?? 0) > 0 || (eventStats?.totalEvents ?? 0) > 0;
+  const showSetup = !setupDismissed && stats !== undefined && liveEvents !== undefined && eventStats !== undefined && !hasData;
 
   return (
     <div className="flex flex-col min-h-screen" style={{ background: "#e9e6db" }}>

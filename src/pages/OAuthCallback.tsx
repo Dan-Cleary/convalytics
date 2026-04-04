@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useAction } from "convex/react";
 import { api } from "../../convex/_generated/api";
-import { clearPkce, getStoredPkce, setSessionToken } from "../lib/auth";
+import { clearPkce, getStoredPkce, getReturnTo, setSessionToken } from "../lib/auth";
 
 interface OAuthCallbackProps {
   onSuccess: () => void;
@@ -45,7 +45,8 @@ export function OAuthCallback({ onSuccess }: OAuthCallbackProps) {
         const sessionToken = await exchangeCode({ code, codeVerifier: pkce.verifier, redirectUri });
         clearPkce();
         setSessionToken(sessionToken);
-        window.history.replaceState({}, "", "/");
+        const returnTo = getReturnTo();
+        window.history.replaceState({}, "", returnTo ?? "/");
         onSuccess();
       } catch (err) {
         clearPkce();
