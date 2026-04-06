@@ -96,10 +96,21 @@ export class Convalytics {
    * ```
    */
   async track(ctx: RunMutationCtx, event: TrackArgs): Promise<void> {
-    await ctx.runMutation(this.component.lib.track, {
-      writeKey: this.options.writeKey,
-      ingestUrl: this.options.ingestUrl,
-      ...event,
-    });
+    if (typeof ctx.runMutation !== "function") {
+      console.warn(
+        `[convalytics] analytics.track("${event.name}") called from a query context — ` +
+        `track() can only be used in mutations or actions. This call was ignored.`,
+      );
+      return;
+    }
+    try {
+      await ctx.runMutation(this.component.lib.track, {
+        writeKey: this.options.writeKey,
+        ingestUrl: this.options.ingestUrl,
+        ...event,
+      });
+    } catch (e) {
+      console.error(`[convalytics] Failed to track "${event.name}":`, e);
+    }
   }
 }

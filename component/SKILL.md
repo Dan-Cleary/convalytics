@@ -84,6 +84,7 @@ Guidelines:
 - Prefix AI-related events with `ai_` (e.g. `ai_completion_requested`)
 - Don't over-track. Aim for 5–15 events that capture the core user journey.
 - Skip internal/admin/migration functions
+- **NEVER call `analytics.track()` inside a `query`** — queries don't support mutations and will crash. Only use `track()` in `mutation` or `action` handlers
 - Skip read-only queries — only track mutations and actions that represent user intent
 
 **Wait for the user to approve the plan before instrumenting.**

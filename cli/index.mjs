@@ -197,8 +197,15 @@ async function init() {
     step("Adding script tag to index.html...");
     const html = readFileSync(htmlPath, "utf8");
     const scriptTag = `  <script defer src="${SCRIPT_URL}?key=${writeKey}"></script>`;
-    if (html.includes(SCRIPT_URL)) {
+    if (html.includes(`${SCRIPT_URL}?key=${writeKey}`)) {
       ok("Script tag already in index.html");
+    } else if (html.includes(SCRIPT_URL)) {
+      const updated = html.replace(
+        new RegExp(`<script defer src="${SCRIPT_URL.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\?key=[^"]+"></script>`),
+        `<script defer src="${SCRIPT_URL}?key=${writeKey}"></script>`,
+      );
+      writeFileSync(htmlPath, updated);
+      ok("Updated script tag write key in index.html");
     } else if (html.includes("</head>")) {
       writeFileSync(htmlPath, html.replace("</head>", `${scriptTag}\n</head>`));
       ok("Added script tag to index.html");
