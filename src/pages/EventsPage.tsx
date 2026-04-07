@@ -7,6 +7,7 @@ interface EventsPageProps {
   sessionToken: string;
   writeKey: string;
   projectName: string;
+  environment?: string;
 }
 
 const CARD_STYLE = {
@@ -15,10 +16,10 @@ const CARD_STYLE = {
   boxShadow: "4px 4px 0px #1a1814",
 };
 
-export function EventsPage({ sessionToken, writeKey, projectName }: EventsPageProps) {
-  const events = useQuery(api.events.listLatest, { sessionToken, writeKey, limit: 100 });
-  const stats = useQuery(api.events.stats7d, { sessionToken, writeKey });
-  const topEvents = useQuery(api.events.topEventNames, { sessionToken, writeKey });
+export function EventsPage({ sessionToken, writeKey, projectName, environment }: EventsPageProps) {
+  const events = useQuery(api.events.listLatest, { sessionToken, writeKey, limit: 100, environment });
+  const stats = useQuery(api.events.stats7d, { sessionToken, writeKey, environment });
+  const topEvents = useQuery(api.events.topEventNames, { sessionToken, writeKey, environment });
   const [filter, setFilter] = useState("");
 
   const filtered = (events ?? []).filter((e) => {
@@ -232,8 +233,10 @@ function EventRow({ event }: { event: Doc<"events"> }) {
           {event.name}
         </span>
       </td>
-      <td className="px-5 py-3 font-mono text-xs tabular-nums" style={{ color: "#9b9488" }}>
-        {event.visitorId.slice(0, 12)}
+      <td className="px-5 py-3 text-xs max-w-[200px]" style={{ color: "#9b9488" }}>
+        <span className="block truncate" title={event.visitorId}>
+          {event.userEmail ?? event.userName ?? event.visitorId}
+        </span>
       </td>
       <td className="px-5 py-3 font-mono text-xs hidden lg:table-cell max-w-[300px] truncate" style={{ color: "#9b9488" }}>
         {propsStr || <span style={{ color: "#c4bfb2" }}>—</span>}

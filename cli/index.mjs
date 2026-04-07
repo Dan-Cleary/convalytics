@@ -13,7 +13,7 @@ const SITE_URL = "https://peaceful-bobcat-731.convex.site";
 const INGEST_URL = `${SITE_URL}/ingest`;
 const PROVISION_URL = `${SITE_URL}/api/provision`;
 const SCRIPT_URL = `${SITE_URL}/script.js`;
-const DASHBOARD_URL = "https://convalytics.dev";
+const DASHBOARD_URL = process.env.CONVALYTICS_DASHBOARD_URL || "https://convalytics.dev";
 
 // ─── CLI entry ───────────────────────────────────────────────────────────────
 
@@ -69,6 +69,9 @@ async function init() {
   }
 
   // 3. Get or provision write key
+  // Always provision via the backend — it deduplicates on convexDeploymentSlug,
+  // so running init twice for the same deployment returns the same project.
+  // Explicit write key from CLI arg or shell env skips provisioning.
   let writeKey = args[1] ?? process.env.CONVALYTICS_WRITE_KEY ?? "";
   let claimUrl = null;
 
@@ -171,18 +174,19 @@ async function init() {
       `// Singleton — import this wherever you need to track events.`,
       `export const analytics = new Convalytics(components.convalytics, {`,
       `  writeKey: process.env.CONVALYTICS_WRITE_KEY!,`,
+      `  deploymentName: process.env.CONVALYTICS_DEPLOYMENT_NAME,`,
       `});`,
       ``,
     ].join("\n"));
     ok("Created convex/analytics.ts");
   }
 
-  // 6. Set the environment variable via Convex CLI
+  // 6. Set environment variables via Convex CLI
   step("Setting CONVALYTICS_WRITE_KEY in Convex environment...");
   const envResult = spawnSync(
     "npx",
     ["convex", "env", "set", "CONVALYTICS_WRITE_KEY", writeKey],
-    { stdio: "inherit", shell: true },
+    { stdio: "inherit" },
   );
   if (envResult.status === 0) {
     ok("Set CONVALYTICS_WRITE_KEY in Convex environment");
@@ -191,21 +195,44 @@ async function init() {
     warn(`  npx convex env set CONVALYTICS_WRITE_KEY ${writeKey}`);
   }
 
+  if (convexDeploymentSlug) {
+    if (!isValidDeploymentSlug(convexDeploymentSlug)) {
+      warn(`"${convexDeploymentSlug}" doesn't look like a Convex deployment slug (expected format: word-word-123).`);
+      warn(`Environment tagging may not work correctly. Check your .env.local for the CONVEX_DEPLOYMENT value.`);
+    }
+    step("Setting CONVALYTICS_DEPLOYMENT_NAME for environment tagging...");
+    const dnResult = spawnSync(
+      "npx",
+      ["convex", "env", "set", "CONVALYTICS_DEPLOYMENT_NAME", convexDeploymentSlug],
+      { stdio: "inherit" },
+    );
+    if (dnResult.status === 0) {
+      ok(`Set CONVALYTICS_DEPLOYMENT_NAME = ${convexDeploymentSlug}`);
+    } else {
+      warn("Could not set env var automatically. Run manually:");
+      warn(`  npx convex env set CONVALYTICS_DEPLOYMENT_NAME ${convexDeploymentSlug}`);
+    }
+  }
+
   // 7. Patch index.html if it exists
+  const scriptVersion = "2";
   const htmlPath = join(process.cwd(), "index.html");
   if (existsSync(htmlPath)) {
     step("Adding script tag to index.html...");
     const html = readFileSync(htmlPath, "utf8");
-    const scriptTag = `  <script defer src="${SCRIPT_URL}?key=${writeKey}"></script>`;
-    if (html.includes(`${SCRIPT_URL}?key=${writeKey}`)) {
-      ok("Script tag already in index.html");
-    } else if (html.includes(SCRIPT_URL)) {
+    const scriptTag = `  <script defer src="${SCRIPT_URL}?key=${writeKey}&v=${scriptVersion}"></script>`;
+    if (html.includes(SCRIPT_URL)) {
+      const escapedScriptURL = SCRIPT_URL.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
       const updated = html.replace(
-        new RegExp(`<script defer src="${SCRIPT_URL.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\?key=[^"]+"></script>`),
-        `<script defer src="${SCRIPT_URL}?key=${writeKey}"></script>`,
+        new RegExp(`<script[^>]*\\bsrc=(["'])${escapedScriptURL}\\1[^>]*>[\\s\\S]*?<\\/script>`, 'g'),
+        scriptTag,
       );
-      writeFileSync(htmlPath, updated);
-      ok("Updated script tag write key in index.html");
+      if (updated !== html) {
+        writeFileSync(htmlPath, updated);
+        ok("Updated script tag in index.html");
+      } else {
+        ok("Script tag already in index.html");
+      }
     } else if (html.includes("</head>")) {
       writeFileSync(htmlPath, html.replace("</head>", `${scriptTag}\n</head>`));
       ok("Added script tag to index.html");
@@ -235,15 +262,40 @@ async function init() {
     warn("Could not install skill file — add it manually from the docs");
   }
 
-  // 9. Done
+  // 9. Save .convalytics dotfile for claim URL recovery
+  const dotfilePath = join(process.cwd(), ".convalytics");
+  const dotfileData = { writeKey };
+  if (claimUrl) dotfileData.claimUrl = claimUrl;
+  if (convexDeploymentSlug) dotfileData.deploymentSlug = convexDeploymentSlug;
+  try {
+    const gitignorePath = join(process.cwd(), ".gitignore");
+    if (existsSync(gitignorePath)) {
+      const gitignore = readFileSync(gitignorePath, "utf8");
+      if (!gitignore.includes(".convalytics")) {
+        writeFileSync(gitignorePath, gitignore.trimEnd() + "\n.convalytics\n");
+        ok("Added .convalytics to .gitignore");
+      }
+    } else {
+      writeFileSync(gitignorePath, ".convalytics\n");
+      ok("Created .gitignore with .convalytics entry");
+    }
+
+    writeFileSync(dotfilePath, JSON.stringify(dotfileData, null, 2) + "\n");
+    ok("Saved .convalytics config file");
+  } catch {
+    warn("Could not save .convalytics config file");
+  }
+
+  // 10. Done
   print("\n" + "─".repeat(50));
   print("✅  Setup complete!\n");
 
-  if (claimUrl) {
+  if (claimUrl || (dotfile && dotfile.claimUrl && dotfile.writeKey === writeKey)) {
+    const displayClaimUrl = claimUrl || dotfile.claimUrl;
     print("╔══════════════════════════════════════════════════╗");
     print("║  CLAIM YOUR PROJECT                             ║");
     print("║                                                  ║");
-    print(`║  ${claimUrl}`);
+    print(`║  ${displayClaimUrl}`);
     print("║                                                  ║");
     print("║  Share this link with the project owner to       ║");
     print("║  connect analytics to their Convalytics account. ║");
@@ -268,7 +320,15 @@ async function verify() {
   print("║   Convalytics · Verify       ║");
   print("╚══════════════════════════════╝\n");
 
-  let writeKey = args[1] ?? process.env.CONVALYTICS_WRITE_KEY ?? "";
+  let dotfile = null;
+  try {
+    const dotfilePath = join(process.cwd(), ".convalytics");
+    if (existsSync(dotfilePath)) {
+      dotfile = JSON.parse(readFileSync(dotfilePath, "utf8"));
+    }
+  } catch { /* ignore */ }
+
+  let writeKey = args[1] ?? process.env.CONVALYTICS_WRITE_KEY ?? dotfile?.writeKey ?? "";
   if (!writeKey) {
     writeKey = await prompt("Write key: ");
     if (!writeKey) bail("Write key is required.");
@@ -297,6 +357,9 @@ async function verify() {
       print("\n  Check your Convalytics dashboard → Custom Events");
       print(`  Look for: convalytics_verify\n`);
       print(`  Dashboard: ${DASHBOARD_URL}\n`);
+      if (dotfile && dotfile.claimUrl && dotfile.writeKey === writeKey) {
+        print(`  Claim URL: ${dotfile.claimUrl}\n`);
+      }
     } else {
       const body = await resp.text().catch(() => "");
       const msg = body || `HTTP ${resp.status}`;
@@ -348,6 +411,11 @@ function error(msg) { process.stderr.write(`  ✗ ${msg}\n`); }
 function bail(msg) {
   error(msg);
   process.exit(1);
+}
+
+function isValidDeploymentSlug(slug) {
+  // Expect Convex production deployment slug format: word-word-123
+  return /^[a-z]+-[a-z]+-\d+$/.test(slug);
 }
 
 function prompt(question) {

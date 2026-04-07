@@ -9,6 +9,9 @@ export const ingest = internalMutation({
     visitorId: v.string(),
     sessionId: v.string(),
     timestamp: v.number(),
+    environment: v.optional(v.string()),
+    userEmail: v.optional(v.string()),
+    userName: v.optional(v.string()),
     path: v.string(),
     referrer: v.string(),
     title: v.string(),
@@ -33,18 +36,33 @@ export const stats = query({
   args: {
     sessionToken: v.string(),
     writeKey: v.string(),
+    environment: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    const project = await validateProjectAccess(ctx, args.sessionToken, args.writeKey);
+    const project = await validateProjectAccess(
+      ctx,
+      args.sessionToken,
+      args.writeKey,
+    );
     if (!project) return null;
 
     const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
-    const rows = await ctx.db
-      .query("pageviews")
-      .withIndex("by_writeKey_and_timestamp", (q) =>
-        q.eq("writeKey", args.writeKey).gte("timestamp", sevenDaysAgo),
-      )
-      .take(10000);
+    const rows = args.environment
+      ? await ctx.db
+          .query("pageviews")
+          .withIndex("by_writeKey_and_environment_and_timestamp", (q) =>
+            q
+              .eq("writeKey", args.writeKey)
+              .eq("environment", args.environment)
+              .gte("timestamp", sevenDaysAgo),
+          )
+          .take(10000)
+      : await ctx.db
+          .query("pageviews")
+          .withIndex("by_writeKey_and_timestamp", (q) =>
+            q.eq("writeKey", args.writeKey).gte("timestamp", sevenDaysAgo),
+          )
+          .take(10000);
 
     const pageViews = rows.length;
     const uniqueVisitors = new Set(rows.map((r) => r.visitorId)).size;
@@ -56,7 +74,8 @@ export const stats = query({
       sessionCounts.set(r.sessionId, (sessionCounts.get(r.sessionId) ?? 0) + 1);
     }
     const bounced = [...sessionCounts.values()].filter((c) => c === 1).length;
-    const bounceRate = sessions > 0 ? Math.round((bounced / sessions) * 100) : 0;
+    const bounceRate =
+      sessions > 0 ? Math.round((bounced / sessions) * 100) : 0;
 
     return { pageViews, uniqueVisitors, sessions, bounceRate };
   },
@@ -66,18 +85,33 @@ export const topPages = query({
   args: {
     sessionToken: v.string(),
     writeKey: v.string(),
+    environment: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    const project = await validateProjectAccess(ctx, args.sessionToken, args.writeKey);
+    const project = await validateProjectAccess(
+      ctx,
+      args.sessionToken,
+      args.writeKey,
+    );
     if (!project) return [];
 
     const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
-    const rows = await ctx.db
-      .query("pageviews")
-      .withIndex("by_writeKey_and_timestamp", (q) =>
-        q.eq("writeKey", args.writeKey).gte("timestamp", sevenDaysAgo),
-      )
-      .take(10000);
+    const rows = args.environment
+      ? await ctx.db
+          .query("pageviews")
+          .withIndex("by_writeKey_and_environment_and_timestamp", (q) =>
+            q
+              .eq("writeKey", args.writeKey)
+              .eq("environment", args.environment)
+              .gte("timestamp", sevenDaysAgo),
+          )
+          .take(10000)
+      : await ctx.db
+          .query("pageviews")
+          .withIndex("by_writeKey_and_timestamp", (q) =>
+            q.eq("writeKey", args.writeKey).gte("timestamp", sevenDaysAgo),
+          )
+          .take(10000);
 
     const pageMap = new Map<string, { views: number; visitors: Set<string> }>();
     for (const r of rows) {
@@ -104,18 +138,33 @@ export const topSources = query({
   args: {
     sessionToken: v.string(),
     writeKey: v.string(),
+    environment: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    const project = await validateProjectAccess(ctx, args.sessionToken, args.writeKey);
+    const project = await validateProjectAccess(
+      ctx,
+      args.sessionToken,
+      args.writeKey,
+    );
     if (!project) return { referrers: [], campaigns: [] };
 
     const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
-    const rows = await ctx.db
-      .query("pageviews")
-      .withIndex("by_writeKey_and_timestamp", (q) =>
-        q.eq("writeKey", args.writeKey).gte("timestamp", sevenDaysAgo),
-      )
-      .take(5000);
+    const rows = args.environment
+      ? await ctx.db
+          .query("pageviews")
+          .withIndex("by_writeKey_and_environment_and_timestamp", (q) =>
+            q
+              .eq("writeKey", args.writeKey)
+              .eq("environment", args.environment)
+              .gte("timestamp", sevenDaysAgo),
+          )
+          .take(5000)
+      : await ctx.db
+          .query("pageviews")
+          .withIndex("by_writeKey_and_timestamp", (q) =>
+            q.eq("writeKey", args.writeKey).gte("timestamp", sevenDaysAgo),
+          )
+          .take(5000);
 
     const referrerMap = new Map<string, number>();
     const campaignMap = new Map<string, number>();
@@ -150,18 +199,33 @@ export const realtimeVisitors = query({
   args: {
     sessionToken: v.string(),
     writeKey: v.string(),
+    environment: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    const project = await validateProjectAccess(ctx, args.sessionToken, args.writeKey);
+    const project = await validateProjectAccess(
+      ctx,
+      args.sessionToken,
+      args.writeKey,
+    );
     if (!project) return 0;
 
     const since = Date.now() - 5 * 60 * 1000;
-    const rows = await ctx.db
-      .query("pageviews")
-      .withIndex("by_writeKey_and_timestamp", (q) =>
-        q.eq("writeKey", args.writeKey).gte("timestamp", since),
-      )
-      .take(500);
+    const rows = args.environment
+      ? await ctx.db
+          .query("pageviews")
+          .withIndex("by_writeKey_and_environment_and_timestamp", (q) =>
+            q
+              .eq("writeKey", args.writeKey)
+              .eq("environment", args.environment)
+              .gte("timestamp", since),
+          )
+          .take(500)
+      : await ctx.db
+          .query("pageviews")
+          .withIndex("by_writeKey_and_timestamp", (q) =>
+            q.eq("writeKey", args.writeKey).gte("timestamp", since),
+          )
+          .take(500);
 
     return new Set(rows.map((r) => r.visitorId)).size;
   },
@@ -171,18 +235,31 @@ export const listLatest = query({
   args: {
     sessionToken: v.string(),
     writeKey: v.string(),
+    environment: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    const project = await validateProjectAccess(ctx, args.sessionToken, args.writeKey);
+    const project = await validateProjectAccess(
+      ctx,
+      args.sessionToken,
+      args.writeKey,
+    );
     if (!project) return [];
 
-    const rows = await ctx.db
-      .query("pageviews")
-      .withIndex("by_writeKey_and_timestamp", (q) =>
-        q.eq("writeKey", args.writeKey),
-      )
-      .order("desc")
-      .take(30);
+    const rows = args.environment
+      ? await ctx.db
+          .query("pageviews")
+          .withIndex("by_writeKey_and_environment_and_timestamp", (q) =>
+            q.eq("writeKey", args.writeKey).eq("environment", args.environment),
+          )
+          .order("desc")
+          .take(30)
+      : await ctx.db
+          .query("pageviews")
+          .withIndex("by_writeKey_and_timestamp", (q) =>
+            q.eq("writeKey", args.writeKey),
+          )
+          .order("desc")
+          .take(30);
 
     return rows.map((r) => ({
       _id: r._id,
@@ -192,6 +269,9 @@ export const listLatest = query({
       visitorId: r.visitorId,
       sessionId: r.sessionId,
       timestamp: r.timestamp,
+      environment: r.environment,
+      userEmail: r.userEmail,
+      userName: r.userName,
     }));
   },
 });

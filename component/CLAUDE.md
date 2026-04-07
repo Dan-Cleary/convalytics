@@ -14,11 +14,46 @@ Track from any mutation or action:
 
 ```typescript
 await analytics.track(ctx, {
-  name: "event_name",       // snake_case, required
-  userId: String(userId),   // stable user ID, required
-  props: { key: "value" },  // optional key/value metadata
+  name: "event_name",        // snake_case, required
+  userId: String(userId),    // stable user ID, required
+  userEmail: identity.email, // optional — human-readable email for dashboard
+  userName: identity.name,   // optional — human-readable name for dashboard
+  props: { key: "value" },   // optional key/value metadata
 });
 ```
+
+## User identity
+
+### Server-side (mutations/actions)
+
+Pass `userEmail` and/or `userName` to `track()` for human-readable display in the dashboard:
+
+```typescript
+const identity = await ctx.auth.getUserIdentity();
+await analytics.track(ctx, {
+  name: "user_signed_up",
+  userId: String(userId),
+  userEmail: identity?.email,
+  userName: identity?.name,
+  props: { plan: args.plan },
+});
+```
+
+### Browser-side (script tag)
+
+Call `convalytics.identify()` after sign-in to link anonymous visitors to real users:
+
+```typescript
+convalytics.identify(user.id, { email: user.email, name: user.name })
+```
+
+On sign-out, call `convalytics.reset()` to revert to anonymous tracking:
+
+```typescript
+convalytics.reset()
+```
+
+The dashboard shows: `userEmail` > `userName` > anonymous `visitorId` (truncated).
 
 ## Common patterns
 
@@ -28,12 +63,14 @@ const userId = await ctx.db.insert("users", args);
 await analytics.track(ctx, { name: "user_created", userId: String(userId) });
 ```
 
-**After a state change:**
+**After a state change (with user identity):**
 ```typescript
+const identity = await ctx.auth.getUserIdentity();
 await ctx.db.patch(subscriptionId, { status: "active" });
 await analytics.track(ctx, {
   name: "subscription_activated",
   userId: args.userId,
+  userEmail: identity?.email,
   props: { plan: args.plan, interval: args.interval },
 });
 ```
@@ -50,15 +87,12 @@ await analytics.track(ctx, {
 ## Configuration
 
 The write key is stored in `CONVALYTICS_WRITE_KEY` environment variable.
+The deployment name is stored in `CONVALYTICS_DEPLOYMENT_NAME` for environment tagging.
 
-Set it via Convex dashboard or:
+Set them via Convex dashboard or:
 ```bash
 npx convex env set CONVALYTICS_WRITE_KEY your_key_here
-```
-
-If events aren't showing up in the dashboard, run the setup mutation:
-```bash
-npx convex run --prod setup  # or whatever your configure mutation is named
+npx convex env set CONVALYTICS_DEPLOYMENT_NAME your_deployment_slug
 ```
 
 ## Verify events are flowing

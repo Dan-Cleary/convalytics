@@ -4,29 +4,53 @@ import { internal } from "./_generated/api";
 
 const http = httpRouter();
 
+function corsHeaders(req: Request) {
+  const origin = req.headers.get("Origin") ?? "*";
+  return {
+    "Access-Control-Allow-Origin": origin,
+    "Access-Control-Allow-Credentials": "true",
+  };
+}
+
 http.route({
   path: "/ingest",
   method: "POST",
   handler: httpAction(async (ctx, req) => {
+    const cors = corsHeaders(req);
+
     let body: unknown;
     try {
-      body = await req.json();
+      const text = await req.text();
+      body = JSON.parse(text);
     } catch {
-      return new Response("Invalid JSON", { status: 400 });
+      return new Response("Invalid JSON", { status: 400, headers: cors });
     }
 
     if (typeof body !== "object" || body === null) {
-      return new Response("Invalid body", { status: 400 });
+      return new Response("Invalid body", { status: 400, headers: cors });
     }
 
     const {
       writeKey,
       name,
-      userId, // External API uses "userId" for developer clarity
+      userId,
       sessionId,
       timestamp,
       props,
+      deploymentName,
+      pageOrigin,
+      userEmail: rawUserEmail,
+      userName: rawUserName,
     } = body as Record<string, unknown>;
+
+    const userEmail =
+      typeof rawUserEmail === "string" && rawUserEmail
+        ? rawUserEmail.slice(0, 200)
+        : undefined;
+    const userName =
+      typeof rawUserName === "string" && rawUserName
+        ? rawUserName.slice(0, 200)
+        : undefined;
 
     if (
       typeof writeKey !== "string" ||
@@ -37,29 +61,55 @@ http.route({
     ) {
       return new Response(
         "Missing required fields: writeKey, name, userId, sessionId, timestamp",
-        { status: 400 },
+        { status: 400, headers: cors },
       );
     }
 
-    // Validate write key
     const project = await ctx.runQuery(internal.projects.validateWriteKey, {
       writeKey,
     });
     if (!project) {
-      return new Response("Invalid write key", { status: 401 });
+      return new Response("Invalid write key", { status: 401, headers: cors });
     }
 
-    // Rate limit: 1000 events per minute per write key
     const allowed: boolean = await ctx.runMutation(internal.rateLimit.check, {
       key: `ingest:${writeKey}`,
       limit: 1000,
     });
     if (!allowed) {
-      return new Response("Rate limit exceeded", { status: 429 });
+      return new Response("Rate limit exceeded", {
+        status: 429,
+        headers: cors,
+      });
     }
 
-    // Clean props — only ASCII printable keys, scalar values
-    // Convex record keys: nonempty, ASCII, must not start with $ or _
+    // Resolve environment: deployment name lookup for server-side events,
+    // origin hostname for web analytics
+    let environment: string | undefined;
+    if (typeof deploymentName === "string" && deploymentName) {
+      const resolved: string | null = await ctx.runQuery(
+        internal.deploymentTypes.resolve,
+        { deploymentName },
+      );
+      environment = resolved ?? "development";
+    } else {
+      const origin =
+        typeof pageOrigin === "string" && pageOrigin
+          ? pageOrigin
+          : (req.headers.get("Origin") ?? "");
+      try {
+        const hostname = new URL(origin).hostname;
+        environment =
+          hostname === "localhost" ||
+          hostname === "127.0.0.1" ||
+          hostname === "0.0.0.0"
+            ? "development"
+            : "production";
+      } catch {
+        environment = undefined;
+      }
+    }
+
     const cleanProps: Record<string, string | number | boolean> = {};
     if (typeof props === "object" && props !== null) {
       for (const [k, v] of Object.entries(props as Record<string, unknown>)) {
@@ -77,7 +127,6 @@ http.route({
       }
     }
 
-    // Internally we use "visitorId" to distinguish from dashboard users
     const visitorId = userId;
 
     if (name === "page_view") {
@@ -86,12 +135,33 @@ http.route({
         visitorId,
         sessionId,
         timestamp,
-        path: (typeof cleanProps.path === "string" ? cleanProps.path : "").slice(0, 500),
-        referrer: (typeof cleanProps.referrer === "string" ? cleanProps.referrer : "").slice(0, 500),
-        title: (typeof cleanProps.title === "string" ? cleanProps.title : "").slice(0, 200),
-        utm_source: typeof cleanProps.utm_source === "string" ? cleanProps.utm_source : undefined,
-        utm_medium: typeof cleanProps.utm_medium === "string" ? cleanProps.utm_medium : undefined,
-        utm_campaign: typeof cleanProps.utm_campaign === "string" ? cleanProps.utm_campaign : undefined,
+        environment,
+        userEmail,
+        userName,
+        path: (typeof cleanProps.path === "string"
+          ? cleanProps.path
+          : ""
+        ).slice(0, 500),
+        referrer: (typeof cleanProps.referrer === "string"
+          ? cleanProps.referrer
+          : ""
+        ).slice(0, 500),
+        title: (typeof cleanProps.title === "string"
+          ? cleanProps.title
+          : ""
+        ).slice(0, 200),
+        utm_source:
+          typeof cleanProps.utm_source === "string"
+            ? cleanProps.utm_source
+            : undefined,
+        utm_medium:
+          typeof cleanProps.utm_medium === "string"
+            ? cleanProps.utm_medium
+            : undefined,
+        utm_campaign:
+          typeof cleanProps.utm_campaign === "string"
+            ? cleanProps.utm_campaign
+            : undefined,
       });
     } else {
       await ctx.runMutation(internal.events.ingest, {
@@ -100,14 +170,14 @@ http.route({
         visitorId,
         sessionId,
         timestamp,
+        environment,
+        userEmail,
+        userName,
         props: cleanProps,
       });
     }
 
-    return new Response(null, {
-      status: 200,
-      headers: { "Access-Control-Allow-Origin": "*" },
-    });
+    return new Response(null, { status: 200, headers: cors });
   }),
 });
 
@@ -139,21 +209,37 @@ const TRACKING_SCRIPT = `(function(){
     } catch(e) { return newId(); }
   }
 
-  var visitorId = persist(localStorage,  '_cnv_uid');
+  var anonId = persist(localStorage,  '_cnv_uid');
   var sessionId = persist(sessionStorage, '_cnv_sid');
+
+  function getIdentified() {
+    try {
+      var uid = localStorage.getItem('_cnv_identified_uid');
+      if (!uid) return null;
+      var traits = JSON.parse(localStorage.getItem('_cnv_traits') || 'null') || {};
+      return { userId: uid, email: traits.email || undefined, name: traits.name || undefined };
+    } catch(e) { return null; }
+  }
 
   function send(name, props) {
     try {
-      var payload = JSON.stringify({
+      var id = getIdentified();
+      var payload = {
         writeKey: key, name: name,
-        userId: visitorId, sessionId: sessionId,
-        timestamp: Date.now(), props: props
-      });
+        userId: id ? id.userId : anonId, sessionId: sessionId,
+        timestamp: Date.now(), props: props,
+        pageOrigin: location.origin
+      };
+      if (id) {
+        if (id.email) payload.userEmail = id.email;
+        if (id.name) payload.userName = id.name;
+      }
+      var body = JSON.stringify(payload);
       if (navigator.sendBeacon) {
-        navigator.sendBeacon(endpoint, new Blob([payload], { type: 'application/json' }));
+        navigator.sendBeacon(endpoint, new Blob([body], { type: 'text/plain' }));
       } else {
-        fetch(endpoint, { method: 'POST', body: payload,
-          headers: { 'Content-Type': 'application/json' }, keepalive: true });
+        fetch(endpoint, { method: 'POST', body: body,
+          headers: { 'Content-Type': 'text/plain' }, keepalive: true, mode: 'cors' });
       }
     } catch(e) {}
   }
@@ -189,6 +275,34 @@ const TRACKING_SCRIPT = `(function(){
   var origPush = history.pushState;
   history.pushState = function() { origPush.apply(this, arguments); pageview(); };
   window.addEventListener('popstate', pageview);
+
+  window.convalytics = {
+    track: function(name, props) {
+      if (!name || typeof name !== 'string') return;
+      send(name, props || {});
+    },
+    identify: function(userId, traits) {
+      if (!userId || typeof userId !== 'string') return;
+      try {
+        var previousUid = localStorage.getItem('_cnv_identified_uid');
+        localStorage.setItem('_cnv_identified_uid', userId);
+        if (traits && typeof traits === 'object') {
+          localStorage.setItem('_cnv_traits', JSON.stringify({
+            email: traits.email || undefined,
+            name: traits.name || undefined
+          }));
+        } else if (previousUid !== userId) {
+          localStorage.removeItem('_cnv_traits');
+        }
+      } catch(e) {}
+    },
+    reset: function() {
+      try {
+        localStorage.removeItem('_cnv_identified_uid');
+        localStorage.removeItem('_cnv_traits');
+      } catch(e) {}
+    }
+  };
 })();`;
 
 http.route({
@@ -198,7 +312,8 @@ http.route({
     return new Response(TRACKING_SCRIPT, {
       headers: {
         "Content-Type": "application/javascript; charset=utf-8",
-        "Cache-Control": "public, max-age=86400",
+        "Cache-Control": "public, max-age=300, s-maxage=300",
+        "CDN-Cache-Control": "max-age=300",
         "Access-Control-Allow-Origin": "*",
       },
     });
@@ -248,23 +363,51 @@ Wait for user approval before instrumenting.
 
     import { analytics } from "./analytics";
 
+    const identity = await ctx.auth.getUserIdentity();
     await analytics.track(ctx, {
       name: "user_signed_up",
       userId: String(userId),
+      userEmail: identity?.email,  // first-class field — NOT in props
       props: { plan: "pro" },
     });
 
-## track() API
+## Server-side track() API
 
     await analytics.track(ctx, {
-      name: string,       // required
-      userId: string,     // required — stable user ID
-      sessionId?: string, // optional
-      timestamp?: number, // optional — unix ms
+      name: string,        // required
+      userId: string,      // required — stable user ID
+      userEmail?: string,  // optional — human-readable email for dashboard
+      userName?: string,   // optional — human-readable name for dashboard
+      sessionId?: string,  // optional
+      timestamp?: number,  // optional — unix ms
       props?: Record<string, string | number | boolean>,
     });
 
 Works from mutations and actions. Never throws.
+When userEmail/userName is provided, the dashboard shows it instead of raw IDs.
+
+## Browser-side track() API
+
+The script tag also exposes window.convalytics.track() for frontend events:
+
+    convalytics.track("button_clicked", { page: "settings", action: "save" })
+
+No import needed — available globally once the script loads.
+Uses the same visitor/session IDs as page views.
+
+## User Identity (identify / reset)
+
+For apps with auth, call identify() after sign-in so page views and events
+show the real user instead of an anonymous UUID:
+
+    convalytics.identify(userId, { email: "dan@example.com", name: "Dan" })
+
+On sign-out, call reset() to revert to anonymous tracking:
+
+    convalytics.reset()
+
+Identity persists in localStorage across page reloads until reset() is called.
+The dashboard shows email > name > anonymous ID with cascading priority.
 
 ## Provision API (for programmatic setup)
 
@@ -273,6 +416,26 @@ Works from mutations and actions. Never throws.
     Response: { writeKey, claimUrl, claimToken, ingestUrl, scriptUrl }
 
 Creates an unclaimed project. No auth required. Human claims via claimUrl later.
+
+## Environment Tagging
+
+Events are automatically tagged as "development" or "production":
+
+- Server-side events: reads CONVALYTICS_DEPLOYMENT_NAME env var, resolves
+  deployment type (dev → development, prod → production) via cached metadata.
+- Browser-side events: script includes page origin in each payload (localhost → development).
+
+The CLI sets CONVALYTICS_DEPLOYMENT_NAME automatically during init.
+
+If events show under "All" but not under Dev/Prod filters, check:
+
+    npx convex env list
+
+Set it manually if missing:
+
+    npx convex env set CONVALYTICS_DEPLOYMENT_NAME YOUR_DEPLOYMENT_SLUG
+
+The deployment slug is from .env.local (e.g. "colorful-capybara-119").
 
 ## CLI
 
@@ -325,15 +488,18 @@ http.route({
     });
     if (!allowed) {
       return new Response(
-        JSON.stringify({ error: "Rate limit exceeded. Try again in a minute." }),
+        JSON.stringify({
+          error: "Rate limit exceeded. Try again in a minute.",
+        }),
         { status: 429, headers: { "Content-Type": "application/json" } },
       );
     }
 
     const { name, convexDeploymentSlug } = body as Record<string, unknown>;
-    const projectName = typeof name === "string" && name.trim()
-      ? name.trim().slice(0, 100)
-      : "Untitled Project";
+    const projectName =
+      typeof name === "string" && name.trim()
+        ? name.trim().slice(0, 100)
+        : "Untitled Project";
 
     const result = await ctx.runMutation(internal.projects.provision, {
       name: projectName,
@@ -344,7 +510,8 @@ http.route({
     });
 
     const siteUrl = new URL(req.url).origin;
-    const dashboardUrl = process.env.CONVALYTICS_DASHBOARD_URL ?? "https://convalytics.dev";
+    const dashboardUrl =
+      process.env.CONVALYTICS_DASHBOARD_URL ?? "https://convalytics.dev";
 
     return new Response(
       JSON.stringify({
@@ -368,11 +535,11 @@ http.route({
 http.route({
   path: "/api/provision",
   method: "OPTIONS",
-  handler: httpAction(async () => {
+  handler: httpAction(async (_, req) => {
     return new Response(null, {
       status: 204,
       headers: {
-        "Access-Control-Allow-Origin": "*",
+        ...corsHeaders(req),
         "Access-Control-Allow-Methods": "POST, OPTIONS",
         "Access-Control-Allow-Headers": "Content-Type",
       },
@@ -384,11 +551,11 @@ http.route({
 http.route({
   path: "/ingest",
   method: "OPTIONS",
-  handler: httpAction(async () => {
+  handler: httpAction(async (_, req) => {
     return new Response(null, {
       status: 204,
       headers: {
-        "Access-Control-Allow-Origin": "*",
+        ...corsHeaders(req),
         "Access-Control-Allow-Methods": "POST, OPTIONS",
         "Access-Control-Allow-Headers": "Content-Type",
       },

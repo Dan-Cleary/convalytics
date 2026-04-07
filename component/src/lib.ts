@@ -23,6 +23,9 @@ export const track = mutation({
     sessionId: v.optional(v.string()),
     timestamp: v.optional(v.number()),
     props: v.optional(PROPS_VALIDATOR),
+    deploymentName: v.optional(v.string()),
+    userEmail: v.optional(v.string()),
+    userName: v.optional(v.string()),
   },
   returns: v.null(),
   handler: async (ctx, args) => {
@@ -34,6 +37,9 @@ export const track = mutation({
       sessionId: args.sessionId ?? crypto.randomUUID(),
       timestamp: args.timestamp ?? Date.now(),
       props: args.props ?? {},
+      deploymentName: args.deploymentName,
+      userEmail: args.userEmail,
+      userName: args.userName,
     });
     return null;
   },
@@ -52,21 +58,29 @@ export const sendEvent = internalAction({
     sessionId: v.string(),
     timestamp: v.number(),
     props: PROPS_VALIDATOR,
+    deploymentName: v.optional(v.string()),
+    userEmail: v.optional(v.string()),
+    userName: v.optional(v.string()),
   },
   returns: v.null(),
   handler: async (_ctx, args) => {
     try {
+      const payload: Record<string, unknown> = {
+        writeKey: args.writeKey,
+        name: args.name,
+        userId: args.userId,
+        sessionId: args.sessionId,
+        timestamp: args.timestamp,
+        props: args.props,
+        deploymentName: args.deploymentName,
+      };
+      if (args.userEmail) payload.userEmail = args.userEmail;
+      if (args.userName) payload.userName = args.userName;
+
       const resp = await fetch(args.ingestUrl, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          writeKey: args.writeKey,
-          name: args.name,
-          userId: args.userId,
-          sessionId: args.sessionId,
-          timestamp: args.timestamp,
-          props: args.props,
-        }),
+        body: JSON.stringify(payload),
       });
       if (!resp.ok) {
         console.error(`[Convalytics] Ingest returned ${resp.status}: ${await resp.text()}`);
