@@ -186,7 +186,7 @@ async function init() {
   const envResult = spawnSync(
     "npx",
     ["convex", "env", "set", "CONVALYTICS_WRITE_KEY", writeKey],
-    { stdio: "inherit", shell: true },
+    { stdio: "inherit" },
   );
   if (envResult.status === 0) {
     ok("Set CONVALYTICS_WRITE_KEY in Convex environment");
@@ -204,7 +204,7 @@ async function init() {
     const dnResult = spawnSync(
       "npx",
       ["convex", "env", "set", "CONVALYTICS_DEPLOYMENT_NAME", convexDeploymentSlug],
-      { stdio: "inherit", shell: true },
+      { stdio: "inherit" },
     );
     if (dnResult.status === 0) {
       ok(`Set CONVALYTICS_DEPLOYMENT_NAME = ${convexDeploymentSlug}`);

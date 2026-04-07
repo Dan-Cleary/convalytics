@@ -26,6 +26,11 @@ export function Overview({ sessionToken, writeKey, projectName, environment }: O
   const realtimeVisitors = useQuery(api.pageviews.realtimeVisitors, { sessionToken, writeKey, environment });
   const eventStats = useQuery(api.events.stats7d, { sessionToken, writeKey, environment });
 
+  // Unscoped queries for setup banner (project-level data check)
+  const statsUnscoped = useQuery(api.pageviews.stats, { sessionToken, writeKey });
+  const liveEventsUnscoped = useQuery(api.pageviews.listLatest, { sessionToken, writeKey });
+  const eventStatsUnscoped = useQuery(api.events.stats7d, { sessionToken, writeKey });
+
   const [setupDismissed, setSetupDismissed] = useState(() => {
     try { return localStorage.getItem(SETUP_DISMISSED_KEY(writeKey)) === "1"; } catch { return false; }
   });
@@ -35,8 +40,8 @@ export function Overview({ sessionToken, writeKey, projectName, environment }: O
     setSetupDismissed(true);
   }, [writeKey]);
 
-  const hasData = (stats?.pageViews ?? 0) > 0 || (liveEvents?.length ?? 0) > 0 || (eventStats?.totalEvents ?? 0) > 0;
-  const showSetup = !setupDismissed && stats !== undefined && liveEvents !== undefined && eventStats !== undefined && !hasData;
+  const hasData = (statsUnscoped?.pageViews ?? 0) > 0 || (liveEventsUnscoped?.length ?? 0) > 0 || (eventStatsUnscoped?.totalEvents ?? 0) > 0;
+  const showSetup = !setupDismissed && statsUnscoped !== undefined && liveEventsUnscoped !== undefined && eventStatsUnscoped !== undefined && !hasData;
 
   return (
     <div className="flex flex-col min-h-screen" style={{ background: "#e9e6db" }}>
