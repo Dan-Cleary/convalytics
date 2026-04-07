@@ -452,7 +452,7 @@ function PageViewRow({
         ) : pv.userName ? (
           <span title={pv.visitorId}>{pv.userName}</span>
         ) : (
-          <span className="font-mono">{pv.visitorId.slice(0, 8)}</span>
+          <span className="font-mono" title={pv.visitorId}>{pv.visitorId}</span>
         )}
       </td>
       <td className="px-5 py-3 text-xs whitespace-nowrap text-right" style={{ color: "#9b9488" }}>

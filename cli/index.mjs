@@ -267,9 +267,6 @@ async function init() {
   if (claimUrl) dotfileData.claimUrl = claimUrl;
   if (convexDeploymentSlug) dotfileData.deploymentSlug = convexDeploymentSlug;
   try {
-    writeFileSync(dotfilePath, JSON.stringify(dotfileData, null, 2) + "\n");
-    ok("Saved .convalytics config file");
-
     const gitignorePath = join(process.cwd(), ".gitignore");
     if (existsSync(gitignorePath)) {
       const gitignore = readFileSync(gitignorePath, "utf8");
@@ -277,7 +274,13 @@ async function init() {
         writeFileSync(gitignorePath, gitignore.trimEnd() + "\n.convalytics\n");
         ok("Added .convalytics to .gitignore");
       }
+    } else {
+      writeFileSync(gitignorePath, ".convalytics\n");
+      ok("Created .gitignore with .convalytics entry");
     }
+
+    writeFileSync(dotfilePath, JSON.stringify(dotfileData, null, 2) + "\n");
+    ok("Saved .convalytics config file");
   } catch {
     warn("Could not save .convalytics config file");
   }

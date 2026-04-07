@@ -23,6 +23,13 @@ export function ClaimPage({
 
   const claimed = claimedWriteKey !== null;
 
+  // Sync effectiveSessionToken when sessionToken prop changes (e.g., after OAuth flow)
+  useEffect(() => {
+    if (sessionToken !== effectiveSessionToken) {
+      setEffectiveSessionToken(sessionToken);
+    }
+  }, [sessionToken, effectiveSessionToken]);
+
   const handleClaim = useCallback(async () => {
     if (!effectiveSessionToken) return;
     setClaiming(true);

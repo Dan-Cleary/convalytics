@@ -152,13 +152,24 @@ export const provision = internalMutation({
   },
   handler: async (ctx, args) => {
     if (args.convexDeploymentSlug) {
-      const existing = await ctx.db
+      const rows = await ctx.db
         .query("projects")
         .withIndex("by_convexDeploymentSlug", (q) =>
           q.eq("convexDeploymentSlug", args.convexDeploymentSlug),
         )
-        .first();
-      if (existing) {
+        .collect();
+      if (rows.length > 0) {
+        // Detect duplicates and reconcile deterministically
+        if (rows.length > 1) {
+          // Select canonical row by earliest createdAt (or _creationTime if no createdAt field)
+          const canonical = rows.reduce((earliest, current) => {
+            const earliestTime = earliest._creationTime;
+            const currentTime = current._creationTime;
+            return currentTime < earliestTime ? current : earliest;
+          });
+          return { writeKey: canonical.writeKey, claimToken: canonical.claimToken ?? "" };
+        }
+        const existing = rows[0];
         return { writeKey: existing.writeKey, claimToken: existing.claimToken ?? "" };
       }
     }
