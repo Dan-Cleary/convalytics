@@ -222,9 +222,10 @@ async function init() {
     const html = readFileSync(htmlPath, "utf8");
     const scriptTag = `  <script defer src="${SCRIPT_URL}?key=${writeKey}&v=${scriptVersion}"></script>`;
     if (html.includes(SCRIPT_URL)) {
+      const escapedScriptURL = SCRIPT_URL.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
       const updated = html.replace(
-        new RegExp(`<script defer src="${SCRIPT_URL.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\?[^"]+"></script>`),
-        `<script defer src="${SCRIPT_URL}?key=${writeKey}&v=${scriptVersion}"></script>`,
+        new RegExp(`<script[^>]*\\bsrc=(["'])${escapedScriptURL}\\1[^>]*>[\\s\\S]*?<\\/script>`, 'g'),
+        scriptTag,
       );
       if (updated !== html) {
         writeFileSync(htmlPath, updated);
@@ -289,11 +290,12 @@ async function init() {
   print("\n" + "─".repeat(50));
   print("✅  Setup complete!\n");
 
-  if (claimUrl) {
+  if (claimUrl || (dotfile && dotfile.claimUrl && dotfile.writeKey === writeKey)) {
+    const displayClaimUrl = claimUrl || dotfile.claimUrl;
     print("╔══════════════════════════════════════════════════╗");
     print("║  CLAIM YOUR PROJECT                             ║");
     print("║                                                  ║");
-    print(`║  ${claimUrl}`);
+    print(`║  ${displayClaimUrl}`);
     print("║                                                  ║");
     print("║  Share this link with the project owner to       ║");
     print("║  connect analytics to their Convalytics account. ║");
@@ -355,7 +357,7 @@ async function verify() {
       print("\n  Check your Convalytics dashboard → Custom Events");
       print(`  Look for: convalytics_verify\n`);
       print(`  Dashboard: ${DASHBOARD_URL}\n`);
-      if (dotfile?.claimUrl) {
+      if (dotfile && dotfile.claimUrl && dotfile.writeKey === writeKey) {
         print(`  Claim URL: ${dotfile.claimUrl}\n`);
       }
     } else {
