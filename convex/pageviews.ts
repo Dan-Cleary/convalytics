@@ -201,7 +201,7 @@ export const listLatest = query({
         q.eq("writeKey", args.writeKey),
       )
       .order("desc")
-      .take(100);
+      .take(300);
 
     const rows = filterByEnv(allRows, args.environment).slice(0, 30);
 

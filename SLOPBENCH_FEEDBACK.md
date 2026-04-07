@@ -19,7 +19,7 @@ window.convalytics = { track: send };
 ```
 
 1. **CDN caching made the `window.convalytics` fix invisible** — after the script was updated, the old version was still being served due to Cloudflare caching. Had to add `&v=2` to the script tag URL to bust it. Worth thinking about a cache-busting strategy (versioned URL, short TTL, or cache-control headers) so script updates don't require manual intervention from app developers.
-2. `**npx convex dev --once` regenerates types locally but the `_generated/` files didn't reflect new mutations** — spent time debugging why `api.runs.trackEvent` was undefined in the frontend. May be a timing or environment issue, but worth investigating.
+2. `npx convex dev --once` regenerates types locally but the `_generated/` files didn't reflect new mutations — spent time debugging why `api.runs.trackEvent` was undefined in the frontend. May be a timing or environment issue, but worth investigating.
 
 ## Feature Suggestion
 

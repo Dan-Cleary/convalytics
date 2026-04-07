@@ -426,6 +426,8 @@ function PageViewRow({
     referrerHost: string;
     visitorId: string;
     timestamp: number;
+    userEmail?: string;
+    userName?: string;
   };
 }) {
   return (

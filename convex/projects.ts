@@ -248,12 +248,14 @@ export const claim = action({
           );
           if (matched) {
             convexProjectId = String(matched.id);
-            await cacheDeploymentTypes(
-              ctx,
-              matched.id,
-              session.managementToken,
-              project.writeKey ?? "",
-            );
+            if (project.writeKey) {
+              await cacheDeploymentTypes(
+                ctx,
+                matched.id,
+                session.managementToken,
+                project.writeKey,
+              );
+            }
           }
         }
       } catch {

@@ -1,7 +1,7 @@
 import { useQuery, useAction } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { startOAuthFlow, clearSession } from "../lib/auth";
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 
 export function ClaimPage({
   claimToken,
@@ -22,7 +22,7 @@ export function ClaimPage({
 
   const claimed = claimedWriteKey !== null;
 
-  async function handleClaim() {
+  const handleClaim = useCallback(async () => {
     if (!effectiveSessionToken) return;
     setClaiming(true);
     setError(null);
@@ -40,14 +40,14 @@ export function ClaimPage({
     } finally {
       setClaiming(false);
     }
-  }
+  }, [effectiveSessionToken, claimToken, claimAction]);
 
   useEffect(() => {
     if (effectiveSessionToken && project && !project.claimed && !claimed && !claiming && !autoClaimAttempted.current) {
       autoClaimAttempted.current = true;
       void handleClaim();
     }
-  }, [effectiveSessionToken, project, claimed, claiming]);
+  }, [effectiveSessionToken, project, claimed, claiming, handleClaim]);
 
   // Check for OAuth callback return on this page
   if (window.location.pathname === "/oauth/callback") {
@@ -157,16 +157,35 @@ export function ClaimPage({
               it to your Convalytics account and view the dashboard.
             </p>
 
-            {error && (
-              <p
-                className="text-xs mb-3 px-3 py-2"
-                style={{ background: "#fef2f2", color: "#dc2626", border: "1px solid #fecaca" }}
-              >
-                {error}
-              </p>
-            )}
-
-            {effectiveSessionToken ? (
+            {error ? (
+              <div>
+                <p
+                  className="text-xs mb-3 px-3 py-2"
+                  style={{ background: "#fef2f2", color: "#dc2626", border: "1px solid #fecaca" }}
+                >
+                  {error}
+                </p>
+                <button
+                  className="w-full flex items-center justify-center gap-2.5 py-3 text-xs font-bold uppercase tracking-wider cursor-pointer transition-all"
+                  style={{
+                    background: "#1a1814",
+                    color: "#e9e6db",
+                    border: "2px solid #1a1814",
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.background = "#e8651c";
+                    e.currentTarget.style.borderColor = "#e8651c";
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.background = "#1a1814";
+                    e.currentTarget.style.borderColor = "#1a1814";
+                  }}
+                  onClick={() => void handleClaim()}
+                >
+                  Retry
+                </button>
+              </div>
+            ) : effectiveSessionToken ? (
               <p className="text-xs text-center py-3" style={{ color: "#9b9488" }}>
                 Claiming...
               </p>
