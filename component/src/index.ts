@@ -21,7 +21,7 @@ type ConvalyticsComponent = {
     track: FunctionReference<
       "mutation",
       "internal",
-      { writeKey: string; ingestUrl: string; deploymentName?: string; userEmail?: string; userName?: string } & TrackArgs,
+      { writeKey: string; ingestUrl: string; deploymentName?: string } & TrackArgs,
       null
     >;
   };

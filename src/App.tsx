@@ -99,7 +99,10 @@ function Dashboard({
     );
   }
 
-  const currentWriteKey = activeWriteKey ?? projects[0].writeKey;
+  const validActiveWriteKey = projects.some((p) => p.writeKey === activeWriteKey)
+    ? activeWriteKey
+    : null;
+  const currentWriteKey = validActiveWriteKey ?? projects[0].writeKey;
   const currentProject =
     projects.find((p) => p.writeKey === currentWriteKey) ?? projects[0];
 
