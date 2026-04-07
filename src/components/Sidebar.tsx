@@ -2,6 +2,7 @@ import { Doc } from "../../convex/_generated/dataModel";
 import { useState, useRef, useEffect } from "react";
 
 type Page = "overview" | "pages" | "events";
+type Environment = "all" | "production" | "development";
 
 interface SidebarProps {
   projects: Doc<"projects">[];
@@ -11,6 +12,8 @@ interface SidebarProps {
   page: Page;
   onSelectPage: (page: Page) => void;
   onSignOut: () => void;
+  environment: Environment;
+  onSelectEnvironment: (env: Environment) => void;
 }
 
 export function Sidebar({
@@ -21,6 +24,8 @@ export function Sidebar({
   page,
   onSelectPage,
   onSignOut,
+  environment,
+  onSelectEnvironment,
 }: SidebarProps) {
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -134,6 +139,29 @@ export function Sidebar({
         <NavItem label="Pages" active={page === "pages"} onClick={() => onSelectPage("pages")} />
         <SectionLabel>Product Analytics</SectionLabel>
         <NavItem label="Events" active={page === "events"} onClick={() => onSelectPage("events")} />
+      </div>
+
+      {/* Environment toggle */}
+      <div className="px-3 py-2 border-t border-[#2e2a22]">
+        <p className="text-[9px] font-bold uppercase tracking-widest mb-1.5 px-1" style={{ color: "#3e3a32" }}>
+          Environment
+        </p>
+        <div className="flex gap-0.5 p-0.5" style={{ background: "#2e2a22" }}>
+          {(["all", "production", "development"] as const).map((env) => (
+            <button
+              key={env}
+              className="flex-1 text-center py-1 text-[10px] font-medium uppercase tracking-wider cursor-pointer transition-colors"
+              style={
+                environment === env
+                  ? { background: "#e8651c", color: "#fff" }
+                  : { color: "#6b6456" }
+              }
+              onClick={() => onSelectEnvironment(env)}
+            >
+              {env === "all" ? "All" : env === "production" ? "Prod" : "Dev"}
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* Sign out */}

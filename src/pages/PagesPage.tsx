@@ -6,6 +6,7 @@ interface PagesPageProps {
   sessionToken: string;
   writeKey: string;
   projectName: string;
+  environment?: string;
 }
 
 const CARD_STYLE = {
@@ -14,8 +15,8 @@ const CARD_STYLE = {
   boxShadow: "4px 4px 0px #1a1814",
 };
 
-export function PagesPage({ sessionToken, writeKey, projectName }: PagesPageProps) {
-  const topPages = useQuery(api.pageviews.topPages, { sessionToken, writeKey });
+export function PagesPage({ sessionToken, writeKey, projectName, environment }: PagesPageProps) {
+  const topPages = useQuery(api.pageviews.topPages, { sessionToken, writeKey, environment });
   const [filter, setFilter] = useState("");
 
   const filtered = (topPages ?? []).filter((p) =>

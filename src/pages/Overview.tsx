@@ -7,6 +7,7 @@ interface OverviewProps {
   sessionToken: string;
   writeKey: string;
   projectName: string;
+  environment?: string;
 }
 
 const CARD_STYLE = {
@@ -17,13 +18,13 @@ const CARD_STYLE = {
 
 const SETUP_DISMISSED_KEY = (writeKey: string) => `cnv_setup_dismissed_${writeKey}`;
 
-export function Overview({ sessionToken, writeKey, projectName }: OverviewProps) {
-  const stats = useQuery(api.pageviews.stats, { sessionToken, writeKey });
-  const topPages = useQuery(api.pageviews.topPages, { sessionToken, writeKey });
-  const topSources = useQuery(api.pageviews.topSources, { sessionToken, writeKey });
-  const liveEvents = useQuery(api.pageviews.listLatest, { sessionToken, writeKey });
-  const realtimeVisitors = useQuery(api.pageviews.realtimeVisitors, { sessionToken, writeKey });
-  const eventStats = useQuery(api.events.stats7d, { sessionToken, writeKey });
+export function Overview({ sessionToken, writeKey, projectName, environment }: OverviewProps) {
+  const stats = useQuery(api.pageviews.stats, { sessionToken, writeKey, environment });
+  const topPages = useQuery(api.pageviews.topPages, { sessionToken, writeKey, environment });
+  const topSources = useQuery(api.pageviews.topSources, { sessionToken, writeKey, environment });
+  const liveEvents = useQuery(api.pageviews.listLatest, { sessionToken, writeKey, environment });
+  const realtimeVisitors = useQuery(api.pageviews.realtimeVisitors, { sessionToken, writeKey, environment });
+  const eventStats = useQuery(api.events.stats7d, { sessionToken, writeKey, environment });
 
   const [setupDismissed, setSetupDismissed] = useState(() => {
     try { return localStorage.getItem(SETUP_DISMISSED_KEY(writeKey)) === "1"; } catch { return false; }
@@ -443,8 +444,14 @@ function PageViewRow({
       <td className="px-5 py-3 text-xs hidden lg:table-cell" style={{ color: "#9b9488" }}>
         {pv.referrerHost || <span style={{ color: "#c4bfb2" }}>(direct)</span>}
       </td>
-      <td className="px-5 py-3 font-mono text-xs tabular-nums" style={{ color: "#9b9488" }}>
-        {pv.visitorId.slice(0, 8)}
+      <td className="px-5 py-3 text-xs tabular-nums" style={{ color: "#9b9488" }}>
+        {pv.userEmail ? (
+          <span title={pv.visitorId}>{pv.userEmail}</span>
+        ) : pv.userName ? (
+          <span title={pv.visitorId}>{pv.userName}</span>
+        ) : (
+          <span className="font-mono">{pv.visitorId.slice(0, 8)}</span>
+        )}
       </td>
       <td className="px-5 py-3 text-xs whitespace-nowrap text-right" style={{ color: "#9b9488" }}>
         {relativeTime(pv.timestamp)}

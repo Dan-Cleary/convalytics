@@ -12,6 +12,7 @@ import { useState, useCallback } from "react";
 import { clearSession, getSessionToken } from "./lib/auth";
 
 type Page = "overview" | "pages" | "events";
+type Environment = "all" | "production" | "development";
 
 export default function App() {
   const [sessionToken, setSessionToken] = useState<string | null>(
@@ -63,9 +64,19 @@ function Dashboard({
   onSignOut: () => void;
 }) {
   const projects = useQuery(api.projects.list, { sessionToken });
-  const [activeWriteKey, setActiveWriteKey] = useState<string | null>(null);
+  const [activeWriteKey, setActiveWriteKey] = useState<string | null>(() => {
+    const params = new URLSearchParams(window.location.search);
+    const key = params.get("project");
+    if (key) {
+      // Clean the param from the URL without triggering a navigation
+      const clean = window.location.pathname;
+      window.history.replaceState(null, "", clean);
+    }
+    return key;
+  });
   const [page, setPage] = useState<Page>("overview");
   const [addingProject, setAddingProject] = useState(false);
+  const [environment, setEnvironment] = useState<Environment>("all");
 
   if (projects === undefined) {
     return (
@@ -102,6 +113,8 @@ function Dashboard({
         page={page}
         onSelectPage={setPage}
         onSignOut={onSignOut}
+        environment={environment}
+        onSelectEnvironment={setEnvironment}
       />
       <main className="flex-1 overflow-auto">
         {page === "overview" && (
@@ -109,6 +122,7 @@ function Dashboard({
             sessionToken={sessionToken}
             writeKey={currentWriteKey}
             projectName={currentProject.name}
+            environment={environment === "all" ? undefined : environment}
           />
         )}
         {page === "pages" && (
@@ -116,6 +130,7 @@ function Dashboard({
             sessionToken={sessionToken}
             writeKey={currentWriteKey}
             projectName={currentProject.name}
+            environment={environment === "all" ? undefined : environment}
           />
         )}
         {page === "events" && (
@@ -123,6 +138,7 @@ function Dashboard({
             sessionToken={sessionToken}
             writeKey={currentWriteKey}
             projectName={currentProject.name}
+            environment={environment === "all" ? undefined : environment}
           />
         )}
       </main>

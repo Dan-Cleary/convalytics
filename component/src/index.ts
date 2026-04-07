@@ -9,6 +9,8 @@ type TrackArgs = {
   userId: string;
   sessionId?: string;
   timestamp?: number;
+  userEmail?: string;
+  userName?: string;
   props?: Record<string, string | number | boolean>;
 };
 
@@ -18,8 +20,8 @@ type ConvalyticsComponent = {
   lib: {
     track: FunctionReference<
       "mutation",
-      "public",
-      { writeKey: string; ingestUrl: string } & TrackArgs,
+      "internal",
+      { writeKey: string; ingestUrl: string; deploymentName?: string; userEmail?: string; userName?: string } & TrackArgs,
       null
     >;
   };
@@ -46,6 +48,7 @@ export type { ConvalyticsComponent };
  *
  * export const analytics = new Convalytics(components.convalytics, {
  *   writeKey: process.env.CONVALYTICS_WRITE_KEY!,
+ *   deploymentName: process.env.CONVALYTICS_DEPLOYMENT_NAME,
  * });
  * ```
  *
@@ -55,22 +58,24 @@ export type { ConvalyticsComponent };
  * await analytics.track(ctx, {
  *   name: "user_signed_up",
  *   userId: String(userId),
+ *   userEmail: identity.email,
  *   props: { plan: "pro" },
  * });
  * ```
  */
 export class Convalytics {
   private component: ConvalyticsComponent;
-  private options: { writeKey: string; ingestUrl: string };
+  private options: { writeKey: string; ingestUrl: string; deploymentName?: string };
 
   constructor(
     component: ConvalyticsComponent,
-    options: { writeKey: string; ingestUrl?: string },
+    options: { writeKey: string; ingestUrl?: string; deploymentName?: string },
   ) {
     this.component = component;
     this.options = {
       writeKey: options.writeKey,
       ingestUrl: options.ingestUrl ?? DEFAULT_INGEST_URL,
+      deploymentName: options.deploymentName,
     };
   }
 
@@ -107,6 +112,7 @@ export class Convalytics {
       await ctx.runMutation(this.component.lib.track, {
         writeKey: this.options.writeKey,
         ingestUrl: this.options.ingestUrl,
+        deploymentName: this.options.deploymentName,
         ...event,
       });
     } catch (e) {

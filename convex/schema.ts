@@ -71,7 +71,8 @@ export default defineSchema({
     .index("by_teamId", ["teamId"])
     .index("by_writeKey", ["writeKey"])
     .index("by_teamId_and_convexProjectId", ["teamId", "convexProjectId"])
-    .index("by_claimToken", ["claimToken"]),
+    .index("by_claimToken", ["claimToken"])
+    .index("by_convexDeploymentSlug", ["convexDeploymentSlug"]),
 
   // -------------------------------------------------------------------------
   // Analytics data (collected from end-user websites)
@@ -84,9 +85,12 @@ export default defineSchema({
   events: defineTable({
     writeKey: v.string(),
     name: v.string(),
-    visitorId: v.string(), // anonymous browser-generated UUID
+    visitorId: v.string(), // anonymous browser-generated UUID, or identified user ID
     sessionId: v.string(), // browser session UUID
     timestamp: v.number(),
+    environment: v.optional(v.string()), // "development" | "production" | "preview"
+    userEmail: v.optional(v.string()), // human-readable email from identify() or server-side track()
+    userName: v.optional(v.string()), // human-readable name from identify() or server-side track()
     props: v.record(
       v.string(),
       v.union(v.string(), v.number(), v.boolean()),
@@ -95,9 +99,12 @@ export default defineSchema({
 
   pageviews: defineTable({
     writeKey: v.string(),
-    visitorId: v.string(), // anonymous browser-generated UUID
+    visitorId: v.string(), // anonymous browser-generated UUID, or identified user ID
     sessionId: v.string(), // browser session UUID
     timestamp: v.number(),
+    environment: v.optional(v.string()), // "development" | "production" | "preview"
+    userEmail: v.optional(v.string()),
+    userName: v.optional(v.string()),
     path: v.string(),
     referrer: v.string(),
     referrerHost: v.string(),
@@ -109,6 +116,16 @@ export default defineSchema({
     .index("by_writeKey_and_timestamp", ["writeKey", "timestamp"])
     .index("by_writeKey_and_path", ["writeKey", "path"]),
 
+  // Cache: maps Convex deployment names to their type (dev/prod/preview).
+  // Populated during project claim via the Management API.
+  deploymentTypes: defineTable({
+    writeKey: v.string(),
+    deploymentName: v.string(), // e.g. "happy-panda-123"
+    deploymentType: v.string(), // "dev" | "prod" | "preview" | "custom"
+  })
+    .index("by_deploymentName", ["deploymentName"])
+    .index("by_writeKey", ["writeKey"]),
+
   // -------------------------------------------------------------------------
   // Rate limiting (simple fixed-window counters)
   // -------------------------------------------------------------------------
@@ -119,15 +136,4 @@ export default defineSchema({
     count: v.number(),
   }).index("by_key_and_window", ["key", "window"]),
 
-  // Materialized 7-day rolling stats per project.
-  // NOTE: Currently computed but NOT read by dashboard queries (they scan raw data).
-  // TODO: Either switch queries to use this table, or remove the cron.
-  dailyStats: defineTable({
-    writeKey: v.string(),
-    date: v.string(), // YYYY-MM-DD (snapshot date)
-    activeUsers: v.number(),
-    totalEvents: v.number(),
-    pageViews: v.optional(v.number()),
-    sessions: v.optional(v.number()),
-  }).index("by_writeKey_and_date", ["writeKey", "date"]),
 });

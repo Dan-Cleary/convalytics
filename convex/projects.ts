@@ -1,6 +1,7 @@
 import { v } from "convex/values";
 import { action, mutation, query, internalQuery, internalMutation } from "./_generated/server";
 import { internal } from "./_generated/api";
+import type { ActionCtx } from "./_generated/server";
 import { validateSession, getUserTeamIds } from "./authHelpers";
 
 export const create = mutation({
@@ -143,12 +144,25 @@ export const validateWriteKey = internalQuery({
 
 // Agent-first: create an unclaimed project without auth.
 // Returns writeKey + claimToken. Human claims it later.
+// Idempotent: if a project with the same convexDeploymentSlug already exists, returns it.
 export const provision = internalMutation({
   args: {
     name: v.string(),
     convexDeploymentSlug: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
+    if (args.convexDeploymentSlug) {
+      const existing = await ctx.db
+        .query("projects")
+        .withIndex("by_convexDeploymentSlug", (q) =>
+          q.eq("convexDeploymentSlug", args.convexDeploymentSlug),
+        )
+        .first();
+      if (existing) {
+        return { writeKey: existing.writeKey, claimToken: existing.claimToken ?? "" };
+      }
+    }
+
     const writeKey = crypto.randomUUID();
     const claimToken = crypto.randomUUID();
     await ctx.db.insert("projects", {
@@ -162,6 +176,38 @@ export const provision = internalMutation({
   },
 });
 
+async function cacheDeploymentTypes(
+  ctx: ActionCtx,
+  projectId: number,
+  managementToken: string,
+  writeKey: string,
+) {
+  try {
+    const url = `https://api.convex.dev/v1/projects/${projectId}/list_deployments`;
+    const resp = await fetch(url, {
+      headers: { Authorization: `Bearer ${managementToken}` },
+    });
+    if (!resp.ok) return;
+
+    const deployments = (await resp.json()) as Array<{
+      name: string;
+      deploymentType: string;
+    }>;
+
+    for (const d of deployments) {
+      if (d.name && d.deploymentType) {
+        await ctx.runMutation(internal.deploymentTypes.cache, {
+          writeKey,
+          deploymentName: d.name,
+          deploymentType: d.deploymentType,
+        });
+      }
+    }
+  } catch {
+    // Non-fatal
+  }
+}
+
 // Claim an unclaimed project: resolve deployment slug via Management API, then finalize.
 export const claim = action({
   args: { sessionToken: v.string(), claimToken: v.string() },
@@ -171,10 +217,10 @@ export const claim = action({
     });
     if (!session) throw new Error("Not authenticated");
 
-    // Look up the unclaimed project to get the deployment slug
     const project: {
       convexDeploymentSlug?: string;
       claimed?: boolean;
+      writeKey?: string;
     } | null = await ctx.runQuery(internal.projects.getByClaimTokenInternal, {
       claimToken: args.claimToken,
     });
@@ -182,31 +228,36 @@ export const claim = action({
     if (project.claimed) throw new Error("This project has already been claimed");
 
     // If we have a deployment slug, resolve it to a Management API project ID
+    // and cache all deployment types for environment tagging.
     let convexProjectId: string | undefined;
-    if (project.convexDeploymentSlug) {
-      const convexTeamId = session.userId.split(":")[1];
-      if (convexTeamId && convexTeamId !== "undefined") {
-        try {
-          const url = `https://api.convex.dev/v1/teams/${convexTeamId}/list_projects`;
-          const resp = await fetch(url, {
-            headers: { Authorization: `Bearer ${session.managementToken}` },
-          });
-          if (resp.ok) {
-            const apiProjects = (await resp.json()) as Array<{
-              id: number;
-              name: string;
-              slug: string;
-            }>;
-            const matched = apiProjects.find(
-              (p) => p.slug === project.convexDeploymentSlug,
+    const convexTeamId = session.userId.split(":")[1];
+    if (project.convexDeploymentSlug && convexTeamId && convexTeamId !== "undefined") {
+      try {
+        const url = `https://api.convex.dev/v1/teams/${convexTeamId}/list_projects`;
+        const resp = await fetch(url, {
+          headers: { Authorization: `Bearer ${session.managementToken}` },
+        });
+        if (resp.ok) {
+          const apiProjects = (await resp.json()) as Array<{
+            id: number;
+            name: string;
+            slug: string;
+          }>;
+          const matched = apiProjects.find(
+            (p) => p.slug === project.convexDeploymentSlug,
+          );
+          if (matched) {
+            convexProjectId = String(matched.id);
+            await cacheDeploymentTypes(
+              ctx,
+              matched.id,
+              session.managementToken,
+              project.writeKey ?? "",
             );
-            if (matched) {
-              convexProjectId = String(matched.id);
-            }
           }
-        } catch {
-          // Non-fatal — claim still works, just without the Management API link
         }
+      } catch {
+        // Non-fatal — claim still works, just without the Management API link
       }
     }
 
