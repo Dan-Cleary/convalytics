@@ -409,9 +409,8 @@ function bail(msg) {
 }
 
 function isValidDeploymentSlug(slug) {
-  // Allow flexible deployment names: letters, numbers, hyphens, and optionally trailing numeric suffix
-  // Matches prod deployments (word-word-123), preview/branch deployments, and custom slugs
-  return /^[a-z0-9]+(-[a-z0-9]+)*(-\d+)?$/.test(slug);
+  // Expect Convex production deployment slug format: word-word-123
+  return /^[a-z]+-[a-z]+-\d+$/.test(slug);
 }
 
 function prompt(question) {
