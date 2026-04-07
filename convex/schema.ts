@@ -91,11 +91,14 @@ export default defineSchema({
     environment: v.optional(v.string()), // "development" | "production" | "preview"
     userEmail: v.optional(v.string()), // human-readable email from identify() or server-side track()
     userName: v.optional(v.string()), // human-readable name from identify() or server-side track()
-    props: v.record(
-      v.string(),
-      v.union(v.string(), v.number(), v.boolean()),
-    ),
-  }).index("by_writeKey_and_timestamp", ["writeKey", "timestamp"]),
+    props: v.record(v.string(), v.union(v.string(), v.number(), v.boolean())),
+  })
+    .index("by_writeKey_and_timestamp", ["writeKey", "timestamp"])
+    .index("by_writeKey_and_environment_and_timestamp", [
+      "writeKey",
+      "environment",
+      "timestamp",
+    ]),
 
   pageviews: defineTable({
     writeKey: v.string(),
@@ -114,6 +117,11 @@ export default defineSchema({
     utm_campaign: v.optional(v.string()),
   })
     .index("by_writeKey_and_timestamp", ["writeKey", "timestamp"])
+    .index("by_writeKey_and_environment_and_timestamp", [
+      "writeKey",
+      "environment",
+      "timestamp",
+    ])
     .index("by_writeKey_and_path", ["writeKey", "path"]),
 
   // Cache: maps Convex deployment names to their type (dev/prod/preview).
@@ -135,5 +143,4 @@ export default defineSchema({
     window: v.number(),
     count: v.number(),
   }).index("by_key_and_window", ["key", "window"]),
-
 });

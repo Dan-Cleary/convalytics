@@ -17,7 +17,8 @@ export function ClaimPage({
   const [claiming, setClaiming] = useState(false);
   const [claimedWriteKey, setClaimedWriteKey] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [effectiveSessionToken, setEffectiveSessionToken] = useState(sessionToken);
+  const [effectiveSessionToken, setEffectiveSessionToken] =
+    useState(sessionToken);
   const autoClaimAttempted = useRef(false);
 
   const claimed = claimedWriteKey !== null;
@@ -27,7 +28,10 @@ export function ClaimPage({
     setClaiming(true);
     setError(null);
     try {
-      const result = await claimAction({ sessionToken: effectiveSessionToken, claimToken });
+      const result = await claimAction({
+        sessionToken: effectiveSessionToken,
+        claimToken,
+      });
       setClaimedWriteKey(result.writeKey);
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Failed to claim project";
@@ -43,7 +47,14 @@ export function ClaimPage({
   }, [effectiveSessionToken, claimToken, claimAction]);
 
   useEffect(() => {
-    if (effectiveSessionToken && project && !project.claimed && !claimed && !claiming && !autoClaimAttempted.current) {
+    if (
+      effectiveSessionToken &&
+      project &&
+      !project.claimed &&
+      !claimed &&
+      !claiming &&
+      !autoClaimAttempted.current
+    ) {
       autoClaimAttempted.current = true;
       void handleClaim();
     }
@@ -91,10 +102,7 @@ export function ClaimPage({
 
         {project === null && (
           <div>
-            <p
-              className="text-sm font-bold mb-2"
-              style={{ color: "#1a1814" }}
-            >
+            <p className="text-sm font-bold mb-2" style={{ color: "#1a1814" }}>
               Invalid claim link
             </p>
             <p className="text-xs" style={{ color: "#6b6456" }}>
@@ -112,16 +120,10 @@ export function ClaimPage({
 
         {project && project.claimed && !claimed && (
           <div>
-            <p
-              className="text-sm font-bold mb-2"
-              style={{ color: "#1a1814" }}
-            >
+            <p className="text-sm font-bold mb-2" style={{ color: "#1a1814" }}>
               Already claimed
             </p>
-            <p
-              className="text-xs mb-4"
-              style={{ color: "#6b6456" }}
-            >
+            <p className="text-xs mb-4" style={{ color: "#6b6456" }}>
               <strong>{project.name}</strong> has already been claimed.
             </p>
             <a
@@ -157,38 +159,46 @@ export function ClaimPage({
               it to your Convalytics account and view the dashboard.
             </p>
 
-            {error ? (
-              <div>
-                <p
-                  className="text-xs mb-3 px-3 py-2"
-                  style={{ background: "#fef2f2", color: "#dc2626", border: "1px solid #fecaca" }}
-                >
-                  {error}
-                </p>
-                <button
-                  className="w-full flex items-center justify-center gap-2.5 py-3 text-xs font-bold uppercase tracking-wider cursor-pointer transition-all"
-                  style={{
-                    background: "#1a1814",
-                    color: "#e9e6db",
-                    border: "2px solid #1a1814",
-                  }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.background = "#e8651c";
-                    e.currentTarget.style.borderColor = "#e8651c";
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.background = "#1a1814";
-                    e.currentTarget.style.borderColor = "#1a1814";
-                  }}
-                  onClick={() => void handleClaim()}
-                >
-                  Retry
-                </button>
-              </div>
-            ) : effectiveSessionToken ? (
-              <p className="text-xs text-center py-3" style={{ color: "#9b9488" }}>
+            {error && (
+              <p
+                className="text-xs mb-3 px-3 py-2"
+                style={{
+                  background: "#fef2f2",
+                  color: "#dc2626",
+                  border: "1px solid #fecaca",
+                }}
+              >
+                {error}
+              </p>
+            )}
+
+            {claiming ? (
+              <p
+                className="text-xs text-center py-3"
+                style={{ color: "#9b9488" }}
+              >
                 Claiming...
               </p>
+            ) : effectiveSessionToken ? (
+              <button
+                className="w-full py-3 text-xs font-bold uppercase tracking-wider cursor-pointer transition-all"
+                style={{
+                  background: "#1a1814",
+                  color: "#e9e6db",
+                  border: "2px solid #1a1814",
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.background = "#e8651c";
+                  e.currentTarget.style.borderColor = "#e8651c";
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = "#1a1814";
+                  e.currentTarget.style.borderColor = "#1a1814";
+                }}
+                onClick={() => void handleClaim()}
+              >
+                Claim this project
+              </button>
             ) : (
               <button
                 className="w-full flex items-center justify-center gap-2.5 py-3 text-xs font-bold uppercase tracking-wider cursor-pointer transition-all"
@@ -218,13 +228,24 @@ export function ClaimPage({
           </div>
         )}
 
-        {claimed && <RedirectToDashboard projectName={project?.name} writeKey={claimedWriteKey!} />}
+        {claimedWriteKey && (
+          <RedirectToDashboard
+            projectName={project?.name}
+            writeKey={claimedWriteKey}
+          />
+        )}
       </div>
     </div>
   );
 }
 
-function RedirectToDashboard({ projectName, writeKey }: { projectName?: string; writeKey: string }) {
+function RedirectToDashboard({
+  projectName,
+  writeKey,
+}: {
+  projectName?: string;
+  writeKey: string;
+}) {
   useEffect(() => {
     const timer = setTimeout(() => {
       window.location.href = `/?project=${encodeURIComponent(writeKey)}`;

@@ -43,8 +43,14 @@ http.route({
       userName: rawUserName,
     } = body as Record<string, unknown>;
 
-    const userEmail = typeof rawUserEmail === "string" && rawUserEmail ? rawUserEmail.slice(0, 200) : undefined;
-    const userName = typeof rawUserName === "string" && rawUserName ? rawUserName.slice(0, 200) : undefined;
+    const userEmail =
+      typeof rawUserEmail === "string" && rawUserEmail
+        ? rawUserEmail.slice(0, 200)
+        : undefined;
+    const userName =
+      typeof rawUserName === "string" && rawUserName
+        ? rawUserName.slice(0, 200)
+        : undefined;
 
     if (
       typeof writeKey !== "string" ||
@@ -71,7 +77,10 @@ http.route({
       limit: 1000,
     });
     if (!allowed) {
-      return new Response("Rate limit exceeded", { status: 429, headers: cors });
+      return new Response("Rate limit exceeded", {
+        status: 429,
+        headers: cors,
+      });
     }
 
     // Resolve environment: deployment name lookup for server-side events,
@@ -84,9 +93,10 @@ http.route({
       );
       environment = resolved ?? "development";
     } else {
-      const origin = (typeof pageOrigin === "string" && pageOrigin)
-        ? pageOrigin
-        : (req.headers.get("Origin") ?? "");
+      const origin =
+        typeof pageOrigin === "string" && pageOrigin
+          ? pageOrigin
+          : (req.headers.get("Origin") ?? "");
       try {
         const hostname = new URL(origin).hostname;
         environment =
@@ -128,12 +138,30 @@ http.route({
         environment,
         userEmail,
         userName,
-        path: (typeof cleanProps.path === "string" ? cleanProps.path : "").slice(0, 500),
-        referrer: (typeof cleanProps.referrer === "string" ? cleanProps.referrer : "").slice(0, 500),
-        title: (typeof cleanProps.title === "string" ? cleanProps.title : "").slice(0, 200),
-        utm_source: typeof cleanProps.utm_source === "string" ? cleanProps.utm_source : undefined,
-        utm_medium: typeof cleanProps.utm_medium === "string" ? cleanProps.utm_medium : undefined,
-        utm_campaign: typeof cleanProps.utm_campaign === "string" ? cleanProps.utm_campaign : undefined,
+        path: (typeof cleanProps.path === "string"
+          ? cleanProps.path
+          : ""
+        ).slice(0, 500),
+        referrer: (typeof cleanProps.referrer === "string"
+          ? cleanProps.referrer
+          : ""
+        ).slice(0, 500),
+        title: (typeof cleanProps.title === "string"
+          ? cleanProps.title
+          : ""
+        ).slice(0, 200),
+        utm_source:
+          typeof cleanProps.utm_source === "string"
+            ? cleanProps.utm_source
+            : undefined,
+        utm_medium:
+          typeof cleanProps.utm_medium === "string"
+            ? cleanProps.utm_medium
+            : undefined,
+        utm_campaign:
+          typeof cleanProps.utm_campaign === "string"
+            ? cleanProps.utm_campaign
+            : undefined,
       });
     } else {
       await ctx.runMutation(internal.events.ingest, {
@@ -256,12 +284,15 @@ const TRACKING_SCRIPT = `(function(){
     identify: function(userId, traits) {
       if (!userId || typeof userId !== 'string') return;
       try {
+        var previousUid = localStorage.getItem('_cnv_identified_uid');
         localStorage.setItem('_cnv_identified_uid', userId);
         if (traits && typeof traits === 'object') {
           localStorage.setItem('_cnv_traits', JSON.stringify({
             email: traits.email || undefined,
             name: traits.name || undefined
           }));
+        } else if (previousUid !== userId) {
+          localStorage.removeItem('_cnv_traits');
         }
       } catch(e) {}
     },
@@ -457,15 +488,18 @@ http.route({
     });
     if (!allowed) {
       return new Response(
-        JSON.stringify({ error: "Rate limit exceeded. Try again in a minute." }),
+        JSON.stringify({
+          error: "Rate limit exceeded. Try again in a minute.",
+        }),
         { status: 429, headers: { "Content-Type": "application/json" } },
       );
     }
 
     const { name, convexDeploymentSlug } = body as Record<string, unknown>;
-    const projectName = typeof name === "string" && name.trim()
-      ? name.trim().slice(0, 100)
-      : "Untitled Project";
+    const projectName =
+      typeof name === "string" && name.trim()
+        ? name.trim().slice(0, 100)
+        : "Untitled Project";
 
     const result = await ctx.runMutation(internal.projects.provision, {
       name: projectName,
@@ -476,7 +510,8 @@ http.route({
     });
 
     const siteUrl = new URL(req.url).origin;
-    const dashboardUrl = process.env.CONVALYTICS_DASHBOARD_URL ?? "https://convalytics.dev";
+    const dashboardUrl =
+      process.env.CONVALYTICS_DASHBOARD_URL ?? "https://convalytics.dev";
 
     return new Response(
       JSON.stringify({
