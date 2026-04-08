@@ -1,5 +1,5 @@
 import { v } from "convex/values";
-import { internalMutation, internalQuery } from "./_generated/server";
+import { internalMutation } from "./_generated/server";
 import { Id } from "./_generated/dataModel";
 import { MutationCtx, QueryCtx } from "./_generated/server";
 import { PLANS, type PlanId } from "./plans";
@@ -86,26 +86,6 @@ export const checkAndIncrement = internalMutation({
     });
 
     return { allowed: true, teamId: team._id, usageAfter, limit, plan };
-  },
-});
-
-// Get current usage for a team (for dashboard display).
-export const getUsage = internalQuery({
-  args: { teamId: v.id("teams") },
-  handler: async (ctx, args) => {
-    const team = await ctx.db.get("teams", args.teamId);
-    if (!team) return null;
-    const plan = (team.plan ?? "free") as PlanId;
-    const limit =
-      team.usageLimitEventsPerMonth ??
-      PLANS[plan]?.eventsPerMonth ??
-      PLANS.free.eventsPerMonth;
-    const currentMonth = monthKey();
-    const usage =
-      team.usageMonthKey === currentMonth
-        ? (team.usageEventsThisMonth ?? 0)
-        : 0;
-    return { usage, limit, plan, retentionDays: PLANS[plan].retentionDays };
   },
 });
 

@@ -195,9 +195,14 @@ export function registerStripeRoutes(http: ReturnType<typeof httpRouter>) {
   });
 }
 
-function planFromPriceId(priceId: string | undefined): "free" | "solo" | "pro" {
-  if (!priceId) return "free";
-  if (priceId === process.env.STRIPE_PRICE_SOLO) return "solo";
-  if (priceId === process.env.STRIPE_PRICE_PRO) return "pro";
-  return "free";
+function planFromPriceId(priceId: string | undefined): "solo" | "pro" {
+  if (!priceId) throw new Error("Missing Stripe price ID on subscription");
+  const soloPriceId = process.env.STRIPE_PRICE_SOLO;
+  const proPriceId = process.env.STRIPE_PRICE_PRO;
+  if (!soloPriceId || !proPriceId) {
+    throw new Error("Missing Stripe price env vars");
+  }
+  if (priceId === soloPriceId) return "solo";
+  if (priceId === proPriceId) return "pro";
+  throw new Error(`Unknown Stripe price ID: ${priceId}`);
 }

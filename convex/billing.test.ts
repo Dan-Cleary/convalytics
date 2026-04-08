@@ -39,8 +39,6 @@ async function setupTeamWithProject(
       joinedAt: Date.now(),
     });
 
-    await ctx.db.insert("users", { userId: "user1", createdAt: Date.now() }).catch(() => {});
-
     writeKey = "wk_test_" + Math.random().toString(36).slice(2);
     await ctx.db.insert("projects", {
       teamId,
@@ -258,6 +256,12 @@ describe("billing.applySubscription", () => {
   test("downgrades to free and clears subscription ID", async () => {
     const t = convexTest(schema, modules);
     const { teamId } = await setupTeamWithProject(t, "solo");
+
+    await t.run(async (ctx) => {
+      await ctx.db.patch("teams", teamId, {
+        stripeSubscriptionId: "sub_existing_123",
+      });
+    });
 
     await t.mutation(internal.billing.applySubscription, {
       teamId,
