@@ -148,6 +148,34 @@ describe("usage.checkAndIncrement", () => {
     expect(result.teamId).toBeNull();
   });
 
+  test("enforces free monthly quota for unclaimed project", async () => {
+    const t = convexTest(schema, modules);
+    let writeKey!: string;
+    await t.run(async (ctx) => {
+      writeKey = "wk_unclaimed_quota_" + Math.random().toString(36).slice(2);
+      await ctx.db.insert("projects", {
+        name: "Unclaimed Quota",
+        writeKey,
+        claimed: false,
+        claimToken: "tok_quota_test",
+      });
+    });
+
+    await t.mutation(internal.usage.checkAndIncrement, {
+      writeKey,
+      count: PLANS.free.eventsPerMonth,
+    });
+
+    const over = await t.mutation(internal.usage.checkAndIncrement, {
+      writeKey,
+      count: 1,
+    });
+
+    expect(over.allowed).toBe(false);
+    expect(over.teamId).toBeNull();
+    expect(over.usageAfter).toBe(PLANS.free.eventsPerMonth);
+  });
+
   test("resets usage on new month", async () => {
     const t = convexTest(schema, modules);
     const { writeKey, teamId } = await setupTeamWithProject(t, "free", 10);

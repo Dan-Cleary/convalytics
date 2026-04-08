@@ -9,6 +9,11 @@ function monthKey(): string {
   return `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}`;
 }
 
+function monthWindowStart(): number {
+  const now = new Date();
+  return Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1);
+}
+
 // Returns the team that owns a write key, or null.
 export async function getTeamForWriteKey(
   ctx: QueryCtx | MutationCtx,
@@ -43,11 +48,54 @@ export const checkAndIncrement = internalMutation({
     const team = await getTeamForWriteKey(ctx, args.writeKey);
     if (!team) {
       // Unclaimed project — apply free tier limits using write key as key
+      const limit = PLANS.free.eventsPerMonth;
+      const key = `monthlyQuota:${args.writeKey}`;
+      const window = monthWindowStart();
+      const existing = await ctx.db
+        .query("rateLimits")
+        .withIndex("by_key_and_window", (q) =>
+          q.eq("key", key).eq("window", window),
+        )
+        .unique();
+      if (existing) {
+        if (existing.count >= limit || existing.count + args.count > limit) {
+          return {
+            allowed: false,
+            teamId: null,
+            usageAfter: existing.count,
+            limit,
+            plan: "free",
+          };
+        }
+        const usageAfter = existing.count + args.count;
+        await ctx.db.patch("rateLimits", existing._id, { count: usageAfter });
+        return {
+          allowed: true,
+          teamId: null,
+          usageAfter,
+          limit,
+          plan: "free",
+        };
+      }
+      if (args.count > limit) {
+        return {
+          allowed: false,
+          teamId: null,
+          usageAfter: 0,
+          limit,
+          plan: "free",
+        };
+      }
+      await ctx.db.insert("rateLimits", {
+        key,
+        window,
+        count: args.count,
+      });
       return {
         allowed: true,
         teamId: null,
-        usageAfter: 0,
-        limit: PLANS.free.eventsPerMonth,
+        usageAfter: args.count,
+        limit,
         plan: "free",
       };
     }

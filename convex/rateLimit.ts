@@ -14,7 +14,10 @@ export const check = internalMutation({
     args,
   ): Promise<{ allowed: boolean; remaining: number; resetAt: number }> => {
     // Validate count parameter: must be a positive integer
-    if (args.count !== undefined && (!Number.isInteger(args.count) || args.count < 1)) {
+    if (
+      args.count !== undefined &&
+      (!Number.isInteger(args.count) || args.count < 1)
+    ) {
       throw new Error("count must be an integer >= 1");
     }
     const increment = args.count ?? 1;
@@ -64,8 +67,20 @@ export const cleanup = internalMutation({
   args: {},
   handler: async (ctx) => {
     const cutoff = Date.now() - 5 * 60_000;
+    const now = new Date();
+    const currentMonthStart = Date.UTC(
+      now.getUTCFullYear(),
+      now.getUTCMonth(),
+      1,
+    );
     const docs = await ctx.db.query("rateLimits").take(500);
     for (const doc of docs) {
+      if (doc.key.startsWith("monthlyQuota:")) {
+        if (doc.window < currentMonthStart) {
+          await ctx.db.delete("rateLimits", doc._id);
+        }
+        continue;
+      }
       if (doc.window < cutoff) {
         await ctx.db.delete("rateLimits", doc._id);
       }
