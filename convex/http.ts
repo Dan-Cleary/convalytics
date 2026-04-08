@@ -1,6 +1,7 @@
 import { httpRouter } from "convex/server";
 import { httpAction } from "./_generated/server";
 import { internal } from "./_generated/api";
+import { registerStripeRoutes } from "./billing";
 
 const http = httpRouter();
 
@@ -90,6 +91,41 @@ http.route({
           headers: { ...cors, "Content-Type": "application/json", "Retry-After": String(retryAfter) },
         },
       );
+    }
+
+    // Quota check — browser events (pageOrigin present, no deploymentName) are dropped
+    // silently on over-quota to avoid breaking pages. Server-side gets a 402.
+    const isBrowserEvent =
+      typeof pageOrigin === "string" && pageOrigin && !deploymentName;
+    const quota = await ctx.runMutation(internal.usage.checkAndIncrement, {
+      writeKey,
+      count: 1,
+    });
+    if (!quota.allowed) {
+      if (isBrowserEvent) {
+        return new Response(null, { status: 200, headers: cors });
+      }
+      return new Response(
+        JSON.stringify({
+          error: "quota_exceeded",
+          message: "Monthly event quota exceeded. Upgrade your plan to continue tracking.",
+          plan: quota.plan,
+          limit: quota.limit,
+        }),
+        { status: 402, headers: { ...cors, "Content-Type": "application/json" } },
+      );
+    }
+
+    // Fire quota notification if thresholds crossed (non-blocking)
+    if (quota.teamId) {
+      const pct = quota.usageAfter / quota.limit;
+      if (pct >= 1.0 || pct >= 0.8) {
+        void ctx.scheduler.runAfter(0, internal.notifications.checkAndNotify, {
+          teamId: quota.teamId,
+          usageAfter: quota.usageAfter,
+          limit: quota.limit,
+        });
+      }
     }
 
     // Resolve environment: deployment name lookup for server-side events,
@@ -530,6 +566,25 @@ http.route({
       });
     }
 
+    // IP-based anti-abuse: max 5 unclaimed projects per IP per hour
+    const ip =
+      req.headers.get("cf-connecting-ip") ??
+      req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ??
+      "unknown";
+    const ipAllowed = await ctx.runMutation(internal.usage.checkProvisionAbuse, {
+      ip,
+      limit: 5,
+    });
+    if (!ipAllowed) {
+      return new Response(
+        JSON.stringify({
+          error: "provision_limit_exceeded",
+          message: "Too many projects provisioned from this IP. Try again in an hour.",
+        }),
+        { status: 429, headers: { "Content-Type": "application/json" } },
+      );
+    }
+
     // Rate limit: 10 provisions per minute globally
     const rl = await ctx.runMutation(internal.rateLimit.check, {
       key: "provision:global",
@@ -838,6 +893,35 @@ http.route({
       );
     }
 
+    // Quota check for the full batch
+    const quota = await ctx.runMutation(internal.usage.checkAndIncrement, {
+      writeKey,
+      count: validCount,
+    });
+    if (!quota.allowed) {
+      return new Response(
+        JSON.stringify({
+          error: "quota_exceeded",
+          message: "Monthly event quota exceeded. Upgrade your plan to continue tracking.",
+          plan: quota.plan,
+          limit: quota.limit,
+        }),
+        { status: 402, headers: { ...cors, "Content-Type": "application/json" } },
+      );
+    }
+
+    // Fire quota notification if thresholds crossed (non-blocking)
+    if (quota.teamId) {
+      const pct = quota.usageAfter / quota.limit;
+      if (pct >= 1.0 || pct >= 0.8) {
+        void ctx.scheduler.runAfter(0, internal.notifications.checkAndNotify, {
+          teamId: quota.teamId,
+          usageAfter: quota.usageAfter,
+          limit: quota.limit,
+        });
+      }
+    }
+
     const eventsToInsert = valid.filter((v): v is ValidatedEvent => v.type === "event").map(({ type: _, ...rest }) => rest);
     const pageviewsToInsert = valid.filter((v): v is ValidatedPageview => v.type === "pageview").map(({ type: _, ...rest }) => rest);
 
@@ -886,5 +970,7 @@ http.route({
     });
   }),
 });
+
+registerStripeRoutes(http);
 
 export default http;

@@ -13,10 +13,16 @@ export default defineSchema({
     name: v.string(),
     slug: v.string(), // URL-friendly identifier
     // Billing (future)
-    plan: v.union(v.literal("free"), v.literal("pro"), v.literal("enterprise")),
+    plan: v.union(v.literal("free"), v.literal("solo"), v.literal("pro")),
     stripeCustomerId: v.optional(v.string()),
     stripeSubscriptionId: v.optional(v.string()),
     usageLimitEventsPerMonth: v.number(),
+    // Rolling monthly usage counter (resets each billing period)
+    usageEventsThisMonth: v.optional(v.number()),
+    usageMonthKey: v.optional(v.string()), // "YYYY-MM" — used to detect month rollover
+    // Notification state — avoid spamming the same threshold email
+    notifiedAt80Pct: v.optional(v.boolean()),
+    notifiedAt100Pct: v.optional(v.boolean()),
     createdAt: v.number(),
   })
     .index("by_convexTeamId", ["convexTeamId"])
@@ -133,6 +139,14 @@ export default defineSchema({
   })
     .index("by_deploymentName", ["deploymentName"])
     .index("by_writeKey", ["writeKey"]),
+
+  // Tracks unclaimed project provisioning per IP for anti-abuse.
+  // Separate from billing rate limits — this is purely to prevent bulk spam provisioning.
+  provisionAbuse: defineTable({
+    ip: v.string(),
+    window: v.number(), // hour-level fixed window (epoch ms floored to hour)
+    count: v.number(),
+  }).index("by_ip_and_window", ["ip", "window"]),
 
   // -------------------------------------------------------------------------
   // Rate limiting (simple fixed-window counters)

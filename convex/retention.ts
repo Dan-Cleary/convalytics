@@ -1,0 +1,83 @@
+import { v } from "convex/values";
+import { internalMutation } from "./_generated/server";
+import { internal } from "./_generated/api";
+import { PLANS, type PlanId } from "./plans";
+
+const BATCH_SIZE = 200;
+
+// Prune events older than the team's retention window.
+// Processes one team at a time and self-reschedules if there's more to delete.
+export const pruneEvents = internalMutation({
+  args: {
+    writeKey: v.string(),
+    retentionDays: v.number(),
+    table: v.union(v.literal("events"), v.literal("pageviews")),
+  },
+  handler: async (ctx, args) => {
+    const cutoff = Date.now() - args.retentionDays * 24 * 60 * 60 * 1000;
+
+    const rows =
+      args.table === "events"
+        ? await ctx.db
+            .query("events")
+            .withIndex("by_writeKey_and_timestamp", (q) =>
+              q.eq("writeKey", args.writeKey).lt("timestamp", cutoff),
+            )
+            .take(BATCH_SIZE)
+        : await ctx.db
+            .query("pageviews")
+            .withIndex("by_writeKey_and_timestamp", (q) =>
+              q.eq("writeKey", args.writeKey).lt("timestamp", cutoff),
+            )
+            .take(BATCH_SIZE);
+
+    if (args.table === "events") {
+      for (const row of rows) {
+        await ctx.db.delete("events", row._id);
+      }
+    } else {
+      for (const row of rows) {
+        await ctx.db.delete("pageviews", row._id);
+      }
+    }
+
+    // If we hit the batch limit there may be more — reschedule immediately
+    if (rows.length === BATCH_SIZE) {
+      await ctx.scheduler.runAfter(0, internal.retention.pruneEvents, {
+        writeKey: args.writeKey,
+        retentionDays: args.retentionDays,
+        table: args.table,
+      });
+    }
+  },
+});
+
+// Nightly job: fan out pruneEvents for every project, using the team's plan retention.
+export const runNightlyRetention = internalMutation({
+  args: {},
+  handler: async (ctx) => {
+    // Collect all projects that belong to claimed teams
+    const projects = await ctx.db.query("projects").take(500);
+
+    for (const project of projects) {
+      if (!project.teamId || !project.claimed) continue;
+
+      const team = await ctx.db.get("teams", project.teamId);
+      if (!team) continue;
+
+      const plan = (team.plan ?? "free") as PlanId;
+      const retentionDays = PLANS[plan]?.retentionDays ?? PLANS.free.retentionDays;
+
+      await ctx.scheduler.runAfter(0, internal.retention.pruneEvents, {
+        writeKey: project.writeKey,
+        retentionDays,
+        table: "events",
+      });
+      await ctx.scheduler.runAfter(0, internal.retention.pruneEvents, {
+        writeKey: project.writeKey,
+        retentionDays,
+        table: "pageviews",
+      });
+    }
+  },
+});
