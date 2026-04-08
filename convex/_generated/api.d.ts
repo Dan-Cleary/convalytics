@@ -12,7 +12,6 @@ import type * as auth from "../auth.js";
 import type * as authHelpers from "../authHelpers.js";
 import type * as crons from "../crons.js";
 import type * as deploymentTypes from "../deploymentTypes.js";
-import type * as envFilter from "../envFilter.js";
 import type * as events from "../events.js";
 import type * as http from "../http.js";
 import type * as oauth from "../oauth.js";
@@ -32,7 +31,6 @@ declare const fullApi: ApiFromModules<{
   authHelpers: typeof authHelpers;
   crons: typeof crons;
   deploymentTypes: typeof deploymentTypes;
-  envFilter: typeof envFilter;
   events: typeof events;
   http: typeof http;
   oauth: typeof oauth;
