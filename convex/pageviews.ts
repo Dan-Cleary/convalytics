@@ -3,6 +3,34 @@ import { v } from "convex/values";
 import { validateProjectAccess } from "./authHelpers";
 
 // Called from http.ts ingest endpoint — write key already validated there.
+export const ingestBatch = internalMutation({
+  args: {
+    pageviews: v.array(
+      v.object({
+        writeKey: v.string(),
+        visitorId: v.string(),
+        sessionId: v.string(),
+        timestamp: v.number(),
+        environment: v.optional(v.string()),
+        userEmail: v.optional(v.string()),
+        userName: v.optional(v.string()),
+        path: v.string(),
+        referrer: v.string(),
+        referrerHost: v.string(),
+        title: v.string(),
+        utm_source: v.optional(v.string()),
+        utm_medium: v.optional(v.string()),
+        utm_campaign: v.optional(v.string()),
+      }),
+    ),
+  },
+  handler: async (ctx, args) => {
+    for (const pv of args.pageviews) {
+      await ctx.db.insert("pageviews", pv);
+    }
+  },
+});
+
 export const ingest = internalMutation({
   args: {
     writeKey: v.string(),

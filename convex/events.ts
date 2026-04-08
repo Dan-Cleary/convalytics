@@ -3,6 +3,29 @@ import { internalMutation, query } from "./_generated/server";
 import { validateProjectAccess } from "./authHelpers";
 
 // Called from http.ts ingest endpoint — write key already validated there.
+export const ingestBatch = internalMutation({
+  args: {
+    events: v.array(
+      v.object({
+        writeKey: v.string(),
+        name: v.string(),
+        visitorId: v.string(),
+        sessionId: v.string(),
+        timestamp: v.number(),
+        environment: v.optional(v.string()),
+        userEmail: v.optional(v.string()),
+        userName: v.optional(v.string()),
+        props: v.record(v.string(), v.union(v.string(), v.number(), v.boolean())),
+      }),
+    ),
+  },
+  handler: async (ctx, args) => {
+    for (const event of args.events) {
+      await ctx.db.insert("events", event);
+    }
+  },
+});
+
 export const ingest = internalMutation({
   args: {
     writeKey: v.string(),

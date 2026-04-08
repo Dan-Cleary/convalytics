@@ -7,10 +7,20 @@ export const check = internalMutation({
   args: {
     key: v.string(),
     limit: v.number(),
+    count: v.optional(v.number()),
   },
-  handler: async (ctx, args): Promise<boolean> => {
+  handler: async (
+    ctx,
+    args,
+  ): Promise<{ allowed: boolean; remaining: number; resetAt: number }> => {
+    // Validate count parameter: must be a positive integer
+    if (args.count !== undefined && (!Number.isInteger(args.count) || args.count < 1)) {
+      throw new Error("count must be an integer >= 1");
+    }
+    const increment = args.count ?? 1;
     const now = Date.now();
     const window = Math.floor(now / WINDOW_MS) * WINDOW_MS;
+    const resetAt = window + WINDOW_MS;
 
     const existing = await ctx.db
       .query("rateLimits")
@@ -20,19 +30,33 @@ export const check = internalMutation({
       .unique();
 
     if (existing) {
-      if (existing.count >= args.limit) {
-        return false;
+      if (existing.count + increment > args.limit) {
+        return {
+          allowed: false,
+          remaining: Math.max(0, args.limit - existing.count),
+          resetAt,
+        };
       }
-      await ctx.db.patch("rateLimits", existing._id, { count: existing.count + 1 });
-      return true;
+      await ctx.db.patch("rateLimits", existing._id, {
+        count: existing.count + increment,
+      });
+      return {
+        allowed: true,
+        remaining: args.limit - existing.count - increment,
+        resetAt,
+      };
+    }
+
+    if (increment > args.limit) {
+      return { allowed: false, remaining: Math.max(0, args.limit), resetAt };
     }
 
     await ctx.db.insert("rateLimits", {
       key: args.key,
       window,
-      count: 1,
+      count: increment,
     });
-    return true;
+    return { allowed: true, remaining: args.limit - increment, resetAt };
   },
 });
 

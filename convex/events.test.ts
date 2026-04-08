@@ -328,6 +328,114 @@ describe("team sharing", () => {
   });
 });
 
+describe("events.ingestBatch", () => {
+  test("inserts all events in the batch", async () => {
+    const t = convexTest(schema, modules);
+    const { sessionToken, teamId } = await setupSession(t, "user1");
+    const writeKey = await setupProject(t, sessionToken, teamId, "my-app");
+
+    const now = Date.now();
+    await t.mutation(internal.events.ingestBatch, {
+      events: [
+        { writeKey, name: "step_started", visitorId: "u1", sessionId: "s1", timestamp: now, props: { step: "validate" } },
+        { writeKey, name: "step_completed", visitorId: "u1", sessionId: "s1", timestamp: now + 100, props: {} },
+        { writeKey, name: "step_started", visitorId: "u2", sessionId: "s2", timestamp: now + 200, props: { step: "process" } },
+      ],
+    });
+
+    const events = await t.query(api.events.listLatest, { sessionToken, writeKey });
+    expect(events).toHaveLength(3);
+  });
+
+  test("empty batch inserts nothing", async () => {
+    const t = convexTest(schema, modules);
+    const { sessionToken, teamId } = await setupSession(t, "user1");
+    const writeKey = await setupProject(t, sessionToken, teamId, "my-app");
+
+    await t.mutation(internal.events.ingestBatch, { events: [] });
+
+    const events = await t.query(api.events.listLatest, { sessionToken, writeKey });
+    expect(events).toHaveLength(0);
+  });
+
+  test("preserves props on each event", async () => {
+    const t = convexTest(schema, modules);
+    const { sessionToken, teamId } = await setupSession(t, "user1");
+    const writeKey = await setupProject(t, sessionToken, teamId, "my-app");
+
+    const now = Date.now();
+    await t.mutation(internal.events.ingestBatch, {
+      events: [
+        { writeKey, name: "ai_completion", visitorId: "u1", sessionId: "s1", timestamp: now, props: { model: "claude-3-5-sonnet", tokens: 500 } },
+      ],
+    });
+
+    const events = await t.query(api.events.listLatest, { sessionToken, writeKey });
+    expect(events[0].props).toEqual({ model: "claude-3-5-sonnet", tokens: 500 });
+  });
+});
+
+describe("rateLimit.check", () => {
+  test("allows requests up to the limit", async () => {
+    const t = convexTest(schema, modules);
+
+    const r1 = await t.mutation(internal.rateLimit.check, { key: "test:key", limit: 3 });
+    expect(r1.allowed).toBe(true);
+    expect(r1.remaining).toBe(2);
+
+    const r2 = await t.mutation(internal.rateLimit.check, { key: "test:key", limit: 3 });
+    expect(r2.allowed).toBe(true);
+    expect(r2.remaining).toBe(1);
+
+    const r3 = await t.mutation(internal.rateLimit.check, { key: "test:key", limit: 3 });
+    expect(r3.allowed).toBe(true);
+    expect(r3.remaining).toBe(0);
+  });
+
+  test("blocks when limit is exceeded", async () => {
+    const t = convexTest(schema, modules);
+
+    for (let i = 0; i < 3; i++) {
+      await t.mutation(internal.rateLimit.check, { key: "test:block", limit: 3 });
+    }
+
+    const over = await t.mutation(internal.rateLimit.check, { key: "test:block", limit: 3 });
+    expect(over.allowed).toBe(false);
+    expect(over.remaining).toBe(0);
+  });
+
+  test("count param reserves N slots atomically", async () => {
+    const t = convexTest(schema, modules);
+
+    const r1 = await t.mutation(internal.rateLimit.check, { key: "test:batch", limit: 10, count: 7 });
+    expect(r1.allowed).toBe(true);
+    expect(r1.remaining).toBe(3);
+
+    // Another batch of 5 should fail (only 3 remaining)
+    const r2 = await t.mutation(internal.rateLimit.check, { key: "test:batch", limit: 10, count: 5 });
+    expect(r2.allowed).toBe(false);
+    expect(r2.remaining).toBe(3);
+  });
+
+  test("returns resetAt as a future timestamp", async () => {
+    const t = convexTest(schema, modules);
+    const before = Date.now();
+    const result = await t.mutation(internal.rateLimit.check, { key: "test:reset", limit: 5 });
+    expect(result.resetAt).toBeGreaterThan(before);
+  });
+
+  test("different keys are tracked independently", async () => {
+    const t = convexTest(schema, modules);
+
+    for (let i = 0; i < 3; i++) {
+      await t.mutation(internal.rateLimit.check, { key: "test:a", limit: 3 });
+    }
+
+    const b = await t.mutation(internal.rateLimit.check, { key: "test:b", limit: 3 });
+    expect(b.allowed).toBe(true);
+  });
+});
+
 describe("events.stats7d", () => {
   test("counts total events and unique visitors", async () => {
     const t = convexTest(schema, modules);

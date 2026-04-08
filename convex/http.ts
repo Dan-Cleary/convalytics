@@ -72,15 +72,24 @@ http.route({
       return new Response("Invalid write key", { status: 401, headers: cors });
     }
 
-    const allowed: boolean = await ctx.runMutation(internal.rateLimit.check, {
+    const rl = await ctx.runMutation(internal.rateLimit.check, {
       key: `ingest:${writeKey}`,
       limit: 1000,
     });
-    if (!allowed) {
-      return new Response("Rate limit exceeded", {
-        status: 429,
-        headers: cors,
-      });
+    if (!rl.allowed) {
+      const retryAfter = Math.max(1, Math.ceil((rl.resetAt - Date.now()) / 1000));
+      return new Response(
+        JSON.stringify({
+          error: "rate_limit_exceeded",
+          message: "Ingest rate limit exceeded (1000 events/min). Retry after reset.",
+          retryAfter,
+          resetAt: rl.resetAt,
+        }),
+        {
+          status: 429,
+          headers: { ...cors, "Content-Type": "application/json", "Retry-After": String(retryAfter) },
+        },
+      );
     }
 
     // Resolve environment: deployment name lookup for server-side events,
@@ -409,6 +418,46 @@ On sign-out, call reset() to revert to anonymous tracking:
 Identity persists in localStorage across page reloads until reset() is called.
 The dashboard shows email > name > anonymous ID with cascading priority.
 
+## Bulk Ingest API
+
+For high-volume tracking (e.g. logging every step of an agent workflow), use the batch endpoint
+to send up to 100 events in a single request. This reduces request-level overhead and latency
+compared to sending individual requests. Each valid event in the batch still counts against the
+1000 events/min quota, but batching helps avoid hitting per-request rate limits.
+
+    POST /ingest/batch
+    Body: {
+      "writeKey": "wk_...",
+      "events": [
+        { "name": "step_started", "userId": "u1", "sessionId": "s1", "timestamp": 1234567890000, "props": { "step": "validate" } },
+        { "name": "step_completed", "userId": "u1", "sessionId": "s1", "timestamp": 1234567891000 }
+      ]
+    }
+    Response: {
+      "accepted": 2,
+      "rejected": 0,
+      "results": [{ "status": "ok" }, { "status": "ok" }]
+    }
+
+- Max 100 events per request
+- Write key is validated once for the whole batch
+- Per-event results: status "ok" or "error" with an error message
+- Rate limit is checked atomically for the full batch count
+- page_view events in a batch are routed to the pageviews table automatically
+
+## Rate Limits
+
+All rate limit errors return JSON with machine-readable fields:
+
+    {
+      "error": "rate_limit_exceeded",
+      "message": "...",
+      "retryAfter": 42,      // seconds until reset
+      "resetAt": 1234567890000  // unix ms
+    }
+
+The HTTP response also includes a standard Retry-After header (seconds).
+
 ## Provision API (for programmatic setup)
 
     POST /api/provision
@@ -482,16 +531,26 @@ http.route({
     }
 
     // Rate limit: 10 provisions per minute globally
-    const allowed: boolean = await ctx.runMutation(internal.rateLimit.check, {
+    const rl = await ctx.runMutation(internal.rateLimit.check, {
       key: "provision:global",
       limit: 10,
     });
-    if (!allowed) {
+    if (!rl.allowed) {
+      const retryAfter = Math.max(1, Math.ceil((rl.resetAt - Date.now()) / 1000));
       return new Response(
         JSON.stringify({
-          error: "Rate limit exceeded. Try again in a minute.",
+          error: "rate_limit_exceeded",
+          message: "Provision rate limit exceeded. Try again in a minute.",
+          retryAfter,
+          resetAt: rl.resetAt,
         }),
-        { status: 429, headers: { "Content-Type": "application/json" } },
+        {
+          status: 429,
+          headers: {
+            "Content-Type": "application/json",
+            "Retry-After": String(retryAfter),
+          },
+        },
       );
     }
 
@@ -534,6 +593,271 @@ http.route({
 
 http.route({
   path: "/api/provision",
+  method: "OPTIONS",
+  handler: httpAction(async (_, req) => {
+    return new Response(null, {
+      status: 204,
+      headers: {
+        ...corsHeaders(req),
+        "Access-Control-Allow-Methods": "POST, OPTIONS",
+        "Access-Control-Allow-Headers": "Content-Type",
+      },
+    });
+  }),
+});
+
+const BATCH_MAX = 100;
+
+// Bulk ingest — accepts up to 100 events in one request.
+// Validates write key once, rate-limits by total event count, returns per-event results.
+http.route({
+  path: "/ingest/batch",
+  method: "POST",
+  handler: httpAction(async (ctx, req) => {
+    const cors = corsHeaders(req);
+
+    let body: unknown;
+    try {
+      body = JSON.parse(await req.text());
+    } catch {
+      return new Response(
+        JSON.stringify({ error: "invalid_json", message: "Invalid JSON" }),
+        { status: 400, headers: { ...cors, "Content-Type": "application/json" } },
+      );
+    }
+
+    if (typeof body !== "object" || body === null) {
+      return new Response(
+        JSON.stringify({ error: "invalid_body", message: "Body must be a JSON object" }),
+        { status: 400, headers: { ...cors, "Content-Type": "application/json" } },
+      );
+    }
+
+    const { writeKey, events } = body as Record<string, unknown>;
+
+    if (typeof writeKey !== "string") {
+      return new Response(
+        JSON.stringify({ error: "missing_write_key", message: "writeKey is required" }),
+        { status: 400, headers: { ...cors, "Content-Type": "application/json" } },
+      );
+    }
+
+    if (!Array.isArray(events)) {
+      return new Response(
+        JSON.stringify({ error: "invalid_events", message: "events must be an array" }),
+        { status: 400, headers: { ...cors, "Content-Type": "application/json" } },
+      );
+    }
+
+    if (events.length === 0) {
+      return new Response(
+        JSON.stringify({ accepted: 0, rejected: 0, results: [] }),
+        { status: 200, headers: { ...cors, "Content-Type": "application/json" } },
+      );
+    }
+
+    if (events.length > BATCH_MAX) {
+      return new Response(
+        JSON.stringify({
+          error: "batch_too_large",
+          message: `Batch size ${events.length} exceeds maximum of ${BATCH_MAX}`,
+          maxBatchSize: BATCH_MAX,
+        }),
+        { status: 400, headers: { ...cors, "Content-Type": "application/json" } },
+      );
+    }
+
+    const project = await ctx.runQuery(internal.projects.validateWriteKey, { writeKey });
+    if (!project) {
+      return new Response(
+        JSON.stringify({ error: "invalid_write_key", message: "Invalid write key" }),
+        { status: 401, headers: { ...cors, "Content-Type": "application/json" } },
+      );
+    }
+
+    // Validate each event and collect results
+    type EventResult = { status: "ok" } | { status: "error"; error: string };
+    const results: EventResult[] = [];
+    type ValidatedEvent = {
+      type: "event";
+      writeKey: string;
+      name: string;
+      visitorId: string;
+      sessionId: string;
+      timestamp: number;
+      environment?: string;
+      userEmail?: string;
+      userName?: string;
+      props: Record<string, string | number | boolean>;
+    };
+    type ValidatedPageview = {
+      type: "pageview";
+      writeKey: string;
+      visitorId: string;
+      sessionId: string;
+      timestamp: number;
+      environment?: string;
+      userEmail?: string;
+      userName?: string;
+      path: string;
+      referrer: string;
+      referrerHost: string;
+      title: string;
+      utm_source?: string;
+      utm_medium?: string;
+      utm_campaign?: string;
+    };
+    const valid: Array<ValidatedEvent | ValidatedPageview> = [];
+
+    // Cache environment resolutions within the batch to avoid redundant queries
+    const envCache = new Map<string, string | undefined>();
+
+    async function resolveEnv(deploymentName: string | undefined, pageOrigin: string | undefined, originHeader: string): Promise<string | undefined> {
+      if (typeof deploymentName === "string" && deploymentName) {
+        const cacheKey = `dn:${deploymentName}`;
+        if (!envCache.has(cacheKey)) {
+          const resolved: string | null = await ctx.runQuery(internal.deploymentTypes.resolve, { deploymentName });
+          envCache.set(cacheKey, resolved ?? "development");
+        }
+        return envCache.get(cacheKey);
+      }
+      const origin = typeof pageOrigin === "string" && pageOrigin ? pageOrigin : originHeader;
+      const cacheKey = `origin:${origin}`;
+      if (!envCache.has(cacheKey)) {
+        try {
+          const hostname = new URL(origin).hostname;
+          envCache.set(cacheKey, hostname === "localhost" || hostname === "127.0.0.1" || hostname === "0.0.0.0" ? "development" : "production");
+        } catch {
+          envCache.set(cacheKey, undefined);
+        }
+      }
+      return envCache.get(cacheKey);
+    }
+
+    const originHeader = req.headers.get("Origin") ?? "";
+
+    for (const raw of events) {
+      if (typeof raw !== "object" || raw === null) {
+        results.push({ status: "error", error: "event must be an object" });
+        continue;
+      }
+      const e = raw as Record<string, unknown>;
+      const { name, userId, sessionId, timestamp, props, deploymentName, pageOrigin, userEmail: rawEmail, userName: rawName } = e;
+
+      if (typeof name !== "string" || !name) {
+        results.push({ status: "error", error: "missing required field: name" });
+        continue;
+      }
+      if (typeof userId !== "string" || !userId) {
+        results.push({ status: "error", error: "missing required field: userId" });
+        continue;
+      }
+      if (typeof sessionId !== "string" || !sessionId) {
+        results.push({ status: "error", error: "missing required field: sessionId" });
+        continue;
+      }
+      if (typeof timestamp !== "number") {
+        results.push({ status: "error", error: "missing required field: timestamp (number)" });
+        continue;
+      }
+
+      const userEmail = typeof rawEmail === "string" && rawEmail ? rawEmail.slice(0, 200) : undefined;
+      const userName = typeof rawName === "string" && rawName ? rawName.slice(0, 200) : undefined;
+
+      const cleanProps: Record<string, string | number | boolean> = {};
+      if (typeof props === "object" && props !== null) {
+        for (const [k, v] of Object.entries(props as Record<string, unknown>)) {
+          if (k.length > 0 && !k.startsWith("$") && !k.startsWith("_") && /^[\x21-\x7E]+$/.test(k) && (typeof v === "string" || typeof v === "number" || typeof v === "boolean")) {
+            cleanProps[k] = v;
+          }
+        }
+      }
+
+      const environment = await resolveEnv(
+        typeof deploymentName === "string" ? deploymentName : undefined,
+        typeof pageOrigin === "string" ? pageOrigin : undefined,
+        originHeader,
+      );
+
+      if (name === "page_view") {
+        let referrerHost = "";
+        const referrer = (typeof cleanProps.referrer === "string" ? cleanProps.referrer : "").slice(0, 500);
+        if (referrer) {
+          try { referrerHost = new URL(referrer).hostname.slice(0, 200); } catch { /* ignore */ }
+        }
+        valid.push({
+          type: "pageview",
+          writeKey,
+          visitorId: userId,
+          sessionId,
+          timestamp,
+          environment,
+          userEmail,
+          userName,
+          path: (typeof cleanProps.path === "string" ? cleanProps.path : "").slice(0, 500),
+          referrer,
+          referrerHost,
+          title: (typeof cleanProps.title === "string" ? cleanProps.title : "").slice(0, 200),
+          utm_source: typeof cleanProps.utm_source === "string" ? cleanProps.utm_source : undefined,
+          utm_medium: typeof cleanProps.utm_medium === "string" ? cleanProps.utm_medium : undefined,
+          utm_campaign: typeof cleanProps.utm_campaign === "string" ? cleanProps.utm_campaign : undefined,
+        });
+      } else {
+        valid.push({ type: "event", writeKey, name, visitorId: userId, sessionId, timestamp, environment, userEmail, userName, props: cleanProps });
+      }
+      results.push({ status: "ok" });
+    }
+
+    const validCount = valid.length;
+    if (validCount === 0) {
+      return new Response(
+        JSON.stringify({ accepted: 0, rejected: results.length, results }),
+        { status: 200, headers: { ...cors, "Content-Type": "application/json" } },
+      );
+    }
+
+    const rl = await ctx.runMutation(internal.rateLimit.check, {
+      key: `ingest:${writeKey}`,
+      limit: 1000,
+      count: validCount,
+    });
+    if (!rl.allowed) {
+      const retryAfter = Math.max(1, Math.ceil((rl.resetAt - Date.now()) / 1000));
+      return new Response(
+        JSON.stringify({
+          error: "rate_limit_exceeded",
+          message: `Rate limit exceeded. Batch of ${validCount} would exceed 1000 events/min. Only ${rl.remaining} slots remaining.`,
+          retryAfter,
+          resetAt: rl.resetAt,
+          remaining: rl.remaining,
+        }),
+        {
+          status: 429,
+          headers: { ...cors, "Content-Type": "application/json", "Retry-After": String(retryAfter) },
+        },
+      );
+    }
+
+    const eventsToInsert = valid.filter((v): v is ValidatedEvent => v.type === "event").map(({ type: _, ...rest }) => rest);
+    const pageviewsToInsert = valid.filter((v): v is ValidatedPageview => v.type === "pageview").map(({ type: _, ...rest }) => rest);
+
+    if (eventsToInsert.length > 0) {
+      await ctx.runMutation(internal.events.ingestBatch, { events: eventsToInsert });
+    }
+    if (pageviewsToInsert.length > 0) {
+      await ctx.runMutation(internal.pageviews.ingestBatch, { pageviews: pageviewsToInsert });
+    }
+
+    const rejected = results.filter((r) => r.status === "error").length;
+    return new Response(
+      JSON.stringify({ accepted: validCount, rejected, results }),
+      { status: 200, headers: { ...cors, "Content-Type": "application/json" } },
+    );
+  }),
+});
+
+http.route({
+  path: "/ingest/batch",
   method: "OPTIONS",
   handler: httpAction(async (_, req) => {
     return new Response(null, {
