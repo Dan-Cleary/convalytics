@@ -77,16 +77,17 @@ http.route({
       limit: 1000,
     });
     if (!rl.allowed) {
+      const retryAfter = Math.ceil((rl.resetAt - Date.now()) / 1000);
       return new Response(
         JSON.stringify({
           error: "rate_limit_exceeded",
           message: "Ingest rate limit exceeded (1000 events/min). Retry after reset.",
-          retryAfter: Math.ceil((rl.resetAt - Date.now()) / 1000),
+          retryAfter,
           resetAt: rl.resetAt,
         }),
         {
           status: 429,
-          headers: { ...cors, "Content-Type": "application/json", "Retry-After": String(Math.ceil((rl.resetAt - Date.now()) / 1000)) },
+          headers: { ...cors, "Content-Type": "application/json", "Retry-After": String(retryAfter) },
         },
       );
     }
@@ -533,18 +534,19 @@ http.route({
       limit: 10,
     });
     if (!rl.allowed) {
+      const retryAfter = Math.ceil((rl.resetAt - Date.now()) / 1000);
       return new Response(
         JSON.stringify({
           error: "rate_limit_exceeded",
           message: "Provision rate limit exceeded. Try again in a minute.",
-          retryAfter: Math.ceil((rl.resetAt - Date.now()) / 1000),
+          retryAfter,
           resetAt: rl.resetAt,
         }),
         {
           status: 429,
           headers: {
             "Content-Type": "application/json",
-            "Retry-After": String(Math.ceil((rl.resetAt - Date.now()) / 1000)),
+            "Retry-After": String(retryAfter),
           },
         },
       );
@@ -818,17 +820,18 @@ http.route({
       count: validCount,
     });
     if (!rl.allowed) {
+      const retryAfter = Math.ceil((rl.resetAt - Date.now()) / 1000);
       return new Response(
         JSON.stringify({
           error: "rate_limit_exceeded",
           message: `Rate limit exceeded. Batch of ${validCount} would exceed 1000 events/min. Only ${rl.remaining} slots remaining.`,
-          retryAfter: Math.ceil((rl.resetAt - Date.now()) / 1000),
+          retryAfter,
           resetAt: rl.resetAt,
           remaining: rl.remaining,
         }),
         {
           status: 429,
-          headers: { ...cors, "Content-Type": "application/json", "Retry-After": String(Math.ceil((rl.resetAt - Date.now()) / 1000)) },
+          headers: { ...cors, "Content-Type": "application/json", "Retry-After": String(retryAfter) },
         },
       );
     }
