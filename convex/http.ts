@@ -77,7 +77,7 @@ http.route({
       limit: 1000,
     });
     if (!rl.allowed) {
-      const retryAfter = Math.ceil((rl.resetAt - Date.now()) / 1000);
+      const retryAfter = Math.max(1, Math.ceil((rl.resetAt - Date.now()) / 1000));
       return new Response(
         JSON.stringify({
           error: "rate_limit_exceeded",
@@ -536,7 +536,7 @@ http.route({
       limit: 10,
     });
     if (!rl.allowed) {
-      const retryAfter = Math.ceil((rl.resetAt - Date.now()) / 1000);
+      const retryAfter = Math.max(1, Math.ceil((rl.resetAt - Date.now()) / 1000));
       return new Response(
         JSON.stringify({
           error: "rate_limit_exceeded",
@@ -822,7 +822,7 @@ http.route({
       count: validCount,
     });
     if (!rl.allowed) {
-      const retryAfter = Math.ceil((rl.resetAt - Date.now()) / 1000);
+      const retryAfter = Math.max(1, Math.ceil((rl.resetAt - Date.now()) / 1000));
       return new Response(
         JSON.stringify({
           error: "rate_limit_exceeded",
