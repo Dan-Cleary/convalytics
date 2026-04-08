@@ -421,7 +421,9 @@ The dashboard shows email > name > anonymous ID with cascading priority.
 ## Bulk Ingest API
 
 For high-volume tracking (e.g. logging every step of an agent workflow), use the batch endpoint
-to send up to 100 events in a single request. This avoids rate limits and reduces latency.
+to send up to 100 events in a single request. This reduces request-level overhead and latency
+compared to sending individual requests. Each valid event in the batch still counts against the
+1000 events/min quota, but batching helps avoid hitting per-request rate limits.
 
     POST /ingest/batch
     Body: {

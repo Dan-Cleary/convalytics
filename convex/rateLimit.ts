@@ -13,6 +13,10 @@ export const check = internalMutation({
     ctx,
     args,
   ): Promise<{ allowed: boolean; remaining: number; resetAt: number }> => {
+    // Validate count parameter: must be a positive integer
+    if (args.count !== undefined && (!Number.isInteger(args.count) || args.count < 1)) {
+      throw new Error("count must be an integer >= 1");
+    }
     const increment = args.count ?? 1;
     const now = Date.now();
     const window = Math.floor(now / WINDOW_MS) * WINDOW_MS;
