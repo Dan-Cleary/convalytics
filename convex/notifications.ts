@@ -25,7 +25,7 @@ export const checkAndNotify = internalAction({
 
     // Get team + owner email
     const { team, ownerEmail } = await ctx.runQuery(
-      internal.notifications.getTeamOwnerEmail,
+      internal.notifications.getTeamOwnerEmailQuery,
       { teamId: args.teamId },
     );
     if (!team || !ownerEmail) return;
@@ -65,21 +65,6 @@ export const checkAndNotify = internalAction({
         threshold: "80",
       });
     }
-  },
-});
-
-export const getTeamOwnerEmail = internalAction({
-  args: { teamId: v.id("teams") },
-  handler: async (
-    ctx,
-    args,
-  ): Promise<{
-    team: { plan: string; notifiedAt80Pct?: boolean; notifiedAt100Pct?: boolean } | null;
-    ownerEmail: string | null;
-  }> => {
-    return ctx.runQuery(internal.notifications.getTeamOwnerEmailQuery, {
-      teamId: args.teamId,
-    });
   },
 });
 

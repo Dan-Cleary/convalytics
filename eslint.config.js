@@ -17,6 +17,7 @@ export default defineConfig([
       "vite.config.ts",
       "vitest.config.ts",
       "convex/events.test.ts",
+      "convex/billing.test.ts",
       "component/**",
     ],
   },

@@ -47,14 +47,15 @@ export const checkAndIncrement = internalMutation({
     }
 
     const plan = (team.plan ?? "free") as PlanId;
-    const limit = PLANS[plan]?.eventsPerMonth ?? PLANS.free.eventsPerMonth;
+    // Use the stored limit as source of truth — billing.applySubscription keeps it in sync.
+    const limit = team.usageLimitEventsPerMonth ?? PLANS[plan]?.eventsPerMonth ?? PLANS.free.eventsPerMonth;
     const currentMonth = monthKey();
 
     // Reset counter on new month
     const storedMonth = team.usageMonthKey ?? "";
     const currentUsage = storedMonth === currentMonth ? (team.usageEventsThisMonth ?? 0) : 0;
 
-    if (currentUsage >= limit) {
+    if (currentUsage >= limit || currentUsage + args.count > limit) {
       return { allowed: false, teamId: team._id, usageAfter: currentUsage, limit, plan };
     }
 
@@ -79,7 +80,7 @@ export const getUsage = internalQuery({
     const team = await ctx.db.get("teams", args.teamId);
     if (!team) return null;
     const plan = (team.plan ?? "free") as PlanId;
-    const limit = PLANS[plan]?.eventsPerMonth ?? PLANS.free.eventsPerMonth;
+    const limit = team.usageLimitEventsPerMonth ?? PLANS[plan]?.eventsPerMonth ?? PLANS.free.eventsPerMonth;
     const currentMonth = monthKey();
     const usage =
       team.usageMonthKey === currentMonth ? (team.usageEventsThisMonth ?? 0) : 0;
