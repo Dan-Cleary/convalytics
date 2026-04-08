@@ -4,6 +4,7 @@ import { internal } from "./_generated/api";
 import { PLANS, type PlanId } from "./plans";
 
 const BATCH_SIZE = 200;
+const NIGHTLY_RETENTION_BATCH_SIZE = 500;
 
 // Prune events older than the team's retention window.
 // Processes one team at a time and self-reschedules if there's more to delete.
@@ -54,19 +55,23 @@ export const pruneEvents = internalMutation({
 
 // Nightly job: fan out pruneEvents for every project, using the team's plan retention.
 export const runNightlyRetention = internalMutation({
-  args: {},
-  handler: async (ctx) => {
-    // Collect all projects that belong to claimed teams
-    const projects = await ctx.db.query("projects").take(500);
+  args: { cursor: v.optional(v.string()) },
+  handler: async (ctx, args) => {
+    // Scan projects in pages and enqueue retention for claimed projects.
+    const projects = await ctx.db.query("projects").paginate({
+      numItems: NIGHTLY_RETENTION_BATCH_SIZE,
+      cursor: args.cursor ?? null,
+    });
 
-    for (const project of projects) {
+    for (const project of projects.page) {
       if (!project.teamId || !project.claimed) continue;
 
       const team = await ctx.db.get("teams", project.teamId);
       if (!team) continue;
 
       const plan = (team.plan ?? "free") as PlanId;
-      const retentionDays = PLANS[plan]?.retentionDays ?? PLANS.free.retentionDays;
+      const retentionDays =
+        PLANS[plan]?.retentionDays ?? PLANS.free.retentionDays;
 
       await ctx.scheduler.runAfter(0, internal.retention.pruneEvents, {
         writeKey: project.writeKey,
@@ -77,6 +82,12 @@ export const runNightlyRetention = internalMutation({
         writeKey: project.writeKey,
         retentionDays,
         table: "pageviews",
+      });
+    }
+
+    if (!projects.isDone) {
+      await ctx.scheduler.runAfter(0, internal.retention.runNightlyRetention, {
+        cursor: projects.continueCursor,
       });
     }
   },

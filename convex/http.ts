@@ -2,8 +2,13 @@ import { httpRouter } from "convex/server";
 import { httpAction } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { registerStripeRoutes } from "./billing";
+import {
+  QUOTA_NOTIFY_THRESHOLDS,
+  UNCLAIMED_PROJECTS_PER_IP_PER_HOUR,
+} from "./plans";
 
 const http = httpRouter();
+const [QUOTA_NOTIFY_80_PCT, QUOTA_NOTIFY_100_PCT] = QUOTA_NOTIFY_THRESHOLDS;
 
 function corsHeaders(req: Request) {
   const origin = req.headers.get("Origin") ?? "*";
@@ -78,17 +83,25 @@ http.route({
       limit: 1000,
     });
     if (!rl.allowed) {
-      const retryAfter = Math.max(1, Math.ceil((rl.resetAt - Date.now()) / 1000));
+      const retryAfter = Math.max(
+        1,
+        Math.ceil((rl.resetAt - Date.now()) / 1000),
+      );
       return new Response(
         JSON.stringify({
           error: "rate_limit_exceeded",
-          message: "Ingest rate limit exceeded (1000 events/min). Retry after reset.",
+          message:
+            "Ingest rate limit exceeded (1000 events/min). Retry after reset.",
           retryAfter,
           resetAt: rl.resetAt,
         }),
         {
           status: 429,
-          headers: { ...cors, "Content-Type": "application/json", "Retry-After": String(retryAfter) },
+          headers: {
+            ...cors,
+            "Content-Type": "application/json",
+            "Retry-After": String(retryAfter),
+          },
         },
       );
     }
@@ -108,18 +121,27 @@ http.route({
       return new Response(
         JSON.stringify({
           error: "quota_exceeded",
-          message: "Monthly event quota exceeded. Upgrade your plan to continue tracking.",
+          message:
+            "Monthly event quota exceeded. Upgrade your plan to continue tracking.",
           plan: quota.plan,
           limit: quota.limit,
         }),
-        { status: 402, headers: { ...cors, "Content-Type": "application/json" } },
+        {
+          status: 402,
+          headers: { ...cors, "Content-Type": "application/json" },
+        },
       );
     }
 
     // Fire quota notification if thresholds crossed (non-blocking)
     if (quota.teamId) {
+      const usageBefore = quota.usageAfter - 1;
+      const pctBefore = usageBefore / quota.limit;
       const pct = quota.usageAfter / quota.limit;
-      if (pct >= 1.0 || pct >= 0.8) {
+      const crossedThreshold =
+        (pctBefore < QUOTA_NOTIFY_80_PCT && pct >= QUOTA_NOTIFY_80_PCT) ||
+        (pctBefore < QUOTA_NOTIFY_100_PCT && pct >= QUOTA_NOTIFY_100_PCT);
+      if (crossedThreshold) {
         void ctx.scheduler.runAfter(0, internal.notifications.checkAndNotify, {
           teamId: quota.teamId,
           usageAfter: quota.usageAfter,
@@ -566,32 +588,16 @@ http.route({
       });
     }
 
-    // IP-based anti-abuse: max 5 unclaimed projects per IP per hour
-    const ip =
-      req.headers.get("cf-connecting-ip") ??
-      req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ??
-      "unknown";
-    const ipAllowed = await ctx.runMutation(internal.usage.checkProvisionAbuse, {
-      ip,
-      limit: 5,
-    });
-    if (!ipAllowed) {
-      return new Response(
-        JSON.stringify({
-          error: "provision_limit_exceeded",
-          message: "Too many projects provisioned from this IP. Try again in an hour.",
-        }),
-        { status: 429, headers: { "Content-Type": "application/json" } },
-      );
-    }
-
     // Rate limit: 10 provisions per minute globally
     const rl = await ctx.runMutation(internal.rateLimit.check, {
       key: "provision:global",
       limit: 10,
     });
     if (!rl.allowed) {
-      const retryAfter = Math.max(1, Math.ceil((rl.resetAt - Date.now()) / 1000));
+      const retryAfter = Math.max(
+        1,
+        Math.ceil((rl.resetAt - Date.now()) / 1000),
+      );
       return new Response(
         JSON.stringify({
           error: "rate_limit_exceeded",
@@ -606,6 +612,29 @@ http.route({
             "Retry-After": String(retryAfter),
           },
         },
+      );
+    }
+
+    // IP-based anti-abuse: max 5 unclaimed projects per IP per hour
+    const ip =
+      req.headers.get("cf-connecting-ip") ??
+      req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ??
+      "unknown";
+    const ipAllowed = await ctx.runMutation(
+      internal.usage.checkProvisionAbuse,
+      {
+        ip,
+        limit: UNCLAIMED_PROJECTS_PER_IP_PER_HOUR,
+      },
+    );
+    if (!ipAllowed) {
+      return new Response(
+        JSON.stringify({
+          error: "provision_limit_exceeded",
+          message:
+            "Too many projects provisioned from this IP. Try again in an hour.",
+        }),
+        { status: 429, headers: { "Content-Type": "application/json" } },
       );
     }
 
@@ -677,14 +706,23 @@ http.route({
     } catch {
       return new Response(
         JSON.stringify({ error: "invalid_json", message: "Invalid JSON" }),
-        { status: 400, headers: { ...cors, "Content-Type": "application/json" } },
+        {
+          status: 400,
+          headers: { ...cors, "Content-Type": "application/json" },
+        },
       );
     }
 
     if (typeof body !== "object" || body === null) {
       return new Response(
-        JSON.stringify({ error: "invalid_body", message: "Body must be a JSON object" }),
-        { status: 400, headers: { ...cors, "Content-Type": "application/json" } },
+        JSON.stringify({
+          error: "invalid_body",
+          message: "Body must be a JSON object",
+        }),
+        {
+          status: 400,
+          headers: { ...cors, "Content-Type": "application/json" },
+        },
       );
     }
 
@@ -692,22 +730,37 @@ http.route({
 
     if (typeof writeKey !== "string") {
       return new Response(
-        JSON.stringify({ error: "missing_write_key", message: "writeKey is required" }),
-        { status: 400, headers: { ...cors, "Content-Type": "application/json" } },
+        JSON.stringify({
+          error: "missing_write_key",
+          message: "writeKey is required",
+        }),
+        {
+          status: 400,
+          headers: { ...cors, "Content-Type": "application/json" },
+        },
       );
     }
 
     if (!Array.isArray(events)) {
       return new Response(
-        JSON.stringify({ error: "invalid_events", message: "events must be an array" }),
-        { status: 400, headers: { ...cors, "Content-Type": "application/json" } },
+        JSON.stringify({
+          error: "invalid_events",
+          message: "events must be an array",
+        }),
+        {
+          status: 400,
+          headers: { ...cors, "Content-Type": "application/json" },
+        },
       );
     }
 
     if (events.length === 0) {
       return new Response(
         JSON.stringify({ accepted: 0, rejected: 0, results: [] }),
-        { status: 200, headers: { ...cors, "Content-Type": "application/json" } },
+        {
+          status: 200,
+          headers: { ...cors, "Content-Type": "application/json" },
+        },
       );
     }
 
@@ -718,15 +771,26 @@ http.route({
           message: `Batch size ${events.length} exceeds maximum of ${BATCH_MAX}`,
           maxBatchSize: BATCH_MAX,
         }),
-        { status: 400, headers: { ...cors, "Content-Type": "application/json" } },
+        {
+          status: 400,
+          headers: { ...cors, "Content-Type": "application/json" },
+        },
       );
     }
 
-    const project = await ctx.runQuery(internal.projects.validateWriteKey, { writeKey });
+    const project = await ctx.runQuery(internal.projects.validateWriteKey, {
+      writeKey,
+    });
     if (!project) {
       return new Response(
-        JSON.stringify({ error: "invalid_write_key", message: "Invalid write key" }),
-        { status: 401, headers: { ...cors, "Content-Type": "application/json" } },
+        JSON.stringify({
+          error: "invalid_write_key",
+          message: "Invalid write key",
+        }),
+        {
+          status: 401,
+          headers: { ...cors, "Content-Type": "application/json" },
+        },
       );
     }
 
@@ -767,21 +831,38 @@ http.route({
     // Cache environment resolutions within the batch to avoid redundant queries
     const envCache = new Map<string, string | undefined>();
 
-    async function resolveEnv(deploymentName: string | undefined, pageOrigin: string | undefined, originHeader: string): Promise<string | undefined> {
+    async function resolveEnv(
+      deploymentName: string | undefined,
+      pageOrigin: string | undefined,
+      originHeader: string,
+    ): Promise<string | undefined> {
       if (typeof deploymentName === "string" && deploymentName) {
         const cacheKey = `dn:${deploymentName}`;
         if (!envCache.has(cacheKey)) {
-          const resolved: string | null = await ctx.runQuery(internal.deploymentTypes.resolve, { deploymentName });
+          const resolved: string | null = await ctx.runQuery(
+            internal.deploymentTypes.resolve,
+            { deploymentName },
+          );
           envCache.set(cacheKey, resolved ?? "development");
         }
         return envCache.get(cacheKey);
       }
-      const origin = typeof pageOrigin === "string" && pageOrigin ? pageOrigin : originHeader;
+      const origin =
+        typeof pageOrigin === "string" && pageOrigin
+          ? pageOrigin
+          : originHeader;
       const cacheKey = `origin:${origin}`;
       if (!envCache.has(cacheKey)) {
         try {
           const hostname = new URL(origin).hostname;
-          envCache.set(cacheKey, hostname === "localhost" || hostname === "127.0.0.1" || hostname === "0.0.0.0" ? "development" : "production");
+          envCache.set(
+            cacheKey,
+            hostname === "localhost" ||
+              hostname === "127.0.0.1" ||
+              hostname === "0.0.0.0"
+              ? "development"
+              : "production",
+          );
         } catch {
           envCache.set(cacheKey, undefined);
         }
@@ -797,32 +878,68 @@ http.route({
         continue;
       }
       const e = raw as Record<string, unknown>;
-      const { name, userId, sessionId, timestamp, props, deploymentName, pageOrigin, userEmail: rawEmail, userName: rawName } = e;
+      const {
+        name,
+        userId,
+        sessionId,
+        timestamp,
+        props,
+        deploymentName,
+        pageOrigin,
+        userEmail: rawEmail,
+        userName: rawName,
+      } = e;
 
       if (typeof name !== "string" || !name) {
-        results.push({ status: "error", error: "missing required field: name" });
+        results.push({
+          status: "error",
+          error: "missing required field: name",
+        });
         continue;
       }
       if (typeof userId !== "string" || !userId) {
-        results.push({ status: "error", error: "missing required field: userId" });
+        results.push({
+          status: "error",
+          error: "missing required field: userId",
+        });
         continue;
       }
       if (typeof sessionId !== "string" || !sessionId) {
-        results.push({ status: "error", error: "missing required field: sessionId" });
+        results.push({
+          status: "error",
+          error: "missing required field: sessionId",
+        });
         continue;
       }
       if (typeof timestamp !== "number") {
-        results.push({ status: "error", error: "missing required field: timestamp (number)" });
+        results.push({
+          status: "error",
+          error: "missing required field: timestamp (number)",
+        });
         continue;
       }
 
-      const userEmail = typeof rawEmail === "string" && rawEmail ? rawEmail.slice(0, 200) : undefined;
-      const userName = typeof rawName === "string" && rawName ? rawName.slice(0, 200) : undefined;
+      const userEmail =
+        typeof rawEmail === "string" && rawEmail
+          ? rawEmail.slice(0, 200)
+          : undefined;
+      const userName =
+        typeof rawName === "string" && rawName
+          ? rawName.slice(0, 200)
+          : undefined;
 
       const cleanProps: Record<string, string | number | boolean> = {};
       if (typeof props === "object" && props !== null) {
         for (const [k, v] of Object.entries(props as Record<string, unknown>)) {
-          if (k.length > 0 && !k.startsWith("$") && !k.startsWith("_") && /^[\x21-\x7E]+$/.test(k) && (typeof v === "string" || typeof v === "number" || typeof v === "boolean")) {
+          if (
+            k.length > 0 &&
+            !k.startsWith("$") &&
+            !k.startsWith("_") &&
+            /^[\x21-\x7E]+$/.test(k) &&
+            (typeof v === "string" ||
+              typeof v === "number" ||
+              typeof v === "boolean")
+          ) {
             cleanProps[k] = v;
           }
         }
@@ -836,9 +953,15 @@ http.route({
 
       if (name === "page_view") {
         let referrerHost = "";
-        const referrer = (typeof cleanProps.referrer === "string" ? cleanProps.referrer : "").slice(0, 500);
+        const referrer = (
+          typeof cleanProps.referrer === "string" ? cleanProps.referrer : ""
+        ).slice(0, 500);
         if (referrer) {
-          try { referrerHost = new URL(referrer).hostname.slice(0, 200); } catch { /* ignore */ }
+          try {
+            referrerHost = new URL(referrer).hostname.slice(0, 200);
+          } catch {
+            /* ignore */
+          }
         }
         valid.push({
           type: "pageview",
@@ -849,16 +972,42 @@ http.route({
           environment,
           userEmail,
           userName,
-          path: (typeof cleanProps.path === "string" ? cleanProps.path : "").slice(0, 500),
+          path: (typeof cleanProps.path === "string"
+            ? cleanProps.path
+            : ""
+          ).slice(0, 500),
           referrer,
           referrerHost,
-          title: (typeof cleanProps.title === "string" ? cleanProps.title : "").slice(0, 200),
-          utm_source: typeof cleanProps.utm_source === "string" ? cleanProps.utm_source : undefined,
-          utm_medium: typeof cleanProps.utm_medium === "string" ? cleanProps.utm_medium : undefined,
-          utm_campaign: typeof cleanProps.utm_campaign === "string" ? cleanProps.utm_campaign : undefined,
+          title: (typeof cleanProps.title === "string"
+            ? cleanProps.title
+            : ""
+          ).slice(0, 200),
+          utm_source:
+            typeof cleanProps.utm_source === "string"
+              ? cleanProps.utm_source
+              : undefined,
+          utm_medium:
+            typeof cleanProps.utm_medium === "string"
+              ? cleanProps.utm_medium
+              : undefined,
+          utm_campaign:
+            typeof cleanProps.utm_campaign === "string"
+              ? cleanProps.utm_campaign
+              : undefined,
         });
       } else {
-        valid.push({ type: "event", writeKey, name, visitorId: userId, sessionId, timestamp, environment, userEmail, userName, props: cleanProps });
+        valid.push({
+          type: "event",
+          writeKey,
+          name,
+          visitorId: userId,
+          sessionId,
+          timestamp,
+          environment,
+          userEmail,
+          userName,
+          props: cleanProps,
+        });
       }
       results.push({ status: "ok" });
     }
@@ -867,7 +1016,10 @@ http.route({
     if (validCount === 0) {
       return new Response(
         JSON.stringify({ accepted: 0, rejected: results.length, results }),
-        { status: 200, headers: { ...cors, "Content-Type": "application/json" } },
+        {
+          status: 200,
+          headers: { ...cors, "Content-Type": "application/json" },
+        },
       );
     }
 
@@ -877,7 +1029,10 @@ http.route({
       count: validCount,
     });
     if (!rl.allowed) {
-      const retryAfter = Math.max(1, Math.ceil((rl.resetAt - Date.now()) / 1000));
+      const retryAfter = Math.max(
+        1,
+        Math.ceil((rl.resetAt - Date.now()) / 1000),
+      );
       return new Response(
         JSON.stringify({
           error: "rate_limit_exceeded",
@@ -888,7 +1043,11 @@ http.route({
         }),
         {
           status: 429,
-          headers: { ...cors, "Content-Type": "application/json", "Retry-After": String(retryAfter) },
+          headers: {
+            ...cors,
+            "Content-Type": "application/json",
+            "Retry-After": String(retryAfter),
+          },
         },
       );
     }
@@ -902,18 +1061,27 @@ http.route({
       return new Response(
         JSON.stringify({
           error: "quota_exceeded",
-          message: "Monthly event quota exceeded. Upgrade your plan to continue tracking.",
+          message:
+            "Monthly event quota exceeded. Upgrade your plan to continue tracking.",
           plan: quota.plan,
           limit: quota.limit,
         }),
-        { status: 402, headers: { ...cors, "Content-Type": "application/json" } },
+        {
+          status: 402,
+          headers: { ...cors, "Content-Type": "application/json" },
+        },
       );
     }
 
     // Fire quota notification if thresholds crossed (non-blocking)
     if (quota.teamId) {
+      const usageBefore = quota.usageAfter - validCount;
+      const pctBefore = usageBefore / quota.limit;
       const pct = quota.usageAfter / quota.limit;
-      if (pct >= 1.0 || pct >= 0.8) {
+      const crossedThreshold =
+        (pctBefore < QUOTA_NOTIFY_80_PCT && pct >= QUOTA_NOTIFY_80_PCT) ||
+        (pctBefore < QUOTA_NOTIFY_100_PCT && pct >= QUOTA_NOTIFY_100_PCT);
+      if (crossedThreshold) {
         void ctx.scheduler.runAfter(0, internal.notifications.checkAndNotify, {
           teamId: quota.teamId,
           usageAfter: quota.usageAfter,
@@ -922,14 +1090,22 @@ http.route({
       }
     }
 
-    const eventsToInsert = valid.filter((v): v is ValidatedEvent => v.type === "event").map(({ type: _, ...rest }) => rest);
-    const pageviewsToInsert = valid.filter((v): v is ValidatedPageview => v.type === "pageview").map(({ type: _, ...rest }) => rest);
+    const eventsToInsert = valid
+      .filter((v): v is ValidatedEvent => v.type === "event")
+      .map(({ type: _, ...rest }) => rest);
+    const pageviewsToInsert = valid
+      .filter((v): v is ValidatedPageview => v.type === "pageview")
+      .map(({ type: _, ...rest }) => rest);
 
     if (eventsToInsert.length > 0) {
-      await ctx.runMutation(internal.events.ingestBatch, { events: eventsToInsert });
+      await ctx.runMutation(internal.events.ingestBatch, {
+        events: eventsToInsert,
+      });
     }
     if (pageviewsToInsert.length > 0) {
-      await ctx.runMutation(internal.pageviews.ingestBatch, { pageviews: pageviewsToInsert });
+      await ctx.runMutation(internal.pageviews.ingestBatch, {
+        pageviews: pageviewsToInsert,
+      });
     }
 
     const rejected = results.filter((r) => r.status === "error").length;

@@ -43,20 +43,36 @@ export const checkAndIncrement = internalMutation({
     const team = await getTeamForWriteKey(ctx, args.writeKey);
     if (!team) {
       // Unclaimed project — apply free tier limits using write key as key
-      return { allowed: true, teamId: null, usageAfter: 0, limit: PLANS.free.eventsPerMonth, plan: "free" };
+      return {
+        allowed: true,
+        teamId: null,
+        usageAfter: 0,
+        limit: PLANS.free.eventsPerMonth,
+        plan: "free",
+      };
     }
 
     const plan = (team.plan ?? "free") as PlanId;
     // Use the stored limit as source of truth — billing.applySubscription keeps it in sync.
-    const limit = team.usageLimitEventsPerMonth ?? PLANS[plan]?.eventsPerMonth ?? PLANS.free.eventsPerMonth;
+    const limit =
+      team.usageLimitEventsPerMonth ??
+      PLANS[plan]?.eventsPerMonth ??
+      PLANS.free.eventsPerMonth;
     const currentMonth = monthKey();
 
     // Reset counter on new month
     const storedMonth = team.usageMonthKey ?? "";
-    const currentUsage = storedMonth === currentMonth ? (team.usageEventsThisMonth ?? 0) : 0;
+    const currentUsage =
+      storedMonth === currentMonth ? (team.usageEventsThisMonth ?? 0) : 0;
 
     if (currentUsage >= limit || currentUsage + args.count > limit) {
-      return { allowed: false, teamId: team._id, usageAfter: currentUsage, limit, plan };
+      return {
+        allowed: false,
+        teamId: team._id,
+        usageAfter: currentUsage,
+        limit,
+        plan,
+      };
     }
 
     const usageAfter = currentUsage + args.count;
@@ -80,22 +96,16 @@ export const getUsage = internalQuery({
     const team = await ctx.db.get("teams", args.teamId);
     if (!team) return null;
     const plan = (team.plan ?? "free") as PlanId;
-    const limit = team.usageLimitEventsPerMonth ?? PLANS[plan]?.eventsPerMonth ?? PLANS.free.eventsPerMonth;
+    const limit =
+      team.usageLimitEventsPerMonth ??
+      PLANS[plan]?.eventsPerMonth ??
+      PLANS.free.eventsPerMonth;
     const currentMonth = monthKey();
     const usage =
-      team.usageMonthKey === currentMonth ? (team.usageEventsThisMonth ?? 0) : 0;
+      team.usageMonthKey === currentMonth
+        ? (team.usageEventsThisMonth ?? 0)
+        : 0;
     return { usage, limit, plan, retentionDays: PLANS[plan].retentionDays };
-  },
-});
-
-// Reset notification flags when a team upgrades — so they get notified again if they hit limits on new plan.
-export const resetNotificationFlags = internalMutation({
-  args: { teamId: v.id("teams") },
-  handler: async (ctx, args) => {
-    await ctx.db.patch("teams", args.teamId, {
-      notifiedAt80Pct: false,
-      notifiedAt100Pct: false,
-    });
   },
 });
 
@@ -116,7 +126,9 @@ export const checkProvisionAbuse = internalMutation({
 
     if (existing) {
       if (existing.count >= args.limit) return false;
-      await ctx.db.patch("provisionAbuse", existing._id, { count: existing.count + 1 });
+      await ctx.db.patch("provisionAbuse", existing._id, {
+        count: existing.count + 1,
+      });
       return true;
     }
 
