@@ -26,6 +26,8 @@ export function BillingSuccessModal({
 }) {
   const usage = useQuery(api.usage.getMyUsage, { sessionToken });
   const fired = useRef(false);
+  const panelRef = useRef<HTMLDivElement>(null);
+  const previousFocusRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
     if (fired.current) return;
@@ -76,6 +78,39 @@ export function BillingSuccessModal({
     };
   }, []);
 
+  // Handle keyboard events (Escape to close)
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        onClose();
+      }
+    };
+
+    document.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [onClose]);
+
+  // Manage focus: save previous focus, move focus into modal, restore on unmount
+  useEffect(() => {
+    // Save the currently focused element
+    previousFocusRef.current = document.activeElement as HTMLElement;
+
+    // Move focus into the modal (focus the panel)
+    if (panelRef.current) {
+      panelRef.current.focus();
+    }
+
+    // Restore focus when modal closes
+    return () => {
+      if (previousFocusRef.current) {
+        previousFocusRef.current.focus();
+      }
+    };
+  }, []);
+
   const plan =
     usage?.plan && (usage.plan !== "free" || expectedPlan === null)
       ? usage.plan
@@ -85,11 +120,16 @@ export function BillingSuccessModal({
 
   return (
     <div
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="modal-title"
       className="fixed inset-0 z-50 flex items-center justify-center"
       style={{ background: "rgba(26,24,20,0.55)", backdropFilter: "blur(3px)" }}
       onClick={onClose}
     >
       <div
+        ref={panelRef}
+        tabIndex={-1}
         className="flex flex-col items-center gap-5 p-8 w-full max-w-xs mx-4"
         style={{
           background: "#fff",
@@ -114,6 +154,7 @@ export function BillingSuccessModal({
             Plan activated
           </p>
           <h2
+            id="modal-title"
             className="text-xl font-bold uppercase tracking-tight mb-2"
             style={{ color: "#1a1814" }}
           >
