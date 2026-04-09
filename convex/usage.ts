@@ -209,7 +209,7 @@ export const getMyUsage = query({
       plan,
       usage,
       limit,
-      retentionDays: PLANS[plan].retentionDays,
+      retentionDays: PLANS[plan]?.retentionDays ?? PLANS.free.retentionDays,
       hasStripeSubscription: !!team.stripeSubscriptionId,
     };
   },
