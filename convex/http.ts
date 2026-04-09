@@ -1,6 +1,7 @@
 import { httpRouter } from "convex/server";
 import { httpAction } from "./_generated/server";
 import { internal } from "./_generated/api";
+import { Id } from "./_generated/dataModel";
 import { registerStripeRoutes } from "./billing";
 import {
   QUOTA_NOTIFY_THRESHOLDS,
@@ -113,6 +114,14 @@ http.route({
     const isBrowserEvent =
       typeof pageOrigin === "string" && pageOrigin && !deploymentName;
 
+    // Capture notification args before ingest; fire after writes so a scheduler
+    // failure can't consume quota without storing data.
+    let quotaNotification: {
+      teamId: Id<"teams">;
+      usageAfter: number;
+      limit: number;
+    } | null = null;
+
     if (!isPageView) {
       const quota = await ctx.runMutation(internal.usage.checkAndIncrement, {
         writeKey,
@@ -137,7 +146,6 @@ http.route({
         );
       }
 
-      // Fire quota notification if thresholds crossed (non-blocking)
       if (quota.teamId) {
         const usageBefore = quota.usageAfter - 1;
         const pctBefore = usageBefore / quota.limit;
@@ -146,15 +154,11 @@ http.route({
           (pctBefore < QUOTA_NOTIFY_80_PCT && pct >= QUOTA_NOTIFY_80_PCT) ||
           (pctBefore < QUOTA_NOTIFY_100_PCT && pct >= QUOTA_NOTIFY_100_PCT);
         if (crossedThreshold) {
-          await ctx.scheduler.runAfter(
-            0,
-            internal.notifications.checkAndNotify,
-            {
-              teamId: quota.teamId,
-              usageAfter: quota.usageAfter,
-              limit: quota.limit,
-            },
-          );
+          quotaNotification = {
+            teamId: quota.teamId,
+            usageAfter: quota.usageAfter,
+            limit: quota.limit,
+          };
         }
       }
     }
@@ -251,6 +255,16 @@ http.route({
         userName,
         props: cleanProps,
       });
+    }
+
+    // Fire quota notification after ingest so a scheduler failure can't
+    // consume quota without storing data.
+    if (quotaNotification) {
+      try {
+        await ctx.scheduler.runAfter(0, internal.notifications.checkAndNotify, quotaNotification);
+      } catch {
+        // Notification failures are non-fatal — data is already written.
+      }
     }
 
     return new Response(null, { status: 200, headers: cors });
@@ -1070,6 +1084,12 @@ http.route({
 
     // Page views are free — only count custom product events against the monthly quota.
     const productEventCount = eventsToInsert.length;
+    let batchQuotaNotification: {
+      teamId: Id<"teams">;
+      usageAfter: number;
+      limit: number;
+    } | null = null;
+
     if (productEventCount > 0) {
       const quota = await ctx.runMutation(internal.usage.checkAndIncrement, {
         writeKey,
@@ -1100,7 +1120,6 @@ http.route({
         );
       }
 
-      // Fire quota notification if thresholds crossed (non-blocking)
       if (quota.teamId) {
         const usageBefore = quota.usageAfter - productEventCount;
         const pctBefore = usageBefore / quota.limit;
@@ -1109,15 +1128,11 @@ http.route({
           (pctBefore < QUOTA_NOTIFY_80_PCT && pct >= QUOTA_NOTIFY_80_PCT) ||
           (pctBefore < QUOTA_NOTIFY_100_PCT && pct >= QUOTA_NOTIFY_100_PCT);
         if (crossedThreshold) {
-          await ctx.scheduler.runAfter(
-            0,
-            internal.notifications.checkAndNotify,
-            {
-              teamId: quota.teamId,
-              usageAfter: quota.usageAfter,
-              limit: quota.limit,
-            },
-          );
+          batchQuotaNotification = {
+            teamId: quota.teamId,
+            usageAfter: quota.usageAfter,
+            limit: quota.limit,
+          };
         }
       }
     }
@@ -1131,6 +1146,20 @@ http.route({
       await ctx.runMutation(internal.pageviews.ingestBatch, {
         pageviews: pageviewsToInsert,
       });
+    }
+
+    // Fire quota notification after ingest so a scheduler failure can't
+    // consume quota without storing data.
+    if (batchQuotaNotification) {
+      try {
+        await ctx.scheduler.runAfter(
+          0,
+          internal.notifications.checkAndNotify,
+          batchQuotaNotification,
+        );
+      } catch {
+        // Notification failures are non-fatal — data is already written.
+      }
     }
 
     const rejected = results.filter((r) => r.status === "error").length;
