@@ -3,7 +3,7 @@ import { api } from "../../convex/_generated/api";
 import { Doc } from "../../convex/_generated/dataModel";
 import { useState } from "react";
 import { TimeRangePicker } from "../components/TimeRangePicker"
-import { sinceForRange, type RangeKey } from "../lib/timeRange";
+import { sinceForRange, defaultRangeForRetention, type RangeKey } from "../lib/timeRange";
 
 interface EventsPageProps {
   sessionToken: string;
@@ -20,7 +20,8 @@ const CARD_STYLE = {
 };
 
 export function EventsPage({ sessionToken, writeKey, projectName, environment, retentionDays }: EventsPageProps) {
-  const [range, setRange] = useState<RangeKey>("7d");
+  const [userRange, setUserRange] = useState<RangeKey | null>(null);
+  const range = userRange ?? defaultRangeForRetention(retentionDays);
   const since = sinceForRange(range);
   const events = useQuery(api.events.listLatest, { sessionToken, writeKey, limit: 100, environment });
   const stats = useQuery(api.events.stats, { sessionToken, writeKey, environment, since });
@@ -48,7 +49,7 @@ export function EventsPage({ sessionToken, writeKey, projectName, environment, r
           <span style={{ color: "#c4bfb2" }}>·</span>
           <span className="text-xs" style={{ color: "#9b9488" }}>{projectName}</span>
         </div>
-        <TimeRangePicker value={range} onChange={setRange} retentionDays={retentionDays} />
+        <TimeRangePicker value={range} onChange={setUserRange} retentionDays={retentionDays} />
       </div>
 
       <div className="p-6 flex flex-col gap-5">

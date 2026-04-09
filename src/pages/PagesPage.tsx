@@ -2,7 +2,7 @@ import { useQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { useState } from "react";
 import { TimeRangePicker } from "../components/TimeRangePicker"
-import { sinceForRange, type RangeKey } from "../lib/timeRange";
+import { sinceForRange, defaultRangeForRetention, type RangeKey } from "../lib/timeRange";
 
 interface PagesPageProps {
   sessionToken: string;
@@ -19,7 +19,8 @@ const CARD_STYLE = {
 };
 
 export function PagesPage({ sessionToken, writeKey, projectName, environment, retentionDays }: PagesPageProps) {
-  const [range, setRange] = useState<RangeKey>("7d");
+  const [userRange, setUserRange] = useState<RangeKey | null>(null);
+  const range = userRange ?? defaultRangeForRetention(retentionDays);
   const rangeLabel = range === "all" ? "all time" : `last ${range}`;
   const since = sinceForRange(range);
   const topPages = useQuery(api.pageviews.topPages, { sessionToken, writeKey, environment, since });
@@ -49,7 +50,7 @@ export function PagesPage({ sessionToken, writeKey, projectName, environment, re
               {filtered.length} page{filtered.length !== 1 ? "s" : ""}
             </span>
           )}
-          <TimeRangePicker value={range} onChange={setRange} retentionDays={retentionDays} />
+          <TimeRangePicker value={range} onChange={setUserRange} retentionDays={retentionDays} />
         </div>
       </div>
 

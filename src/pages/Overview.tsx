@@ -3,7 +3,7 @@ import { api } from "../../convex/_generated/api";
 import { getConvexSiteUrl } from "../lib/convex";
 import { useState, useCallback } from "react";
 import { TimeRangePicker } from "../components/TimeRangePicker"
-import { sinceForRange, type RangeKey } from "../lib/timeRange";
+import { sinceForRange, defaultRangeForRetention, type RangeKey } from "../lib/timeRange";
 
 interface OverviewProps {
   sessionToken: string;
@@ -22,7 +22,8 @@ const CARD_STYLE = {
 const SETUP_DISMISSED_KEY = (writeKey: string) => `cnv_setup_dismissed_${writeKey}`;
 
 export function Overview({ sessionToken, writeKey, projectName, environment, retentionDays }: OverviewProps) {
-  const [range, setRange] = useState<RangeKey>("7d");
+  const [userRange, setUserRange] = useState<RangeKey | null>(null);
+  const range = userRange ?? defaultRangeForRetention(retentionDays);
   const since = sinceForRange(range);
   const rangeLabel = range === "all" ? "all time" : `last ${range}`;
 
@@ -72,7 +73,7 @@ export function Overview({ sessionToken, writeKey, projectName, environment, ret
               {realtimeVisitors} now
             </span>
           )}
-          <TimeRangePicker value={range} onChange={setRange} retentionDays={retentionDays} />
+          <TimeRangePicker value={range} onChange={setUserRange} retentionDays={retentionDays} />
         </div>
       </div>
 

@@ -45,3 +45,19 @@ export function sinceForRange(key: RangeKey): number {
   const range = RANGES.find((r) => r.key === key)!;
   return range.days >= MAX_RETENTION_DAYS ? 0 : sinceHour(range.days);
 }
+
+// Default range based on plan retention — paid users land on a longer window
+// so the extra history is immediately visible rather than hidden behind a click.
+export function defaultRangeForRetention(retentionDays: number): RangeKey {
+  if (retentionDays >= MAX_RETENTION_DAYS) return "90d"; // Pro
+  if (retentionDays >= 365) return "30d";               // Solo
+  return "7d";                                          // Free
+}
+
+// The best range the plan can actually show — used for the "more history" hint.
+export function maxRangeForRetention(retentionDays: number): RangeKey {
+  if (retentionDays >= MAX_RETENTION_DAYS) return "all";
+  if (retentionDays >= 365) return "1y";
+  if (retentionDays >= 90) return "90d";
+  return "30d";
+}
