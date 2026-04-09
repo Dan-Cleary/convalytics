@@ -32,6 +32,7 @@ export function BillingSuccessModal({
     const duration = 3000;
     const end = Date.now() + duration;
     const colors = ["#e8651c", "#1a1814", "#c9581a", "#f0a070", "#fff"];
+    let frameId: number | undefined;
 
     // Initial big burst
     void confetti({
@@ -61,10 +62,16 @@ export function BillingSuccessModal({
       });
 
       if (Date.now() < end) {
-        requestAnimationFrame(frame);
+        frameId = requestAnimationFrame(frame);
       }
     };
     frame();
+
+    return () => {
+      if (frameId !== undefined) {
+        cancelAnimationFrame(frameId);
+      }
+    };
   }, []);
 
   const plan = usage?.plan ?? null;
@@ -108,7 +115,10 @@ export function BillingSuccessModal({
             Welcome to {planName}!
           </h2>
           {tagline && (
-            <p className="text-[11px] leading-relaxed" style={{ color: "#6b6456" }}>
+            <p
+              className="text-[11px] leading-relaxed"
+              style={{ color: "#6b6456" }}
+            >
               {tagline}
             </p>
           )}
@@ -116,7 +126,8 @@ export function BillingSuccessModal({
             className="text-[11px] leading-relaxed mt-2"
             style={{ color: "#9b9488" }}
           >
-            Your quota is live. New events will count against your updated limit right away.
+            Your quota is live. New events will count against your updated limit
+            right away.
           </p>
         </div>
 
