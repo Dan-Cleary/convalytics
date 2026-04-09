@@ -210,7 +210,10 @@ export function BillingPage({ sessionToken }: { sessionToken: string }) {
                 {!isCurrent &&
                   !isDowngrade &&
                   plan.id !== "free" &&
-                  usage.plan === "free" && (
+                  (usage.plan === "free" ||
+                    (usage.plan === "solo" &&
+                      plan.id === "pro" &&
+                      usage.hasStripeSubscription)) && (
                     <button
                       className="px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider cursor-pointer transition-all"
                       style={{
@@ -226,14 +229,22 @@ export function BillingPage({ sessionToken }: { sessionToken: string }) {
                         e.currentTarget.style.background = "#e8651c";
                         e.currentTarget.style.borderColor = "#e8651c";
                       }}
-                      disabled={loading === plan.id}
-                      onClick={() => void handleUpgrade(plan.id)}
+                      disabled={
+                        loading === (usage.plan === "free" ? plan.id : "portal")
+                      }
+                      onClick={() =>
+                        void (usage.plan === "free"
+                          ? handleUpgrade(plan.id)
+                          : handleManage())
+                      }
                     >
-                      {loading === plan.id ? "Opening…" : "Upgrade"}
+                      {loading === (usage.plan === "free" ? plan.id : "portal")
+                        ? "Opening…"
+                        : "Upgrade"}
                     </button>
                   )}
 
-                {!isCurrent && isDowngrade && (
+                {!isCurrent && isDowngrade && usage.hasStripeSubscription && (
                   <button
                     className="px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider cursor-pointer"
                     style={{ color: "#9b9488", border: "1px solid #d5d0c8" }}
