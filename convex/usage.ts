@@ -210,7 +210,7 @@ export const getMyUsage = query({
       usage,
       limit,
       retentionDays: PLANS[plan].retentionDays,
-      hasStripeSubscription: !!team.stripeCustomerId,
+      hasStripeSubscription: !!team.stripeSubscriptionId,
     };
   },
 });

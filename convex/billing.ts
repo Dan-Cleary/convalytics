@@ -12,8 +12,7 @@ export const stripe = new StripeSubscriptions(components.stripe);
 // Stripe price IDs — set these to your actual Stripe price IDs via env vars.
 // These are read at runtime so they can be set in the Convex dashboard.
 function getPriceId(plan: "solo" | "pro"): string {
-  const key =
-    plan === "solo" ? "STRIPE_PRICE_SOLO" : "STRIPE_PRICE_PRO";
+  const key = plan === "solo" ? "STRIPE_PRICE_SOLO" : "STRIPE_PRICE_PRO";
   const id = process.env[key];
   if (!id) throw new Error(`Missing env var: ${key}`);
   return id;
@@ -38,6 +37,12 @@ export const createCheckoutSession = action({
     });
     if (teams.length === 0) throw new Error("No team found");
     const team = teams[0];
+    const currentPlan = (team.plan ?? "free") as PlanId;
+    if (currentPlan !== "free" || team.stripeSubscriptionId) {
+      throw new Error(
+        "Team already has an active subscription. Use the billing portal to manage plan changes.",
+      );
+    }
 
     const { customerId } = await stripe.getOrCreateCustomer(ctx, {
       userId: team._id,
@@ -172,7 +177,9 @@ export function registerStripeRoutes(http: ReturnType<typeof httpRouter>) {
         const teamId = sub.metadata?.teamId;
         if (!teamId) return;
         const isActive = sub.status === "active" || sub.status === "trialing";
-        const plan = isActive ? planFromPriceId(sub.items.data[0]?.price?.id) : "free";
+        const plan = isActive
+          ? planFromPriceId(sub.items.data[0]?.price?.id)
+          : "free";
         await ctx.runMutation(internal.billing.applySubscription, {
           teamId: teamId as Id<"teams">,
           plan,

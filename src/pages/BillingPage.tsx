@@ -27,7 +27,8 @@ const PLANS = [
 ];
 
 function fmt(n: number): string {
-  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1).replace(/\.0$/, "")}M`;
+  if (n >= 1_000_000)
+    return `${(n / 1_000_000).toFixed(1).replace(/\.0$/, "")}M`;
   if (n >= 1_000) return `${(n / 1_000).toFixed(0)}K`;
   return String(n);
 }
@@ -68,14 +69,14 @@ export function BillingPage({ sessionToken }: { sessionToken: string }) {
   }
 
   if (usage === undefined) {
-    return (
-      <div className="p-8 text-sm text-gray-400">Loading...</div>
-    );
+    return <div className="p-8 text-sm text-gray-400">Loading...</div>;
   }
 
   if (usage === null) {
     return (
-      <div className="p-8 text-sm text-gray-400">Unable to load billing info.</div>
+      <div className="p-8 text-sm text-gray-400">
+        Unable to load billing info.
+      </div>
     );
   }
 
@@ -97,7 +98,10 @@ export function BillingPage({ sessionToken }: { sessionToken: string }) {
         style={{ border: "2px solid #1a1814", background: "#fff" }}
       >
         <div className="flex items-baseline justify-between mb-3">
-          <span className="text-xs font-bold uppercase tracking-wider" style={{ color: "#1a1814" }}>
+          <span
+            className="text-xs font-bold uppercase tracking-wider"
+            style={{ color: "#1a1814" }}
+          >
             This month
           </span>
           <span className="text-xs" style={{ color: "#6b6456" }}>
@@ -157,10 +161,16 @@ export function BillingPage({ sessionToken }: { sessionToken: string }) {
                   )}
                 </div>
                 <div className="flex gap-3">
-                  <span className="text-[10px]" style={{ color: isCurrent ? "#9b9488" : "#6b6456" }}>
+                  <span
+                    className="text-[10px]"
+                    style={{ color: isCurrent ? "#9b9488" : "#6b6456" }}
+                  >
                     {plan.events}
                   </span>
-                  <span className="text-[10px]" style={{ color: isCurrent ? "#9b9488" : "#6b6456" }}>
+                  <span
+                    className="text-[10px]"
+                    style={{ color: isCurrent ? "#9b9488" : "#6b6456" }}
+                  >
                     {plan.retention}
                   </span>
                 </div>
@@ -197,28 +207,31 @@ export function BillingPage({ sessionToken }: { sessionToken: string }) {
                   </button>
                 )}
 
-                {!isCurrent && !isDowngrade && plan.id !== "free" && (
-                  <button
-                    className="px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider cursor-pointer transition-all"
-                    style={{
-                      background: "#e8651c",
-                      color: "#fff",
-                      border: "2px solid #e8651c",
-                    }}
-                    onMouseEnter={(e) => {
-                      e.currentTarget.style.background = "#c9581a";
-                      e.currentTarget.style.borderColor = "#c9581a";
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.background = "#e8651c";
-                      e.currentTarget.style.borderColor = "#e8651c";
-                    }}
-                    disabled={loading === plan.id}
-                    onClick={() => void handleUpgrade(plan.id)}
-                  >
-                    {loading === plan.id ? "Opening…" : "Upgrade"}
-                  </button>
-                )}
+                {!isCurrent &&
+                  !isDowngrade &&
+                  plan.id !== "free" &&
+                  usage.plan === "free" && (
+                    <button
+                      className="px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider cursor-pointer transition-all"
+                      style={{
+                        background: "#e8651c",
+                        color: "#fff",
+                        border: "2px solid #e8651c",
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.background = "#c9581a";
+                        e.currentTarget.style.borderColor = "#c9581a";
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.background = "#e8651c";
+                        e.currentTarget.style.borderColor = "#e8651c";
+                      }}
+                      disabled={loading === plan.id}
+                      onClick={() => void handleUpgrade(plan.id)}
+                    >
+                      {loading === plan.id ? "Opening…" : "Upgrade"}
+                    </button>
+                  )}
 
                 {!isCurrent && isDowngrade && (
                   <button
@@ -237,7 +250,8 @@ export function BillingPage({ sessionToken }: { sessionToken: string }) {
       </div>
 
       <p className="mt-4 text-[10px]" style={{ color: "#9b9488" }}>
-        Payments handled securely by Stripe. Cancel anytime from the billing portal.
+        Payments handled securely by Stripe. Cancel anytime from the billing
+        portal.
       </p>
     </div>
   );
