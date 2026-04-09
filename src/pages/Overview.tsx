@@ -2,12 +2,15 @@ import { useQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { getConvexSiteUrl } from "../lib/convex";
 import { useState, useCallback } from "react";
+import { TimeRangePicker } from "../components/TimeRangePicker"
+import { sinceForRange, type RangeKey } from "../lib/timeRange";
 
 interface OverviewProps {
   sessionToken: string;
   writeKey: string;
   projectName: string;
   environment?: string;
+  retentionDays: number;
 }
 
 const CARD_STYLE = {
@@ -18,18 +21,22 @@ const CARD_STYLE = {
 
 const SETUP_DISMISSED_KEY = (writeKey: string) => `cnv_setup_dismissed_${writeKey}`;
 
-export function Overview({ sessionToken, writeKey, projectName, environment }: OverviewProps) {
-  const stats = useQuery(api.pageviews.stats, { sessionToken, writeKey, environment });
-  const topPages = useQuery(api.pageviews.topPages, { sessionToken, writeKey, environment });
-  const topSources = useQuery(api.pageviews.topSources, { sessionToken, writeKey, environment });
+export function Overview({ sessionToken, writeKey, projectName, environment, retentionDays }: OverviewProps) {
+  const [range, setRange] = useState<RangeKey>("7d");
+  const since = sinceForRange(range);
+  const rangeLabel = range === "all" ? "all time" : `last ${range}`;
+
+  const stats = useQuery(api.pageviews.stats, { sessionToken, writeKey, environment, since });
+  const topPages = useQuery(api.pageviews.topPages, { sessionToken, writeKey, environment, since });
+  const topSources = useQuery(api.pageviews.topSources, { sessionToken, writeKey, environment, since });
   const liveEvents = useQuery(api.pageviews.listLatest, { sessionToken, writeKey, environment });
   const realtimeVisitors = useQuery(api.pageviews.realtimeVisitors, { sessionToken, writeKey, environment });
-  const eventStats = useQuery(api.events.stats7d, { sessionToken, writeKey, environment });
+  const eventStats = useQuery(api.events.stats, { sessionToken, writeKey, environment, since });
 
   // Unscoped queries for setup banner (project-level data check)
   const statsUnscoped = useQuery(api.pageviews.stats, { sessionToken, writeKey });
   const liveEventsUnscoped = useQuery(api.pageviews.listLatest, { sessionToken, writeKey });
-  const eventStatsUnscoped = useQuery(api.events.stats7d, { sessionToken, writeKey });
+  const eventStatsUnscoped = useQuery(api.events.stats, { sessionToken, writeKey });
 
   const [setupDismissed, setSetupDismissed] = useState(() => {
     try { return localStorage.getItem(SETUP_DISMISSED_KEY(writeKey)) === "1"; } catch { return false; }
@@ -65,12 +72,7 @@ export function Overview({ sessionToken, writeKey, projectName, environment }: O
               {realtimeVisitors} now
             </span>
           )}
-          <span
-            className="text-[10px] font-medium uppercase tracking-wider px-2 py-1"
-            style={{ border: "1px solid #c4bfb2", color: "#9b9488" }}
-          >
-            Last 7 days
-          </span>
+          <TimeRangePicker value={range} onChange={setRange} retentionDays={retentionDays} />
         </div>
       </div>
 
@@ -81,11 +83,11 @@ export function Overview({ sessionToken, writeKey, projectName, environment }: O
       <div className="p-6 flex flex-col gap-5">
         {/* Stat cards */}
         <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
-          <StatCard label="Page Views" value={stats?.pageViews} sub="this week" />
-          <StatCard label="Unique Visitors" value={stats?.uniqueVisitors} sub="this week" />
-          <StatCard label="Sessions" value={stats?.sessions} sub="this week" />
+          <StatCard label="Page Views" value={stats?.pageViews} sub={rangeLabel} />
+          <StatCard label="Unique Visitors" value={stats?.uniqueVisitors} sub={rangeLabel} />
+          <StatCard label="Sessions" value={stats?.sessions} sub={rangeLabel} />
           <StatCard label="Bounce Rate" value={stats?.bounceRate} sub="% single-page" suffix="%" />
-          <StatCard label="Product Events" value={eventStats?.totalEvents} sub="this week" accent />
+          <StatCard label="Product Events" value={eventStats?.totalEvents} sub={rangeLabel} accent />
         </div>
 
         {/* Top pages + traffic sources */}

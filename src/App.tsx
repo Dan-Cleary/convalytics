@@ -2,17 +2,20 @@ import { useQuery } from "convex/react";
 import { api } from "../convex/_generated/api";
 import { SignInForm } from "./components/SignInForm";
 import { Sidebar } from "./components/Sidebar";
+import { BillingSuccessModal } from "./components/BillingSuccessModal";
 import { Overview } from "./pages/Overview";
 import { EventsPage } from "./pages/EventsPage";
 import { PagesPage } from "./pages/PagesPage";
 import { ProjectSetup } from "./pages/ProjectSetup";
 import { OAuthCallback } from "./pages/OAuthCallback";
 import { ClaimPage } from "./pages/ClaimPage";
+import { BillingPage } from "./pages/BillingPage";
 import { useState, useCallback } from "react";
 import { clearSession, getSessionToken } from "./lib/auth";
 
-type Page = "overview" | "pages" | "events";
+type Page = "overview" | "pages" | "events" | "billing";
 type Environment = "all" | "production" | "development";
+type PlanId = "free" | "solo" | "pro";
 
 export default function App() {
   const [sessionToken, setSessionToken] = useState<string | null>(
@@ -48,12 +51,7 @@ export default function App() {
     return <SignInForm />;
   }
 
-  return (
-    <Dashboard
-      sessionToken={sessionToken}
-      onSignOut={handleSignOut}
-    />
-  );
+  return <Dashboard sessionToken={sessionToken} onSignOut={handleSignOut} />;
 }
 
 function Dashboard({
@@ -64,6 +62,8 @@ function Dashboard({
   onSignOut: () => void;
 }) {
   const projects = useQuery(api.projects.list, { sessionToken });
+  const usage = useQuery(api.usage.getMyUsage, { sessionToken });
+  const retentionDays = usage?.retentionDays ?? 90;
   const [activeWriteKey, setActiveWriteKey] = useState<string | null>(() => {
     const params = new URLSearchParams(window.location.search);
     const key = params.get("project");
@@ -73,6 +73,22 @@ function Dashboard({
       window.history.replaceState(null, "", clean);
     }
     return key;
+  });
+  const [billingSuccess, setBillingSuccess] = useState<{
+    open: boolean;
+    expectedPlan: PlanId | null;
+  }>(() => {
+    const params = new URLSearchParams(window.location.search);
+    const open = params.get("billing") === "success";
+    const planParam = params.get("plan");
+    const expectedPlan: PlanId | null =
+      planParam === "free" || planParam === "solo" || planParam === "pro"
+        ? planParam
+        : null;
+    if (open) {
+      window.history.replaceState(null, "", window.location.pathname);
+    }
+    return { open, expectedPlan };
   });
   const [page, setPage] = useState<Page>("overview");
   const [addingProject, setAddingProject] = useState(false);
@@ -99,7 +115,9 @@ function Dashboard({
     );
   }
 
-  const validActiveWriteKey = projects.some((p) => p.writeKey === activeWriteKey)
+  const validActiveWriteKey = projects.some(
+    (p) => p.writeKey === activeWriteKey,
+  )
     ? activeWriteKey
     : null;
   const currentWriteKey = validActiveWriteKey ?? projects[0].writeKey;
@@ -126,6 +144,7 @@ function Dashboard({
             writeKey={currentWriteKey}
             projectName={currentProject.name}
             environment={environment === "all" ? undefined : environment}
+            retentionDays={retentionDays}
           />
         )}
         {page === "pages" && (
@@ -134,6 +153,7 @@ function Dashboard({
             writeKey={currentWriteKey}
             projectName={currentProject.name}
             environment={environment === "all" ? undefined : environment}
+            retentionDays={retentionDays}
           />
         )}
         {page === "events" && (
@@ -142,9 +162,21 @@ function Dashboard({
             writeKey={currentWriteKey}
             projectName={currentProject.name}
             environment={environment === "all" ? undefined : environment}
+            retentionDays={retentionDays}
           />
         )}
+        {page === "billing" && <BillingPage sessionToken={sessionToken} />}
       </main>
+
+      {billingSuccess.open && (
+        <BillingSuccessModal
+          sessionToken={sessionToken}
+          expectedPlan={billingSuccess.expectedPlan}
+          onClose={() =>
+            setBillingSuccess((state) => ({ ...state, open: false }))
+          }
+        />
+      )}
     </div>
   );
 }

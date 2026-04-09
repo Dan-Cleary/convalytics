@@ -1,7 +1,7 @@
 import { v } from "convex/values";
 import { internalMutation } from "./_generated/server";
 import { internal } from "./_generated/api";
-import { PLANS, type PlanId } from "./plans";
+import { MAX_RETENTION_DAYS } from "./plans";
 
 const BATCH_SIZE = 200;
 const NIGHTLY_RETENTION_BATCH_SIZE = 500;
@@ -53,7 +53,10 @@ export const pruneEvents = internalMutation({
   },
 });
 
-// Nightly job: fan out pruneEvents for every project, using the team's plan retention.
+// Nightly job: fan out pruneEvents for every project.
+// We always delete at MAX_RETENTION_DAYS regardless of the team's current plan.
+// The plan's retentionDays is the query window shown in the UI — upgrading
+// immediately unlocks historical data that was already stored.
 export const runNightlyRetention = internalMutation({
   args: { cursor: v.optional(v.string()) },
   handler: async (ctx, args) => {
@@ -66,21 +69,14 @@ export const runNightlyRetention = internalMutation({
     for (const project of projects.page) {
       if (!project.teamId || !project.claimed) continue;
 
-      const team = await ctx.db.get("teams", project.teamId);
-      if (!team) continue;
-
-      const plan = (team.plan ?? "free") as PlanId;
-      const retentionDays =
-        PLANS[plan]?.retentionDays ?? PLANS.free.retentionDays;
-
       await ctx.scheduler.runAfter(0, internal.retention.pruneEvents, {
         writeKey: project.writeKey,
-        retentionDays,
+        retentionDays: MAX_RETENTION_DAYS,
         table: "events",
       });
       await ctx.scheduler.runAfter(0, internal.retention.pruneEvents, {
         writeKey: project.writeKey,
-        retentionDays,
+        retentionDays: MAX_RETENTION_DAYS,
         table: "pageviews",
       });
     }

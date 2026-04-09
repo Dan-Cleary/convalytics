@@ -65,6 +65,7 @@ export const stats = query({
     sessionToken: v.string(),
     writeKey: v.string(),
     environment: v.optional(v.string()),
+    since: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
     const project = await validateProjectAccess(
@@ -74,7 +75,7 @@ export const stats = query({
     );
     if (!project) return null;
 
-    const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+    const startTime = args.since ?? Date.now() - 7 * 24 * 60 * 60 * 1000;
     const rows = args.environment
       ? await ctx.db
           .query("pageviews")
@@ -82,14 +83,16 @@ export const stats = query({
             q
               .eq("writeKey", args.writeKey)
               .eq("environment", args.environment)
-              .gte("timestamp", sevenDaysAgo),
+              .gte("timestamp", startTime),
           )
+          .order("desc")
           .take(10000)
       : await ctx.db
           .query("pageviews")
           .withIndex("by_writeKey_and_timestamp", (q) =>
-            q.eq("writeKey", args.writeKey).gte("timestamp", sevenDaysAgo),
+            q.eq("writeKey", args.writeKey).gte("timestamp", startTime),
           )
+          .order("desc")
           .take(10000);
 
     const pageViews = rows.length;
@@ -114,6 +117,7 @@ export const topPages = query({
     sessionToken: v.string(),
     writeKey: v.string(),
     environment: v.optional(v.string()),
+    since: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
     const project = await validateProjectAccess(
@@ -123,7 +127,7 @@ export const topPages = query({
     );
     if (!project) return [];
 
-    const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+    const startTime = args.since ?? Date.now() - 7 * 24 * 60 * 60 * 1000;
     const rows = args.environment
       ? await ctx.db
           .query("pageviews")
@@ -131,14 +135,16 @@ export const topPages = query({
             q
               .eq("writeKey", args.writeKey)
               .eq("environment", args.environment)
-              .gte("timestamp", sevenDaysAgo),
+              .gte("timestamp", startTime),
           )
+          .order("desc")
           .take(10000)
       : await ctx.db
           .query("pageviews")
           .withIndex("by_writeKey_and_timestamp", (q) =>
-            q.eq("writeKey", args.writeKey).gte("timestamp", sevenDaysAgo),
+            q.eq("writeKey", args.writeKey).gte("timestamp", startTime),
           )
+          .order("desc")
           .take(10000);
 
     const pageMap = new Map<string, { views: number; visitors: Set<string> }>();
@@ -167,6 +173,7 @@ export const topSources = query({
     sessionToken: v.string(),
     writeKey: v.string(),
     environment: v.optional(v.string()),
+    since: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
     const project = await validateProjectAccess(
@@ -176,7 +183,7 @@ export const topSources = query({
     );
     if (!project) return { referrers: [], campaigns: [] };
 
-    const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+    const startTime = args.since ?? Date.now() - 7 * 24 * 60 * 60 * 1000;
     const rows = args.environment
       ? await ctx.db
           .query("pageviews")
@@ -184,14 +191,16 @@ export const topSources = query({
             q
               .eq("writeKey", args.writeKey)
               .eq("environment", args.environment)
-              .gte("timestamp", sevenDaysAgo),
+              .gte("timestamp", startTime),
           )
+          .order("desc")
           .take(5000)
       : await ctx.db
           .query("pageviews")
           .withIndex("by_writeKey_and_timestamp", (q) =>
-            q.eq("writeKey", args.writeKey).gte("timestamp", sevenDaysAgo),
+            q.eq("writeKey", args.writeKey).gte("timestamp", startTime),
           )
+          .order("desc")
           .take(5000);
 
     const referrerMap = new Map<string, number>();

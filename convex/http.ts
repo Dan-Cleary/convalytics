@@ -1,6 +1,7 @@
 import { httpRouter } from "convex/server";
 import { httpAction } from "./_generated/server";
 import { internal } from "./_generated/api";
+import { Id } from "./_generated/dataModel";
 import { registerStripeRoutes } from "./billing";
 import {
   QUOTA_NOTIFY_THRESHOLDS,
@@ -106,47 +107,59 @@ http.route({
       );
     }
 
-    // Quota check — browser events (pageOrigin present, no deploymentName) are dropped
-    // silently on over-quota to avoid breaking pages. Server-side gets a 402.
+    // Page views are free — only custom product events count against the monthly quota.
+    // Browser events (pageOrigin present, no deploymentName) are dropped silently on
+    // over-quota to avoid breaking pages. Server-side events get a 402.
+    const isPageView = name === "page_view";
     const isBrowserEvent =
       typeof pageOrigin === "string" && pageOrigin && !deploymentName;
-    const quota = await ctx.runMutation(internal.usage.checkAndIncrement, {
-      writeKey,
-      count: 1,
-    });
-    if (!quota.allowed) {
-      if (isBrowserEvent) {
-        return new Response(null, { status: 200, headers: cors });
-      }
-      return new Response(
-        JSON.stringify({
-          error: "quota_exceeded",
-          message:
-            "Monthly event quota exceeded. Upgrade your plan to continue tracking.",
-          plan: quota.plan,
-          limit: quota.limit,
-        }),
-        {
-          status: 402,
-          headers: { ...cors, "Content-Type": "application/json" },
-        },
-      );
-    }
 
-    // Fire quota notification if thresholds crossed (non-blocking)
-    if (quota.teamId) {
-      const usageBefore = quota.usageAfter - 1;
-      const pctBefore = usageBefore / quota.limit;
-      const pct = quota.usageAfter / quota.limit;
-      const crossedThreshold =
-        (pctBefore < QUOTA_NOTIFY_80_PCT && pct >= QUOTA_NOTIFY_80_PCT) ||
-        (pctBefore < QUOTA_NOTIFY_100_PCT && pct >= QUOTA_NOTIFY_100_PCT);
-      if (crossedThreshold) {
-        void ctx.scheduler.runAfter(0, internal.notifications.checkAndNotify, {
-          teamId: quota.teamId,
-          usageAfter: quota.usageAfter,
-          limit: quota.limit,
-        });
+    // Capture notification args before ingest; fire after writes so a scheduler
+    // failure can't consume quota without storing data.
+    let quotaNotification: {
+      teamId: Id<"teams">;
+      usageAfter: number;
+      limit: number;
+    } | null = null;
+
+    if (!isPageView) {
+      const quota = await ctx.runMutation(internal.usage.checkAndIncrement, {
+        writeKey,
+        count: 1,
+      });
+      if (!quota.allowed) {
+        if (isBrowserEvent) {
+          return new Response(null, { status: 200, headers: cors });
+        }
+        return new Response(
+          JSON.stringify({
+            error: "quota_exceeded",
+            message:
+              "Monthly event quota exceeded. Upgrade your plan to continue tracking.",
+            plan: quota.plan,
+            limit: quota.limit,
+          }),
+          {
+            status: 402,
+            headers: { ...cors, "Content-Type": "application/json" },
+          },
+        );
+      }
+
+      if (quota.teamId) {
+        const usageBefore = quota.usageAfter - 1;
+        const pctBefore = usageBefore / quota.limit;
+        const pct = quota.usageAfter / quota.limit;
+        const crossedThreshold =
+          (pctBefore < QUOTA_NOTIFY_80_PCT && pct >= QUOTA_NOTIFY_80_PCT) ||
+          (pctBefore < QUOTA_NOTIFY_100_PCT && pct >= QUOTA_NOTIFY_100_PCT);
+        if (crossedThreshold) {
+          quotaNotification = {
+            teamId: quota.teamId,
+            usageAfter: quota.usageAfter,
+            limit: quota.limit,
+          };
+        }
       }
     }
 
@@ -242,6 +255,16 @@ http.route({
         userName,
         props: cleanProps,
       });
+    }
+
+    // Fire quota notification after ingest so a scheduler failure can't
+    // consume quota without storing data.
+    if (quotaNotification) {
+      try {
+        await ctx.scheduler.runAfter(0, internal.notifications.checkAndNotify, quotaNotification);
+      } catch {
+        // Notification failures are non-fatal — data is already written.
+      }
     }
 
     return new Response(null, { status: 200, headers: cors });
@@ -1052,50 +1075,67 @@ http.route({
       );
     }
 
-    // Quota check for the full batch
-    const quota = await ctx.runMutation(internal.usage.checkAndIncrement, {
-      writeKey,
-      count: validCount,
-    });
-    if (!quota.allowed) {
-      return new Response(
-        JSON.stringify({
-          error: "quota_exceeded",
-          message:
-            "Monthly event quota exceeded. Upgrade your plan to continue tracking.",
-          plan: quota.plan,
-          limit: quota.limit,
-        }),
-        {
-          status: 402,
-          headers: { ...cors, "Content-Type": "application/json" },
-        },
-      );
-    }
-
-    // Fire quota notification if thresholds crossed (non-blocking)
-    if (quota.teamId) {
-      const usageBefore = quota.usageAfter - validCount;
-      const pctBefore = usageBefore / quota.limit;
-      const pct = quota.usageAfter / quota.limit;
-      const crossedThreshold =
-        (pctBefore < QUOTA_NOTIFY_80_PCT && pct >= QUOTA_NOTIFY_80_PCT) ||
-        (pctBefore < QUOTA_NOTIFY_100_PCT && pct >= QUOTA_NOTIFY_100_PCT);
-      if (crossedThreshold) {
-        void ctx.scheduler.runAfter(0, internal.notifications.checkAndNotify, {
-          teamId: quota.teamId,
-          usageAfter: quota.usageAfter,
-          limit: quota.limit,
-        });
-      }
-    }
-
     const eventsToInsert = valid
       .filter((v): v is ValidatedEvent => v.type === "event")
       .map(({ type: _, ...rest }) => rest);
     const pageviewsToInsert = valid
       .filter((v): v is ValidatedPageview => v.type === "pageview")
       .map(({ type: _, ...rest }) => rest);
+
+    // Page views are free — only count custom product events against the monthly quota.
+    const productEventCount = eventsToInsert.length;
+    let batchQuotaNotification: {
+      teamId: Id<"teams">;
+      usageAfter: number;
+      limit: number;
+    } | null = null;
+
+    if (productEventCount > 0) {
+      const quota = await ctx.runMutation(internal.usage.checkAndIncrement, {
+        writeKey,
+        count: productEventCount,
+      });
+      if (!quota.allowed) {
+        // Keep free page views even when paid product events are over quota.
+        if (pageviewsToInsert.length > 0) {
+          await ctx.runMutation(internal.pageviews.ingestBatch, {
+            pageviews: pageviewsToInsert,
+          });
+        }
+        return new Response(
+          JSON.stringify({
+            error: "quota_exceeded",
+            message:
+              "Monthly event quota exceeded. Upgrade your plan to continue tracking.",
+            plan: quota.plan,
+            limit: quota.limit,
+            partialIngest: pageviewsToInsert.length > 0,
+            acceptedPageviews: pageviewsToInsert.length,
+            rejectedProductEvents: productEventCount,
+          }),
+          {
+            status: 402,
+            headers: { ...cors, "Content-Type": "application/json" },
+          },
+        );
+      }
+
+      if (quota.teamId) {
+        const usageBefore = quota.usageAfter - productEventCount;
+        const pctBefore = usageBefore / quota.limit;
+        const pct = quota.usageAfter / quota.limit;
+        const crossedThreshold =
+          (pctBefore < QUOTA_NOTIFY_80_PCT && pct >= QUOTA_NOTIFY_80_PCT) ||
+          (pctBefore < QUOTA_NOTIFY_100_PCT && pct >= QUOTA_NOTIFY_100_PCT);
+        if (crossedThreshold) {
+          batchQuotaNotification = {
+            teamId: quota.teamId,
+            usageAfter: quota.usageAfter,
+            limit: quota.limit,
+          };
+        }
+      }
+    }
 
     if (eventsToInsert.length > 0) {
       await ctx.runMutation(internal.events.ingestBatch, {
@@ -1106,6 +1146,20 @@ http.route({
       await ctx.runMutation(internal.pageviews.ingestBatch, {
         pageviews: pageviewsToInsert,
       });
+    }
+
+    // Fire quota notification after ingest so a scheduler failure can't
+    // consume quota without storing data.
+    if (batchQuotaNotification) {
+      try {
+        await ctx.scheduler.runAfter(
+          0,
+          internal.notifications.checkAndNotify,
+          batchQuotaNotification,
+        );
+      } catch {
+        // Notification failures are non-fatal — data is already written.
+      }
     }
 
     const rejected = results.filter((r) => r.status === "error").length;
