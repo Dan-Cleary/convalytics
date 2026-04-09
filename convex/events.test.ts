@@ -436,7 +436,7 @@ describe("rateLimit.check", () => {
   });
 });
 
-describe("events.stats7d", () => {
+describe("events.stats", () => {
   test("counts total events and unique visitors", async () => {
     const t = convexTest(schema, modules);
     const { sessionToken, teamId } = await setupSession(t, "user1");
@@ -446,7 +446,7 @@ describe("events.stats7d", () => {
     await ingestEvent(t, writeKey, { visitorId: "alice" }); // same visitor, 2nd event
     await ingestEvent(t, writeKey, { visitorId: "bob" });
 
-    const stats = await t.query(api.events.stats7d, { sessionToken, writeKey });
+    const stats = await t.query(api.events.stats, { sessionToken, writeKey });
     expect(stats.totalEvents).toBe(3);
     expect(stats.activeUsers).toBe(2); // alice + bob, not 3
   });
@@ -459,7 +459,7 @@ describe("events.stats7d", () => {
     const writeKey = await setupProject(t, token1, teamId1, "my-app");
     await ingestEvent(t, writeKey, { visitorId: "alice" });
 
-    const stats = await t.query(api.events.stats7d, {
+    const stats = await t.query(api.events.stats, {
       sessionToken: token2,
       writeKey,
     });
@@ -471,7 +471,7 @@ describe("events.stats7d", () => {
     const { sessionToken, teamId } = await setupSession(t, "user1");
     const writeKey = await setupProject(t, sessionToken, teamId, "my-app");
 
-    const stats = await t.query(api.events.stats7d, { sessionToken, writeKey });
+    const stats = await t.query(api.events.stats, { sessionToken, writeKey });
     expect(stats).toEqual({ totalEvents: 0, activeUsers: 0 });
   });
 });
