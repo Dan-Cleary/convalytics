@@ -142,7 +142,7 @@ http.route({
         (pctBefore < QUOTA_NOTIFY_80_PCT && pct >= QUOTA_NOTIFY_80_PCT) ||
         (pctBefore < QUOTA_NOTIFY_100_PCT && pct >= QUOTA_NOTIFY_100_PCT);
       if (crossedThreshold) {
-        void ctx.scheduler.runAfter(0, internal.notifications.checkAndNotify, {
+        await ctx.scheduler.runAfter(0, internal.notifications.checkAndNotify, {
           teamId: quota.teamId,
           usageAfter: quota.usageAfter,
           limit: quota.limit,
@@ -1082,7 +1082,7 @@ http.route({
         (pctBefore < QUOTA_NOTIFY_80_PCT && pct >= QUOTA_NOTIFY_80_PCT) ||
         (pctBefore < QUOTA_NOTIFY_100_PCT && pct >= QUOTA_NOTIFY_100_PCT);
       if (crossedThreshold) {
-        void ctx.scheduler.runAfter(0, internal.notifications.checkAndNotify, {
+        await ctx.scheduler.runAfter(0, internal.notifications.checkAndNotify, {
           teamId: quota.teamId,
           usageAfter: quota.usageAfter,
           limit: quota.limit,

@@ -1,10 +1,11 @@
 import { v } from "convex/values";
-import { action, internalMutation } from "./_generated/server";
+import { action, internalMutation, internalQuery } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { StripeSubscriptions, registerRoutes } from "@convex-dev/stripe";
 import { components } from "./_generated/api";
 import { httpRouter } from "convex/server";
 import { PLANS, type PlanId } from "./plans";
+import { Id } from "./_generated/dataModel";
 
 export const stripe = new StripeSubscriptions(components.stripe);
 
@@ -94,8 +95,6 @@ export const createPortalSession = action({
 
 // Internal helpers
 
-import { internalQuery } from "./_generated/server";
-
 export const getTeamsForUser = internalQuery({
   args: { userId: v.string() },
   handler: async (ctx, args) => {
@@ -158,7 +157,7 @@ export function registerStripeRoutes(http: ReturnType<typeof httpRouter>) {
         if (!teamId) return;
         const plan = planFromPriceId(sub.items.data[0]?.price?.id);
         await ctx.runMutation(internal.billing.applySubscription, {
-          teamId: teamId as never,
+          teamId: teamId as Id<"teams">,
           plan,
           stripeSubscriptionId: sub.id,
         });
@@ -175,7 +174,7 @@ export function registerStripeRoutes(http: ReturnType<typeof httpRouter>) {
         const isActive = sub.status === "active" || sub.status === "trialing";
         const plan = isActive ? planFromPriceId(sub.items.data[0]?.price?.id) : "free";
         await ctx.runMutation(internal.billing.applySubscription, {
-          teamId: teamId as never,
+          teamId: teamId as Id<"teams">,
           plan,
           stripeSubscriptionId: isActive ? sub.id : undefined,
         });
@@ -187,7 +186,7 @@ export function registerStripeRoutes(http: ReturnType<typeof httpRouter>) {
         const teamId = sub.metadata?.teamId;
         if (!teamId) return;
         await ctx.runMutation(internal.billing.applySubscription, {
-          teamId: teamId as never,
+          teamId: teamId as Id<"teams">,
           plan: "free",
         });
       },

@@ -8,10 +8,11 @@ import { PagesPage } from "./pages/PagesPage";
 import { ProjectSetup } from "./pages/ProjectSetup";
 import { OAuthCallback } from "./pages/OAuthCallback";
 import { ClaimPage } from "./pages/ClaimPage";
+import { BillingPage } from "./pages/BillingPage";
 import { useState, useCallback } from "react";
 import { clearSession, getSessionToken } from "./lib/auth";
 
-type Page = "overview" | "pages" | "events";
+type Page = "overview" | "pages" | "events" | "billing";
 type Environment = "all" | "production" | "development";
 
 export default function App() {
@@ -143,6 +144,9 @@ function Dashboard({
             projectName={currentProject.name}
             environment={environment === "all" ? undefined : environment}
           />
+        )}
+        {page === "billing" && (
+          <BillingPage sessionToken={sessionToken} />
         )}
       </main>
     </div>

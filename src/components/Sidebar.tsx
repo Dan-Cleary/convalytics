@@ -1,7 +1,7 @@
 import { Doc } from "../../convex/_generated/dataModel";
 import { useState, useRef, useEffect } from "react";
 
-type Page = "overview" | "pages" | "events";
+type Page = "overview" | "pages" | "events" | "billing";
 type Environment = "all" | "production" | "development";
 
 interface SidebarProps {
@@ -139,6 +139,8 @@ export function Sidebar({
         <NavItem label="Pages" active={page === "pages"} onClick={() => onSelectPage("pages")} />
         <SectionLabel>Product Analytics</SectionLabel>
         <NavItem label="Events" active={page === "events"} onClick={() => onSelectPage("events")} />
+        <SectionLabel>Settings</SectionLabel>
+        <NavItem label="Billing" active={page === "billing"} onClick={() => onSelectPage("billing")} />
       </div>
 
       {/* Environment toggle */}

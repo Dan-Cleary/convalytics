@@ -1,8 +1,9 @@
 import { v } from "convex/values";
-import { internalMutation } from "./_generated/server";
+import { internalMutation, query } from "./_generated/server";
 import { Id } from "./_generated/dataModel";
 import { MutationCtx, QueryCtx } from "./_generated/server";
 import { PLANS, type PlanId } from "./plans";
+import { validateSession, getUserTeamIds } from "./authHelpers";
 
 function monthKey(): string {
   const now = new Date();
@@ -176,5 +177,40 @@ export const cleanupProvisionAbuse = internalMutation({
         await ctx.db.delete("provisionAbuse", doc._id);
       }
     }
+  },
+});
+
+// Public query — returns billing/usage info for the current user's team.
+// Used by the in-app billing page.
+export const getMyUsage = query({
+  args: { sessionToken: v.string() },
+  handler: async (ctx, args) => {
+    const session = await validateSession(ctx, args.sessionToken);
+    if (!session) return null;
+
+    const teamIds = await getUserTeamIds(ctx, session.userId);
+    if (teamIds.length === 0) return null;
+
+    const team = await ctx.db.get("teams", teamIds[0]);
+    if (!team) return null;
+
+    const plan = (team.plan ?? "free") as PlanId;
+    const limit =
+      team.usageLimitEventsPerMonth ??
+      PLANS[plan]?.eventsPerMonth ??
+      PLANS.free.eventsPerMonth;
+    const currentMonth = monthKey();
+    const usage =
+      team.usageMonthKey === currentMonth
+        ? (team.usageEventsThisMonth ?? 0)
+        : 0;
+
+    return {
+      plan,
+      usage,
+      limit,
+      retentionDays: PLANS[plan].retentionDays,
+      hasStripeSubscription: !!team.stripeCustomerId,
+    };
   },
 });

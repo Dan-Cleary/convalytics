@@ -115,6 +115,11 @@ export function SignInForm() {
           </p>
         </div>
 
+        {/* Pricing hint */}
+        <p className="text-center text-[10px]" style={{ color: "#9b9488" }}>
+          Free · Solo $29/mo · Pro $99/mo
+        </p>
+
         {/* Secondary — sign in for existing users */}
         <div
           className="bg-white px-6 py-4 flex items-center justify-between"
