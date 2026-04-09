@@ -84,6 +84,7 @@ export const topEventNames = query({
     sessionToken: v.string(),
     writeKey: v.string(),
     environment: v.optional(v.string()),
+    since: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
     const project = await validateProjectAccess(
@@ -93,7 +94,7 @@ export const topEventNames = query({
     );
     if (!project) return [];
 
-    const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+    const startTime = args.since ?? Date.now() - 7 * 24 * 60 * 60 * 1000;
     const events = args.environment
       ? await ctx.db
           .query("events")
@@ -101,13 +102,13 @@ export const topEventNames = query({
             q
               .eq("writeKey", args.writeKey)
               .eq("environment", args.environment)
-              .gte("timestamp", sevenDaysAgo),
+              .gte("timestamp", startTime),
           )
           .take(5000)
       : await ctx.db
           .query("events")
           .withIndex("by_writeKey_and_timestamp", (q) =>
-            q.eq("writeKey", args.writeKey).gte("timestamp", sevenDaysAgo),
+            q.eq("writeKey", args.writeKey).gte("timestamp", startTime),
           )
           .take(5000);
 
@@ -123,11 +124,12 @@ export const topEventNames = query({
   },
 });
 
-export const stats7d = query({
+export const stats = query({
   args: {
     sessionToken: v.string(),
     writeKey: v.string(),
     environment: v.optional(v.string()),
+    since: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
     const project = await validateProjectAccess(
@@ -137,7 +139,7 @@ export const stats7d = query({
     );
     if (!project) return { totalEvents: 0, activeUsers: 0 };
 
-    const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+    const startTime = args.since ?? Date.now() - 7 * 24 * 60 * 60 * 1000;
     const events = args.environment
       ? await ctx.db
           .query("events")
@@ -145,13 +147,13 @@ export const stats7d = query({
             q
               .eq("writeKey", args.writeKey)
               .eq("environment", args.environment)
-              .gte("timestamp", sevenDaysAgo),
+              .gte("timestamp", startTime),
           )
           .take(10000)
       : await ctx.db
           .query("events")
           .withIndex("by_writeKey_and_timestamp", (q) =>
-            q.eq("writeKey", args.writeKey).gte("timestamp", sevenDaysAgo),
+            q.eq("writeKey", args.writeKey).gte("timestamp", startTime),
           )
           .take(10000);
 

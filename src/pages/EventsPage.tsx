@@ -2,12 +2,14 @@ import { useQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { Doc } from "../../convex/_generated/dataModel";
 import { useState } from "react";
+import { TimeRangePicker, sinceForRange, type RangeKey } from "../components/TimeRangePicker";
 
 interface EventsPageProps {
   sessionToken: string;
   writeKey: string;
   projectName: string;
   environment?: string;
+  retentionDays: number;
 }
 
 const CARD_STYLE = {
@@ -16,10 +18,12 @@ const CARD_STYLE = {
   boxShadow: "4px 4px 0px #1a1814",
 };
 
-export function EventsPage({ sessionToken, writeKey, projectName, environment }: EventsPageProps) {
+export function EventsPage({ sessionToken, writeKey, projectName, environment, retentionDays }: EventsPageProps) {
+  const [range, setRange] = useState<RangeKey>("7d");
+  const since = sinceForRange(range);
   const events = useQuery(api.events.listLatest, { sessionToken, writeKey, limit: 100, environment });
-  const stats = useQuery(api.events.stats7d, { sessionToken, writeKey, environment });
-  const topEvents = useQuery(api.events.topEventNames, { sessionToken, writeKey, environment });
+  const stats = useQuery(api.events.stats, { sessionToken, writeKey, environment, since });
+  const topEvents = useQuery(api.events.topEventNames, { sessionToken, writeKey, environment, since });
   const [filter, setFilter] = useState("");
 
   const filtered = (events ?? []).filter((e) => {
@@ -43,18 +47,13 @@ export function EventsPage({ sessionToken, writeKey, projectName, environment }:
           <span style={{ color: "#c4bfb2" }}>·</span>
           <span className="text-xs" style={{ color: "#9b9488" }}>{projectName}</span>
         </div>
-        <span
-          className="text-[10px] font-medium uppercase tracking-wider px-2 py-1"
-          style={{ border: "1px solid #c4bfb2", color: "#9b9488" }}
-        >
-          Last 7 days
-        </span>
+        <TimeRangePicker value={range} onChange={setRange} retentionDays={retentionDays} />
       </div>
 
       <div className="p-6 flex flex-col gap-5">
         {/* Stat cards */}
         <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
-          <StatCard label="Total Events" value={stats?.totalEvents} sub="this week" />
+          <StatCard label="Total Events" value={stats?.totalEvents} sub={`last ${range === "all" ? "all time" : range}`} />
           <StatCard label="Active Users" value={stats?.activeUsers} sub="unique users" />
           <StatCard
             label="Top Event"

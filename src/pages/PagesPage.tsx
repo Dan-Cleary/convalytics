@@ -1,12 +1,14 @@
 import { useQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { useState } from "react";
+import { TimeRangePicker, sinceForRange, type RangeKey } from "../components/TimeRangePicker";
 
 interface PagesPageProps {
   sessionToken: string;
   writeKey: string;
   projectName: string;
   environment?: string;
+  retentionDays: number;
 }
 
 const CARD_STYLE = {
@@ -15,8 +17,10 @@ const CARD_STYLE = {
   boxShadow: "4px 4px 0px #1a1814",
 };
 
-export function PagesPage({ sessionToken, writeKey, projectName, environment }: PagesPageProps) {
-  const topPages = useQuery(api.pageviews.topPages, { sessionToken, writeKey, environment });
+export function PagesPage({ sessionToken, writeKey, projectName, environment, retentionDays }: PagesPageProps) {
+  const [range, setRange] = useState<RangeKey>("7d");
+  const since = sinceForRange(range);
+  const topPages = useQuery(api.pageviews.topPages, { sessionToken, writeKey, environment, since });
   const [filter, setFilter] = useState("");
 
   const filtered = (topPages ?? []).filter((p) =>
@@ -37,11 +41,14 @@ export function PagesPage({ sessionToken, writeKey, projectName, environment }: 
           <span style={{ color: "#c4bfb2" }}>·</span>
           <span className="text-xs" style={{ color: "#9b9488" }}>{projectName}</span>
         </div>
-        {topPages !== undefined && (
-          <span className="text-xs" style={{ color: "#9b9488" }}>
-            {filtered.length} page{filtered.length !== 1 ? "s" : ""}
-          </span>
-        )}
+        <div className="flex items-center gap-3">
+          {topPages !== undefined && (
+            <span className="text-xs" style={{ color: "#9b9488" }}>
+              {filtered.length} page{filtered.length !== 1 ? "s" : ""}
+            </span>
+          )}
+          <TimeRangePicker value={range} onChange={setRange} retentionDays={retentionDays} />
+        </div>
       </div>
 
       <div className="p-6 flex flex-col gap-4">

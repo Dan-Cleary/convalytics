@@ -62,6 +62,8 @@ function Dashboard({
   onSignOut: () => void;
 }) {
   const projects = useQuery(api.projects.list, { sessionToken });
+  const usage = useQuery(api.usage.getMyUsage, { sessionToken });
+  const retentionDays = usage?.retentionDays ?? 90;
   const [activeWriteKey, setActiveWriteKey] = useState<string | null>(() => {
     const params = new URLSearchParams(window.location.search);
     const key = params.get("project");
@@ -142,6 +144,7 @@ function Dashboard({
             writeKey={currentWriteKey}
             projectName={currentProject.name}
             environment={environment === "all" ? undefined : environment}
+            retentionDays={retentionDays}
           />
         )}
         {page === "pages" && (
@@ -150,6 +153,7 @@ function Dashboard({
             writeKey={currentWriteKey}
             projectName={currentProject.name}
             environment={environment === "all" ? undefined : environment}
+            retentionDays={retentionDays}
           />
         )}
         {page === "events" && (
@@ -158,6 +162,7 @@ function Dashboard({
             writeKey={currentWriteKey}
             projectName={currentProject.name}
             environment={environment === "all" ? undefined : environment}
+            retentionDays={retentionDays}
           />
         )}
         {page === "billing" && <BillingPage sessionToken={sessionToken} />}
