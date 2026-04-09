@@ -8,23 +8,25 @@ const PLANS = [
     name: "Free",
     price: "$0",
     events: "50K events/mo",
-    retention: "30-day retention",
+    retention: "90-day retention",
   },
   {
     id: "solo" as const,
     name: "Solo",
     price: "$29/mo",
     events: "500K events/mo",
-    retention: "90-day retention",
+    retention: "1-year retention",
   },
   {
     id: "pro" as const,
     name: "Pro",
     price: "$99/mo",
     events: "5M events/mo",
-    retention: "1-year retention",
+    retention: "Unlimited retention",
   },
 ];
+
+const MAX_RETENTION_DAYS = 1825;
 
 function fmt(n: number): string {
   if (n >= 1_000_000)
@@ -120,7 +122,10 @@ export function BillingPage({ sessionToken }: { sessionToken: string }) {
             {pct}% used
           </span>
           <span className="text-[10px]" style={{ color: "#9b9488" }}>
-            {usage.retentionDays}-day data retention
+            {usage.retentionDays >= MAX_RETENTION_DAYS
+              ? "Unlimited"
+              : `${usage.retentionDays}-day`}{" "}
+            data retention
           </span>
         </div>
         <p className="text-[10px] mt-3" style={{ color: "#9b9488" }}>

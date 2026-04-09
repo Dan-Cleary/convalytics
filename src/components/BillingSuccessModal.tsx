@@ -10,9 +10,9 @@ const PLAN_LABELS: Record<string, string> = {
 };
 
 const PLAN_TAGLINES: Record<string, string> = {
-  solo: "500K events/mo · 90-day retention",
-  pro: "5M events/mo · 1-year retention",
-  free: "50K events/mo · 30-day retention",
+  free: "50K events/mo · 90-day retention",
+  solo: "500K events/mo · 1-year retention",
+  pro: "5M events/mo · Unlimited retention",
 };
 
 export function BillingSuccessModal({
