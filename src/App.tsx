@@ -2,6 +2,7 @@ import { useQuery } from "convex/react";
 import { api } from "../convex/_generated/api";
 import { SignInForm } from "./components/SignInForm";
 import { Sidebar } from "./components/Sidebar";
+import { BillingSuccessModal } from "./components/BillingSuccessModal";
 import { Overview } from "./pages/Overview";
 import { EventsPage } from "./pages/EventsPage";
 import { PagesPage } from "./pages/PagesPage";
@@ -74,6 +75,14 @@ function Dashboard({
       window.history.replaceState(null, "", clean);
     }
     return key;
+  });
+  const [showBillingSuccess, setShowBillingSuccess] = useState(() => {
+    const params = new URLSearchParams(window.location.search);
+    const success = params.get("billing") === "success";
+    if (success) {
+      window.history.replaceState(null, "", window.location.pathname);
+    }
+    return success;
   });
   const [page, setPage] = useState<Page>("overview");
   const [addingProject, setAddingProject] = useState(false);
@@ -149,6 +158,13 @@ function Dashboard({
           <BillingPage sessionToken={sessionToken} />
         )}
       </main>
+
+      {showBillingSuccess && (
+        <BillingSuccessModal
+          sessionToken={sessionToken}
+          onClose={() => setShowBillingSuccess(false)}
+        />
+      )}
     </div>
   );
 }
