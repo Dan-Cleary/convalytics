@@ -1,6 +1,7 @@
 import { useQuery, useAction } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { useState } from "react";
+import { formatEventLimit, MAX_RETENTION_DAYS } from "../lib/timeRange";
 
 const PLANS = [
   {
@@ -25,15 +26,6 @@ const PLANS = [
     retention: "Unlimited retention",
   },
 ];
-
-const MAX_RETENTION_DAYS = 1825;
-
-function fmt(n: number): string {
-  if (n >= 1_000_000)
-    return `${(n / 1_000_000).toFixed(1).replace(/\.0$/, "")}M`;
-  if (n >= 1_000) return `${(n / 1_000).toFixed(0)}K`;
-  return String(n);
-}
 
 export function BillingPage({ sessionToken }: { sessionToken: string }) {
   const usage = useQuery(api.usage.getMyUsage, { sessionToken });
@@ -107,7 +99,7 @@ export function BillingPage({ sessionToken }: { sessionToken: string }) {
             Events this month
           </span>
           <span className="text-xs" style={{ color: "#6b6456" }}>
-            {fmt(usage.usage)} / {fmt(usage.limit)}
+            {formatEventLimit(usage.usage)} / {formatEventLimit(usage.limit)}
           </span>
         </div>
         {/* Usage bar */}

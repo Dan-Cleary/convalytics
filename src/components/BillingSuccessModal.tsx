@@ -2,21 +2,13 @@ import { useEffect, useRef } from "react";
 import confetti from "canvas-confetti";
 import { useQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
+import { formatEventLimit, MAX_RETENTION_DAYS } from "../lib/timeRange";
 
 const PLAN_LABELS: Record<string, string> = {
   solo: "Solo",
   pro: "Pro",
   free: "Free",
 };
-
-const MAX_RETENTION_DAYS = 1825;
-
-function fmtLimit(n: number): string {
-  if (n >= 1_000_000)
-    return `${(n / 1_000_000).toFixed(1).replace(/\.0$/, "")}M`;
-  if (n >= 1_000) return `${(n / 1_000).toFixed(0)}K`;
-  return String(n);
-}
 
 function fmtRetention(days: number): string {
   if (days >= MAX_RETENTION_DAYS) return "Unlimited retention";
@@ -126,7 +118,7 @@ export function BillingSuccessModal({
       : expectedPlan;
   const planName = plan ? (PLAN_LABELS[plan] ?? plan) : "…";
   const tagline = usage
-    ? `${fmtLimit(usage.limit)} events/mo · ${fmtRetention(usage.retentionDays)}`
+    ? `${formatEventLimit(usage.limit)} events/mo · ${fmtRetention(usage.retentionDays)}`
     : "";
 
   return (

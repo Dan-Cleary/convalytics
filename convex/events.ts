@@ -104,12 +104,14 @@ export const topEventNames = query({
               .eq("environment", args.environment)
               .gte("timestamp", startTime),
           )
+          .order("desc")
           .take(5000)
       : await ctx.db
           .query("events")
           .withIndex("by_writeKey_and_timestamp", (q) =>
             q.eq("writeKey", args.writeKey).gte("timestamp", startTime),
           )
+          .order("desc")
           .take(5000);
 
     const counts = new Map<string, number>();
@@ -149,12 +151,14 @@ export const stats = query({
               .eq("environment", args.environment)
               .gte("timestamp", startTime),
           )
+          .order("desc")
           .take(10000)
       : await ctx.db
           .query("events")
           .withIndex("by_writeKey_and_timestamp", (q) =>
             q.eq("writeKey", args.writeKey).gte("timestamp", startTime),
           )
+          .order("desc")
           .take(10000);
 
     const visitorSet = new Set(events.map((e) => e.visitorId));

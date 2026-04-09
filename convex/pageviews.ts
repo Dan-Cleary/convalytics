@@ -85,12 +85,14 @@ export const stats = query({
               .eq("environment", args.environment)
               .gte("timestamp", startTime),
           )
+          .order("desc")
           .take(10000)
       : await ctx.db
           .query("pageviews")
           .withIndex("by_writeKey_and_timestamp", (q) =>
             q.eq("writeKey", args.writeKey).gte("timestamp", startTime),
           )
+          .order("desc")
           .take(10000);
 
     const pageViews = rows.length;
@@ -135,12 +137,14 @@ export const topPages = query({
               .eq("environment", args.environment)
               .gte("timestamp", startTime),
           )
+          .order("desc")
           .take(10000)
       : await ctx.db
           .query("pageviews")
           .withIndex("by_writeKey_and_timestamp", (q) =>
             q.eq("writeKey", args.writeKey).gte("timestamp", startTime),
           )
+          .order("desc")
           .take(10000);
 
     const pageMap = new Map<string, { views: number; visitors: Set<string> }>();
@@ -189,12 +193,14 @@ export const topSources = query({
               .eq("environment", args.environment)
               .gte("timestamp", startTime),
           )
+          .order("desc")
           .take(5000)
       : await ctx.db
           .query("pageviews")
           .withIndex("by_writeKey_and_timestamp", (q) =>
             q.eq("writeKey", args.writeKey).gte("timestamp", startTime),
           )
+          .order("desc")
           .take(5000);
 
     const referrerMap = new Map<string, number>();

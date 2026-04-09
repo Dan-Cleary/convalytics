@@ -1089,6 +1089,9 @@ http.route({
               "Monthly event quota exceeded. Upgrade your plan to continue tracking.",
             plan: quota.plan,
             limit: quota.limit,
+            partialIngest: pageviewsToInsert.length > 0,
+            acceptedPageviews: pageviewsToInsert.length,
+            rejectedProductEvents: productEventCount,
           }),
           {
             status: 402,
