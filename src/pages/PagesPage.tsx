@@ -1,7 +1,8 @@
 import { useQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { useState } from "react";
-import { TimeRangePicker, sinceForRange, type RangeKey } from "../components/TimeRangePicker";
+import { TimeRangePicker } from "../components/TimeRangePicker"
+import { sinceForRange, type RangeKey } from "../lib/timeRange";
 
 interface PagesPageProps {
   sessionToken: string;

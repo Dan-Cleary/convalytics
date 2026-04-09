@@ -9,11 +9,20 @@ const PLAN_LABELS: Record<string, string> = {
   free: "Free",
 };
 
-const PLAN_TAGLINES: Record<string, string> = {
-  free: "50K events/mo · 90-day retention",
-  solo: "500K events/mo · 1-year retention",
-  pro: "5M events/mo · Unlimited retention",
-};
+const MAX_RETENTION_DAYS = 1825;
+
+function fmtLimit(n: number): string {
+  if (n >= 1_000_000)
+    return `${(n / 1_000_000).toFixed(1).replace(/\.0$/, "")}M`;
+  if (n >= 1_000) return `${(n / 1_000).toFixed(0)}K`;
+  return String(n);
+}
+
+function fmtRetention(days: number): string {
+  if (days >= MAX_RETENTION_DAYS) return "Unlimited retention";
+  if (days >= 365) return `${Math.round(days / 365)}-year retention`;
+  return `${days}-day retention`;
+}
 
 export function BillingSuccessModal({
   sessionToken,
@@ -116,7 +125,9 @@ export function BillingSuccessModal({
       ? usage.plan
       : expectedPlan;
   const planName = plan ? (PLAN_LABELS[plan] ?? plan) : "…";
-  const tagline = plan ? (PLAN_TAGLINES[plan] ?? "") : "";
+  const tagline = usage
+    ? `${fmtLimit(usage.limit)} events/mo · ${fmtRetention(usage.retentionDays)}`
+    : "";
 
   return (
     <div
