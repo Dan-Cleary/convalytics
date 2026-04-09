@@ -20,6 +20,7 @@ const CARD_STYLE = {
 
 export function PagesPage({ sessionToken, writeKey, projectName, environment, retentionDays }: PagesPageProps) {
   const [range, setRange] = useState<RangeKey>("7d");
+  const rangeLabel = range === "all" ? "all time" : `last ${range}`;
   const since = sinceForRange(range);
   const topPages = useQuery(api.pageviews.topPages, { sessionToken, writeKey, environment, since });
   const [filter, setFilter] = useState("");
@@ -129,7 +130,7 @@ export function PagesPage({ sessionToken, writeKey, projectName, environment, re
 
         {topPages !== undefined && topPages.length > 0 && (
           <p className="text-xs" style={{ color: "#9b9488" }}>
-            Showing top {Math.min(20, topPages.length)} pages from the last 7 days.
+            Showing top {Math.min(20, topPages.length)} pages for {rangeLabel}.
           </p>
         )}
       </div>

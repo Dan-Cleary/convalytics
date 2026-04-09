@@ -24,6 +24,7 @@ const SETUP_DISMISSED_KEY = (writeKey: string) => `cnv_setup_dismissed_${writeKe
 export function Overview({ sessionToken, writeKey, projectName, environment, retentionDays }: OverviewProps) {
   const [range, setRange] = useState<RangeKey>("7d");
   const since = sinceForRange(range);
+  const rangeLabel = `last ${range === "all" ? "all time" : range}`;
 
   const stats = useQuery(api.pageviews.stats, { sessionToken, writeKey, environment, since });
   const topPages = useQuery(api.pageviews.topPages, { sessionToken, writeKey, environment, since });
@@ -82,11 +83,11 @@ export function Overview({ sessionToken, writeKey, projectName, environment, ret
       <div className="p-6 flex flex-col gap-5">
         {/* Stat cards */}
         <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
-          <StatCard label="Page Views" value={stats?.pageViews} sub="this week" />
-          <StatCard label="Unique Visitors" value={stats?.uniqueVisitors} sub="this week" />
-          <StatCard label="Sessions" value={stats?.sessions} sub="this week" />
+          <StatCard label="Page Views" value={stats?.pageViews} sub={rangeLabel} />
+          <StatCard label="Unique Visitors" value={stats?.uniqueVisitors} sub={rangeLabel} />
+          <StatCard label="Sessions" value={stats?.sessions} sub={rangeLabel} />
           <StatCard label="Bounce Rate" value={stats?.bounceRate} sub="% single-page" suffix="%" />
-          <StatCard label="Product Events" value={eventStats?.totalEvents} sub="this week" accent />
+          <StatCard label="Product Events" value={eventStats?.totalEvents} sub={rangeLabel} accent />
         </div>
 
         {/* Top pages + traffic sources */}

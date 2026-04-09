@@ -1,5 +1,7 @@
+import { MAX_RETENTION_DAYS } from "../../convex/plans";
+
 const MS = 24 * 60 * 60 * 1000;
-export const MAX_RETENTION_DAYS = 1825;
+export { MAX_RETENTION_DAYS };
 
 export function formatEventLimit(n: number): string {
   if (n >= 1_000_000)
