@@ -1061,14 +1061,27 @@ http.route({
       );
     }
 
+    const eventsToInsert = valid
+      .filter((v): v is ValidatedEvent => v.type === "event")
+      .map(({ type: _, ...rest }) => rest);
+    const pageviewsToInsert = valid
+      .filter((v): v is ValidatedPageview => v.type === "pageview")
+      .map(({ type: _, ...rest }) => rest);
+
     // Page views are free — only count custom product events against the monthly quota.
-    const productEventCount = valid.filter((v) => v.type === "event").length;
+    const productEventCount = eventsToInsert.length;
     if (productEventCount > 0) {
       const quota = await ctx.runMutation(internal.usage.checkAndIncrement, {
         writeKey,
         count: productEventCount,
       });
       if (!quota.allowed) {
+        // Keep free page views even when paid product events are over quota.
+        if (pageviewsToInsert.length > 0) {
+          await ctx.runMutation(internal.pageviews.ingestBatch, {
+            pageviews: pageviewsToInsert,
+          });
+        }
         return new Response(
           JSON.stringify({
             error: "quota_exceeded",
@@ -1105,13 +1118,6 @@ http.route({
         }
       }
     }
-
-    const eventsToInsert = valid
-      .filter((v): v is ValidatedEvent => v.type === "event")
-      .map(({ type: _, ...rest }) => rest);
-    const pageviewsToInsert = valid
-      .filter((v): v is ValidatedPageview => v.type === "pageview")
-      .map(({ type: _, ...rest }) => rest);
 
     if (eventsToInsert.length > 0) {
       await ctx.runMutation(internal.events.ingestBatch, {

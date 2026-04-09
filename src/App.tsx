@@ -15,6 +15,7 @@ import { clearSession, getSessionToken } from "./lib/auth";
 
 type Page = "overview" | "pages" | "events" | "billing";
 type Environment = "all" | "production" | "development";
+type PlanId = "free" | "solo" | "pro";
 
 export default function App() {
   const [sessionToken, setSessionToken] = useState<string | null>(
@@ -50,12 +51,7 @@ export default function App() {
     return <SignInForm />;
   }
 
-  return (
-    <Dashboard
-      sessionToken={sessionToken}
-      onSignOut={handleSignOut}
-    />
-  );
+  return <Dashboard sessionToken={sessionToken} onSignOut={handleSignOut} />;
 }
 
 function Dashboard({
@@ -76,13 +72,21 @@ function Dashboard({
     }
     return key;
   });
-  const [showBillingSuccess, setShowBillingSuccess] = useState(() => {
+  const [billingSuccess, setBillingSuccess] = useState<{
+    open: boolean;
+    expectedPlan: PlanId | null;
+  }>(() => {
     const params = new URLSearchParams(window.location.search);
-    const success = params.get("billing") === "success";
-    if (success) {
+    const open = params.get("billing") === "success";
+    const planParam = params.get("plan");
+    const expectedPlan: PlanId | null =
+      planParam === "free" || planParam === "solo" || planParam === "pro"
+        ? planParam
+        : null;
+    if (open) {
       window.history.replaceState(null, "", window.location.pathname);
     }
-    return success;
+    return { open, expectedPlan };
   });
   const [page, setPage] = useState<Page>("overview");
   const [addingProject, setAddingProject] = useState(false);
@@ -109,7 +113,9 @@ function Dashboard({
     );
   }
 
-  const validActiveWriteKey = projects.some((p) => p.writeKey === activeWriteKey)
+  const validActiveWriteKey = projects.some(
+    (p) => p.writeKey === activeWriteKey,
+  )
     ? activeWriteKey
     : null;
   const currentWriteKey = validActiveWriteKey ?? projects[0].writeKey;
@@ -154,15 +160,16 @@ function Dashboard({
             environment={environment === "all" ? undefined : environment}
           />
         )}
-        {page === "billing" && (
-          <BillingPage sessionToken={sessionToken} />
-        )}
+        {page === "billing" && <BillingPage sessionToken={sessionToken} />}
       </main>
 
-      {showBillingSuccess && (
+      {billingSuccess.open && (
         <BillingSuccessModal
           sessionToken={sessionToken}
-          onClose={() => setShowBillingSuccess(false)}
+          expectedPlan={billingSuccess.expectedPlan}
+          onClose={() =>
+            setBillingSuccess((state) => ({ ...state, open: false }))
+          }
         />
       )}
     </div>

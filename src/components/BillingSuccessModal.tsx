@@ -17,9 +17,11 @@ const PLAN_TAGLINES: Record<string, string> = {
 
 export function BillingSuccessModal({
   sessionToken,
+  expectedPlan,
   onClose,
 }: {
   sessionToken: string;
+  expectedPlan: "free" | "solo" | "pro" | null;
   onClose: () => void;
 }) {
   const usage = useQuery(api.usage.getMyUsage, { sessionToken });
@@ -74,7 +76,10 @@ export function BillingSuccessModal({
     };
   }, []);
 
-  const plan = usage?.plan ?? null;
+  const plan =
+    usage?.plan && (usage.plan !== "free" || expectedPlan === null)
+      ? usage.plan
+      : expectedPlan;
   const planName = plan ? (PLAN_LABELS[plan] ?? plan) : "…";
   const tagline = plan ? (PLAN_TAGLINES[plan] ?? "") : "";
 

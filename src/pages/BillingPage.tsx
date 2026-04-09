@@ -48,7 +48,7 @@ export function BillingPage({ sessionToken }: { sessionToken: string }) {
       const { url } = await createCheckout({
         sessionToken,
         plan,
-        successUrl: `${origin}/?billing=success`,
+        successUrl: `${origin}/?billing=success&plan=${plan}`,
         cancelUrl: `${origin}/`,
       });
       if (url) window.location.href = url;
