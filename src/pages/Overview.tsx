@@ -24,7 +24,7 @@ const SETUP_DISMISSED_KEY = (writeKey: string) => `cnv_setup_dismissed_${writeKe
 export function Overview({ sessionToken, writeKey, projectName, environment, retentionDays }: OverviewProps) {
   const [range, setRange] = useState<RangeKey>("7d");
   const since = sinceForRange(range);
-  const rangeLabel = `last ${range === "all" ? "all time" : range}`;
+  const rangeLabel = range === "all" ? "all time" : `last ${range}`;
 
   const stats = useQuery(api.pageviews.stats, { sessionToken, writeKey, environment, since });
   const topPages = useQuery(api.pageviews.topPages, { sessionToken, writeKey, environment, since });

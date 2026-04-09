@@ -54,7 +54,7 @@ export function EventsPage({ sessionToken, writeKey, projectName, environment, r
       <div className="p-6 flex flex-col gap-5">
         {/* Stat cards */}
         <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
-          <StatCard label="Total Events" value={stats?.totalEvents} sub={`last ${range === "all" ? "all time" : range}`} />
+          <StatCard label="Total Events" value={stats?.totalEvents} sub={range === "all" ? "all time" : `last ${range}`} />
           <StatCard label="Active Users" value={stats?.activeUsers} sub="unique users" />
           <StatCard
             label="Top Event"
