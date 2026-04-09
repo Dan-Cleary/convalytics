@@ -7,21 +7,21 @@ const PLANS = [
     id: "free" as const,
     name: "Free",
     price: "$0",
-    events: "50K events/mo",
+    events: "50K product events/mo",
     retention: "30-day retention",
   },
   {
     id: "solo" as const,
     name: "Solo",
     price: "$29/mo",
-    events: "500K events/mo",
+    events: "500K product events/mo",
     retention: "90-day retention",
   },
   {
     id: "pro" as const,
     name: "Pro",
     price: "$99/mo",
-    events: "5M events/mo",
+    events: "5M product events/mo",
     retention: "1-year retention",
   },
 ];
@@ -102,10 +102,10 @@ export function BillingPage({ sessionToken }: { sessionToken: string }) {
             className="text-xs font-bold uppercase tracking-wider"
             style={{ color: "#1a1814" }}
           >
-            This month
+            Product events this month
           </span>
           <span className="text-xs" style={{ color: "#6b6456" }}>
-            {fmt(usage.usage)} / {fmt(usage.limit)} events
+            {fmt(usage.usage)} / {fmt(usage.limit)}
           </span>
         </div>
         {/* Usage bar */}
@@ -123,6 +123,9 @@ export function BillingPage({ sessionToken }: { sessionToken: string }) {
             {usage.retentionDays}-day data retention
           </span>
         </div>
+        <p className="text-[10px] mt-3" style={{ color: "#9b9488" }}>
+          Page views are free and don't count toward this limit.
+        </p>
       </div>
 
       {/* Plan cards */}
