@@ -17,33 +17,33 @@ export const pruneEvents = internalMutation({
   handler: async (ctx, args) => {
     const cutoff = Date.now() - args.retentionDays * 24 * 60 * 60 * 1000;
 
-    const rows =
-      args.table === "events"
-        ? await ctx.db
-            .query("events")
-            .withIndex("by_writeKey_and_timestamp", (q) =>
-              q.eq("writeKey", args.writeKey).lt("timestamp", cutoff),
-            )
-            .take(BATCH_SIZE)
-        : await ctx.db
-            .query("pageviews")
-            .withIndex("by_writeKey_and_timestamp", (q) =>
-              q.eq("writeKey", args.writeKey).lt("timestamp", cutoff),
-            )
-            .take(BATCH_SIZE);
-
+    let rowCount: number;
     if (args.table === "events") {
+      const rows = await ctx.db
+        .query("events")
+        .withIndex("by_writeKey_and_timestamp", (q) =>
+          q.eq("writeKey", args.writeKey).lt("timestamp", cutoff),
+        )
+        .take(BATCH_SIZE);
       for (const row of rows) {
         await ctx.db.delete("events", row._id);
       }
+      rowCount = rows.length;
     } else {
+      const rows = await ctx.db
+        .query("pageviews")
+        .withIndex("by_writeKey_and_timestamp", (q) =>
+          q.eq("writeKey", args.writeKey).lt("timestamp", cutoff),
+        )
+        .take(BATCH_SIZE);
       for (const row of rows) {
         await ctx.db.delete("pageviews", row._id);
       }
+      rowCount = rows.length;
     }
 
     // If we hit the batch limit there may be more — reschedule immediately
-    if (rows.length === BATCH_SIZE) {
+    if (rowCount === BATCH_SIZE) {
       await ctx.scheduler.runAfter(0, internal.retention.pruneEvents, {
         writeKey: args.writeKey,
         retentionDays: args.retentionDays,
