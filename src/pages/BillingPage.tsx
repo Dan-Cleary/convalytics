@@ -7,21 +7,21 @@ const PLANS = [
     id: "free" as const,
     name: "Free",
     price: "$0",
-    events: "50K product events/mo",
+    events: "50K events/mo",
     retention: "30-day retention",
   },
   {
     id: "solo" as const,
     name: "Solo",
     price: "$29/mo",
-    events: "500K product events/mo",
+    events: "500K events/mo",
     retention: "90-day retention",
   },
   {
     id: "pro" as const,
     name: "Pro",
     price: "$99/mo",
-    events: "5M product events/mo",
+    events: "5M events/mo",
     retention: "1-year retention",
   },
 ];
@@ -102,7 +102,7 @@ export function BillingPage({ sessionToken }: { sessionToken: string }) {
             className="text-xs font-bold uppercase tracking-wider"
             style={{ color: "#1a1814" }}
           >
-            Product events this month
+            Events this month
           </span>
           <span className="text-xs" style={{ color: "#6b6456" }}>
             {fmt(usage.usage)} / {fmt(usage.limit)}
