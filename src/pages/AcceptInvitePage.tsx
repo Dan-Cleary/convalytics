@@ -42,6 +42,12 @@ export function AcceptInvitePage({ token, onSuccess }: Props) {
       } else if ("sessionToken" in result && result.sessionToken) {
         saveAndRedirect(result.sessionToken);
       }
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : "An unexpected error occurred. Please try again."
+      );
     } finally {
       setLoading(false);
     }
@@ -58,6 +64,12 @@ export function AcceptInvitePage({ token, onSuccess }: Props) {
       } else if ("sessionToken" in result && result.sessionToken) {
         saveAndRedirect(result.sessionToken);
       }
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : "An unexpected error occurred. Please try again."
+      );
     } finally {
       setLoading(false);
     }

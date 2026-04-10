@@ -186,15 +186,27 @@ export const provision = internalMutation({
             const currentTime = current._creationTime;
             return currentTime < earliestTime ? current : earliest;
           });
+          // Generate and persist claimToken if missing
+          let claimToken = canonical.claimToken;
+          if (!claimToken) {
+            claimToken = crypto.randomUUID();
+            await ctx.db.patch(canonical._id, { claimToken });
+          }
           return {
             writeKey: canonical.writeKey,
-            claimToken: canonical.claimToken ?? "",
+            claimToken,
           };
         }
         const existing = rows[0];
+        // Generate and persist claimToken if missing
+        let claimToken = existing.claimToken;
+        if (!claimToken) {
+          claimToken = crypto.randomUUID();
+          await ctx.db.patch(existing._id, { claimToken });
+        }
         return {
           writeKey: existing.writeKey,
-          claimToken: existing.claimToken ?? "",
+          claimToken,
         };
       }
     }
@@ -318,10 +330,14 @@ export const claim = action({
     });
 
     // Fire welcome email non-blocking — failure should not break the claim flow
-    await ctx.scheduler.runAfter(0, internal.projects.sendWelcomeEmail, {
-      sessionToken: args.sessionToken,
-      projectName: result.name,
-    });
+    try {
+      await ctx.scheduler.runAfter(0, internal.projects.sendWelcomeEmail, {
+        sessionToken: args.sessionToken,
+        projectName: result.name,
+      });
+    } catch (err) {
+      // Swallow scheduling errors to ensure claim succeeds
+    }
 
     return result;
   },
