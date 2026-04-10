@@ -5,18 +5,10 @@ import {
   internalQuery,
 } from "./_generated/server";
 import { internal } from "./_generated/api";
-import { Resend } from "@convex-dev/resend";
-import { components } from "./_generated/api";
 import { QUOTA_NOTIFY_THRESHOLDS } from "./plans";
 import { render } from "@react-email/render";
 import { QuotaEmail } from "./emails/QuotaEmail";
-
-const resend = new Resend(components.resend, {
-  testMode: false,
-});
-
-const FROM = "Convalytics <notifications@convalytics.dev>";
-const REPLY_TO = ["dancleary54@gmail.com"];
+import { FROM, REPLY_TO, resend } from "./emailConfig";
 const [QUOTA_NOTIFY_80_PCT, QUOTA_NOTIFY_100_PCT] = QUOTA_NOTIFY_THRESHOLDS;
 
 // Called after every ingest when usage crosses 80% or 100%.
@@ -49,7 +41,14 @@ export const checkAndNotify = internalAction({
         FROM,
         reservation.ownerEmail,
         "You've hit your Convalytics event limit",
-        await render(QuotaEmail({ pct: 100, usage: args.usageAfter, limit: args.limit, plan: reservation.plan })),
+        await render(
+          QuotaEmail({
+            pct: 100,
+            usage: args.usageAfter,
+            limit: args.limit,
+            plan: reservation.plan,
+          }),
+        ),
         undefined,
         REPLY_TO,
       );
@@ -59,7 +58,14 @@ export const checkAndNotify = internalAction({
         FROM,
         reservation.ownerEmail,
         "You've used 80% of your Convalytics event quota",
-        await render(QuotaEmail({ pct: 80, usage: args.usageAfter, limit: args.limit, plan: reservation.plan })),
+        await render(
+          QuotaEmail({
+            pct: 80,
+            usage: args.usageAfter,
+            limit: args.limit,
+            plan: reservation.plan,
+          }),
+        ),
         undefined,
         REPLY_TO,
       );
@@ -170,4 +176,3 @@ export const markNotified = internalMutation({
     }
   },
 });
-

@@ -10,14 +10,9 @@ import {
 import { internal } from "./_generated/api";
 import type { ActionCtx } from "./_generated/server";
 import { validateSession, getUserTeamIds } from "./authHelpers";
-import { Resend } from "@convex-dev/resend";
-import { components } from "./_generated/api";
 import { render } from "@react-email/render";
 import { WelcomeEmail } from "./emails/WelcomeEmail";
-
-const resend = new Resend(components.resend, { testMode: false });
-const FROM = "Convalytics <notifications@convalytics.dev>";
-const REPLY_TO = ["dancleary54@gmail.com"];
+import { FROM, REPLY_TO, resend } from "./emailConfig";
 
 export const create = mutation({
   args: { sessionToken: v.string(), name: v.string(), teamId: v.id("teams") },

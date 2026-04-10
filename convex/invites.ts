@@ -18,16 +18,10 @@ import {
   query,
 } from "./_generated/server";
 import { internal } from "./_generated/api";
-import { Resend } from "@convex-dev/resend";
-import { components } from "./_generated/api";
 import { validateSession, getTeamMembership } from "./authHelpers";
 import { render } from "@react-email/render";
 import { InviteEmail } from "./emails/InviteEmail";
-
-const resend = new Resend(components.resend, { testMode: false });
-
-const FROM = "Convalytics <notifications@convalytics.dev>";
-const REPLY_TO = ["dancleary54@gmail.com"];
+import { FROM, REPLY_TO, resend } from "./emailConfig";
 const INVITE_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
 const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
 
@@ -74,7 +68,12 @@ export const listMembers = query({
     );
 
     const myMembership = memberships.find((m) => m.teamId === teamId);
-    return { teamId, members, myRole: myMembership?.role ?? "member", myUserId: session.userId };
+    return {
+      teamId,
+      members,
+      myRole: myMembership?.role ?? "member",
+      myUserId: session.userId,
+    };
   },
 });
 
@@ -151,7 +150,8 @@ export const createInvite = mutation({
       .withIndex("by_userId", (q) => q.eq("userId", session.userId))
       .first();
     if (!membership) return { error: "Not a team member" };
-    if (membership.role === "member") return { error: "Only owners and admins can invite members" };
+    if (membership.role === "member")
+      return { error: "Only owners and admins can invite members" };
 
     const teamId = membership.teamId;
     const email = args.email.toLowerCase().trim();
@@ -163,8 +163,13 @@ export const createInvite = mutation({
       .withIndex("by_email", (q) => q.eq("email", email))
       .unique();
     if (existingUser) {
-      const existingMembership = await getTeamMembership(ctx, teamId, existingUser.userId);
-      if (existingMembership) return { error: "This person is already a team member" };
+      const existingMembership = await getTeamMembership(
+        ctx,
+        teamId,
+        existingUser.userId,
+      );
+      if (existingMembership)
+        return { error: "This person is already a team member" };
     }
 
     // Check for a pending (non-expired, non-accepted) invite to the same email
@@ -174,12 +179,18 @@ export const createInvite = mutation({
         q.eq("teamId", teamId).eq("invitedEmail", email),
       )
       .filter((q) =>
-        q.and(q.eq(q.field("acceptedAt"), undefined), q.gt(q.field("expiresAt"), now)),
+        q.and(
+          q.eq(q.field("acceptedAt"), undefined),
+          q.gt(q.field("expiresAt"), now),
+        ),
       )
       .first();
-    if (existing) return { error: "A pending invite already exists for this email" };
+    if (existing)
+      return { error: "A pending invite already exists for this email" };
 
-    const token = crypto.randomUUID().replace(/-/g, "") + crypto.randomUUID().replace(/-/g, "");
+    const token =
+      crypto.randomUUID().replace(/-/g, "") +
+      crypto.randomUUID().replace(/-/g, "");
 
     await ctx.db.insert("teamInvites", {
       teamId,
@@ -218,11 +229,13 @@ export const revokeInvite = mutation({
       .withIndex("by_userId", (q) => q.eq("userId", session.userId))
       .first();
     if (!membership) return { error: "Not a team member" };
-    if (membership.role === "member") return { error: "Only owners and admins can revoke invites" };
+    if (membership.role === "member")
+      return { error: "Only owners and admins can revoke invites" };
 
     const invite = await ctx.db.get("teamInvites", args.inviteId);
     if (!invite) return { error: "Invite not found" };
-    if (invite.teamId !== membership.teamId) return { error: "Invite belongs to a different team" };
+    if (invite.teamId !== membership.teamId)
+      return { error: "Invite belongs to a different team" };
 
     await ctx.db.delete("teamInvites", args.inviteId);
     return { ok: true };
@@ -321,7 +334,11 @@ export const finalizeInviteAccept = internalMutation({
     }
 
     // Add to team
-    const existingMembership = await getTeamMembership(ctx, invite.teamId, userId);
+    const existingMembership = await getTeamMembership(
+      ctx,
+      invite.teamId,
+      userId,
+    );
     if (!existingMembership) {
       await ctx.db.insert("teamMembers", {
         teamId: invite.teamId,
@@ -363,7 +380,9 @@ export const getUserForSignIn = internalQuery({
   handler: async (ctx, args) => {
     const user = await ctx.db
       .query("users")
-      .withIndex("by_email", (q) => q.eq("email", args.email.toLowerCase().trim()))
+      .withIndex("by_email", (q) =>
+        q.eq("email", args.email.toLowerCase().trim()),
+      )
       .unique();
     if (!user || !user.passwordHash) return null;
     return { userId: user.userId, passwordHash: user.passwordHash };
@@ -416,7 +435,12 @@ async function hashPassword(password: string): Promise<string> {
     ["deriveBits"],
   );
   const bits = await crypto.subtle.deriveBits(
-    { name: "PBKDF2", salt: enc.encode(salt), iterations: 100_000, hash: "SHA-256" },
+    {
+      name: "PBKDF2",
+      salt: enc.encode(salt),
+      iterations: 100_000,
+      hash: "SHA-256",
+    },
     keyMaterial,
     256,
   );
@@ -428,14 +452,17 @@ async function hashPassword(password: string): Promise<string> {
 
 /** Constant-time byte comparison to prevent timing attacks. */
 function constantTimeEqual(a: Uint8Array, b: Uint8Array): boolean {
-  if (a.length !== b.length) return false;
-  let diff = 0;
-  for (let i = 0; i < a.length; i++) diff |= (a[i] ?? 0) ^ (b[i] ?? 0);
+  const length = Math.max(a.length, b.length);
+  let diff = a.length ^ b.length;
+  for (let i = 0; i < length; i++) diff |= (a[i] ?? 0) ^ (b[i] ?? 0);
   return diff === 0;
 }
 
 /** Verify a password against a stored hash. */
-async function verifyPassword(password: string, stored: string): Promise<boolean> {
+async function verifyPassword(
+  password: string,
+  stored: string,
+): Promise<boolean> {
   const [salt, expectedHash] = stored.split(":");
   if (!salt || !expectedHash) return false;
   const enc = new TextEncoder();
@@ -447,12 +474,19 @@ async function verifyPassword(password: string, stored: string): Promise<boolean
     ["deriveBits"],
   );
   const bits = await crypto.subtle.deriveBits(
-    { name: "PBKDF2", salt: enc.encode(salt), iterations: 100_000, hash: "SHA-256" },
+    {
+      name: "PBKDF2",
+      salt: enc.encode(salt),
+      iterations: 100_000,
+      hash: "SHA-256",
+    },
     keyMaterial,
     256,
   );
   const derived = new Uint8Array(bits);
-  const expected = new Uint8Array(expectedHash.match(/.{2}/g)!.map((h) => parseInt(h, 16)));
+  const expected = new Uint8Array(
+    expectedHash.match(/.{2}/g)!.map((h) => parseInt(h, 16)),
+  );
   return constantTimeEqual(derived, expected);
 }
 
@@ -467,7 +501,10 @@ export const acceptInviteWithPassword = action({
     v.object({ ok: v.literal(true), sessionToken: v.string() }),
     v.object({ error: v.string() }),
   ),
-  handler: async (ctx, args): Promise<{ ok: true; sessionToken: string } | { error: string }> => {
+  handler: async (
+    ctx,
+    args,
+  ): Promise<{ ok: true; sessionToken: string } | { error: string }> => {
     if (args.password.length < 8) {
       return { error: "Password must be at least 8 characters" };
     }
@@ -476,13 +513,16 @@ export const acceptInviteWithPassword = action({
     const sessionToken = crypto.randomUUID();
     const expiresAt = Date.now() + SESSION_TTL_MS;
 
-    const result = await ctx.runMutation(internal.invites.finalizeInviteAccept, {
-      token: args.token,
-      passwordHash,
-      name: args.name,
-      sessionToken,
-      expiresAt,
-    });
+    const result = await ctx.runMutation(
+      internal.invites.finalizeInviteAccept,
+      {
+        token: args.token,
+        passwordHash,
+        name: args.name,
+        sessionToken,
+        expiresAt,
+      },
+    );
 
     if ("error" in result) return { error: result.error ?? "Unknown error" };
     return { ok: true, sessionToken: result.sessionToken };
@@ -536,7 +576,9 @@ export const sendInviteEmail = internalAction({
       FROM,
       args.toEmail,
       `You've been invited to ${args.teamName} on Convalytics`,
-      await render(InviteEmail({ teamName: args.teamName, inviteUrl, role: args.role })),
+      await render(
+        InviteEmail({ teamName: args.teamName, inviteUrl, role: args.role }),
+      ),
       undefined,
       REPLY_TO,
     );
