@@ -39,27 +39,45 @@ export default defineSchema({
     .index("by_userId", ["userId"])
     .index("by_teamId_and_userId", ["teamId", "userId"]),
 
-  // Individual users. Created on first login via Convex OAuth.
-  // Future: also created via invite flow (Convex Auth with email/password).
+  // Individual users. Created on first login via Convex OAuth,
+  // or via team invite (email/password).
   users: defineTable({
-    userId: v.string(), // stable ID: "convex:{teamId}" for OAuth users
-    email: v.optional(v.string()), // future: for invited users
+    userId: v.string(), // "convex:{teamId}" for OAuth users, "invited:{email}" for invited users
+    email: v.optional(v.string()),
     name: v.optional(v.string()),
+    passwordHash: v.optional(v.string()), // only set for invited (non-OAuth) users
     createdAt: v.number(),
-  }).index("by_userId", ["userId"]),
+  })
+    .index("by_userId", ["userId"])
+    .index("by_email", ["email"]),
 
   // Ephemeral auth tokens. Rotated on each login, expire after 30 days.
   // managementToken is the Convex OAuth access token — used to call
   // api.convex.dev on behalf of the user. Expires independently (~1 hour).
+  // Optional for invited users who don't have Convex OAuth.
   sessions: defineTable({
     sessionToken: v.string(),
     userId: v.string(), // ref: users.userId
-    managementToken: v.string(),
+    managementToken: v.optional(v.string()),
     expiresAt: v.optional(v.number()), // epoch ms — optional for migration
   })
     .index("by_sessionToken", ["sessionToken"])
     .index("by_userId", ["userId"])
     .index("by_expiresAt", ["expiresAt"]),
+
+  // Pending team invitations. Invited users set a password on first sign-in.
+  teamInvites: defineTable({
+    teamId: v.id("teams"),
+    invitedEmail: v.string(),
+    token: v.string(), // secure random token for the invite URL
+    role: v.union(v.literal("admin"), v.literal("member")),
+    invitedBy: v.string(), // userId of the person who sent the invite
+    expiresAt: v.number(), // epoch ms — invites expire after 7 days
+    acceptedAt: v.optional(v.number()), // set when the invite is accepted
+  })
+    .index("by_token", ["token"])
+    .index("by_teamId", ["teamId"])
+    .index("by_teamId_and_email", ["teamId", "invitedEmail"]),
 
   // -------------------------------------------------------------------------
   // Projects (analytics projects owned by teams)
@@ -121,6 +139,11 @@ export default defineSchema({
     utm_source: v.optional(v.string()),
     utm_medium: v.optional(v.string()),
     utm_campaign: v.optional(v.string()),
+    // Enriched server-side from request headers (optional for backcompat with existing rows)
+    country: v.optional(v.string()),     // ISO 2-letter code from cf-ipcountry
+    deviceType: v.optional(v.string()),  // "Desktop" | "Mobile" | "Tablet"
+    browser: v.optional(v.string()),     // "Chrome" | "Firefox" | "Safari" | etc.
+    osName: v.optional(v.string()),      // "Windows" | "macOS" | "iOS" | "Android" | etc.
   })
     .index("by_writeKey_and_timestamp", ["writeKey", "timestamp"])
     .index("by_writeKey_and_environment_and_timestamp", [

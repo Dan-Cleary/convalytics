@@ -1,7 +1,7 @@
 import { useQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { getConvexSiteUrl } from "../lib/convex";
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { TimeRangePicker } from "../components/TimeRangePicker"
 import { TrendChart } from "../components/TrendChart";
 import { sinceForRange, daysForRange, defaultRangeForRetention, type RangeKey } from "../lib/timeRange";
@@ -12,6 +12,7 @@ interface OverviewProps {
   projectName: string;
   environment?: string;
   retentionDays: number;
+  onNavigateBilling?: () => void;
 }
 
 const CARD_STYLE = {
@@ -22,7 +23,7 @@ const CARD_STYLE = {
 
 const SETUP_DISMISSED_KEY = (writeKey: string) => `cnv_setup_dismissed_${writeKey}`;
 
-export function Overview({ sessionToken, writeKey, projectName, environment, retentionDays }: OverviewProps) {
+export function Overview({ sessionToken, writeKey, projectName, environment, retentionDays, onNavigateBilling }: OverviewProps) {
   const [userRange, setUserRange] = useState<RangeKey | null>(null);
   const range = userRange ?? defaultRangeForRetention(retentionDays);
   const since = sinceForRange(range);
@@ -78,7 +79,7 @@ export function Overview({ sessionToken, writeKey, projectName, environment, ret
               {realtimeVisitors} now
             </span>
           )}
-          <TimeRangePicker value={range} onChange={setUserRange} retentionDays={retentionDays} />
+          <TimeRangePicker value={range} onChange={setUserRange} retentionDays={retentionDays} onUpgrade={onNavigateBilling} />
         </div>
       </div>
 
@@ -104,8 +105,8 @@ export function Overview({ sessionToken, writeKey, projectName, environment, ret
                 Traffic Trend
               </p>
               <div className="flex items-center gap-4">
-                <span className="flex items-center gap-1.5 text-[10px]" style={{ color: "#1a1814" }}>
-                  <span className="inline-block w-3 h-0.5" style={{ background: "#1a1814" }} />
+                <span className="flex items-center gap-1.5 text-[10px]" style={{ color: "#4f7be8" }}>
+                  <span className="inline-block w-3 h-0.5" style={{ background: "#4f7be8" }} />
                   Page views
                 </span>
                 <span className="flex items-center gap-1.5 text-[10px]" style={{ color: "#e8651c" }}>
@@ -125,14 +126,12 @@ export function Overview({ sessionToken, writeKey, projectName, environment, ret
               series={[
                 {
                   label: "Page views",
-                  color: "#1a1814",
-                  fillColor: "rgba(26,24,20,0.06)",
+                  color: "#4f7be8",
                   data: pvTimeSeries.map((d) => ({ timestamp: d.timestamp, value: d.views })),
                 },
                 {
                   label: "Visitors",
                   color: "#e8651c",
-                  fillColor: "rgba(232,101,28,0.06)",
                   data: pvTimeSeries.map((d) => ({ timestamp: d.timestamp, value: d.visitors })),
                 },
                 ...(evTimeSeries && evTimeSeries.some((d) => d.count > 0)
@@ -140,8 +139,7 @@ export function Overview({ sessionToken, writeKey, projectName, environment, ret
                       {
                         label: "Events",
                         color: "#2d7a2d",
-                        fillColor: "rgba(45,122,45,0.06)",
-                        data: evTimeSeries.map((d) => ({ timestamp: d.timestamp, value: d.count })),
+                              data: evTimeSeries.map((d) => ({ timestamp: d.timestamp, value: d.count })),
                       },
                     ]
                   : []),
@@ -293,85 +291,43 @@ Full reference: .claude/skills/convalytics/SKILL.md`;
 
   return (
     <div
-      className="mx-6 mt-6 p-5"
+      className="mx-6 mt-6 p-5 flex items-center justify-between gap-6"
       style={{ background: "#fff", border: "2px solid #1a1814", boxShadow: "4px 4px 0px #1a1814" }}
     >
-      {/* Header */}
-      <div className="flex items-start justify-between mb-4">
-        <div>
-          <p className="text-[10px] font-bold uppercase tracking-widest mb-0.5" style={{ color: "#9b9488" }}>
-            Getting started
-          </p>
-          <h2 className="text-sm font-bold" style={{ color: "#1a1814" }}>
-            No data yet — install tracking on <span style={{ color: "#e8651c" }}>{projectName}</span>
-          </h2>
-        </div>
+      <div>
+        <p className="text-[10px] font-bold uppercase tracking-widest mb-0.5" style={{ color: "#9b9488" }}>
+          Getting started
+        </p>
+        <h2 className="text-sm font-bold mb-1" style={{ color: "#1a1814" }}>
+          No data yet — install tracking on <span style={{ color: "#e8651c" }}>{projectName}</span>
+        </h2>
+        <p className="text-xs leading-relaxed" style={{ color: "#6b6456" }}>
+          Paste the agent prompt into Claude Code, Cursor, or any AI assistant — it handles the full setup.
+        </p>
+      </div>
+
+      <div className="flex items-center gap-3 flex-shrink-0">
+        <button
+          onClick={() => copy(agentPrompt, "prompt")}
+          className="flex items-center gap-2 px-4 py-2.5 text-xs font-bold uppercase tracking-wider cursor-pointer transition-all"
+          style={{
+            background: copied === "prompt" ? "#2d7a2d" : "#1a1814",
+            color: "#fff",
+            border: `2px solid ${copied === "prompt" ? "#2d7a2d" : "#1a1814"}`,
+            whiteSpace: "nowrap",
+          }}
+        >
+          {copied === "prompt" ? "✓ Copied" : "Copy agent prompt"}
+        </button>
         <button
           onClick={onDismiss}
-          className="text-xs cursor-pointer ml-4 flex-shrink-0"
+          className="text-xs cursor-pointer flex-shrink-0"
           style={{ color: "#c4bfb2" }}
           onMouseEnter={(e) => (e.currentTarget.style.color = "#1a1814")}
           onMouseLeave={(e) => (e.currentTarget.style.color = "#c4bfb2")}
         >
           Dismiss
         </button>
-      </div>
-
-      <div className="flex flex-col lg:flex-row gap-4">
-        {/* Step 1 — Web analytics */}
-        <div className="flex-1">
-          <p className="text-[10px] font-bold uppercase tracking-widest mb-2" style={{ color: "#9b9488" }}>
-            1 · Web Analytics
-          </p>
-          <p className="text-xs mb-2 leading-relaxed" style={{ color: "#6b6456" }}>
-            Add to your <code className="px-1 py-0.5 text-[11px]" style={{ background: "#e9e6db" }}>&lt;head&gt;</code> for automatic page views:
-          </p>
-          <div className="relative">
-            <code
-              className="block text-[11px] px-3 py-2.5 break-all leading-relaxed pr-16"
-              style={{ background: "#1a1814", color: "#e8651c" }}
-            >
-              {scriptTag}
-            </code>
-            <button
-              onClick={() => copy(scriptTag, "script")}
-              className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] font-bold uppercase tracking-wider px-2 py-1 cursor-pointer transition-all"
-              style={{
-                background: copied === "script" ? "#2d7a2d" : "#2e2a22",
-                color: copied === "script" ? "#fff" : "#9b9488",
-              }}
-            >
-              {copied === "script" ? "Copied" : "Copy"}
-            </button>
-          </div>
-        </div>
-
-        {/* Divider */}
-        <div className="hidden lg:block w-px self-stretch" style={{ background: "#e9e6db" }} />
-
-        {/* Step 2 — Product analytics */}
-        <div className="flex-1">
-          <p className="text-[10px] font-bold uppercase tracking-widest mb-2" style={{ color: "#9b9488" }}>
-            2 · Product Analytics
-          </p>
-          <p className="text-xs mb-3 leading-relaxed" style={{ color: "#6b6456" }}>
-            Paste this into your AI coding agent. It reads your codebase, proposes events to track, and instruments them after you approve.
-          </p>
-          <button
-            onClick={() => copy(agentPrompt, "prompt")}
-            className="flex items-center gap-2 px-3 py-2 text-xs font-bold uppercase tracking-wider cursor-pointer transition-all"
-            style={{
-              background: copied === "prompt" ? "#2d7a2d" : "#1a1814",
-              color: "#fff",
-              border: `2px solid ${copied === "prompt" ? "#2d7a2d" : "#1a1814"}`,
-            }}
-          >
-            <span>{copied === "prompt" ? "✓ Copied" : "Copy agent prompt"}</span>
-          </button>
-          <p className="text-[10px] mt-2" style={{ color: "#c4bfb2" }}>
-            One prompt — full setup, event discovery, and instrumentation.
-          </p>
-        </div>
       </div>
     </div>
   );
@@ -418,7 +374,18 @@ function TrafficSources({
                 className="flex items-center justify-between py-2"
                 style={{ borderBottom: "1px solid #e9e6db" }}
               >
-                <span className="text-sm truncate max-w-[160px]" style={{ color: "#1a1814" }}>
+                <span className="flex items-center gap-2 text-sm truncate max-w-[200px]" style={{ color: "#1a1814" }}>
+                  {source !== "(direct)" && (
+                    <img
+                      src={`https://www.google.com/s2/favicons?domain=${encodeURIComponent(source)}&sz=32`}
+                      alt=""
+                      width={14}
+                      height={14}
+                      className="flex-shrink-0"
+                      style={{ borderRadius: 2 }}
+                      loading="lazy"
+                    />
+                  )}
                   {source}
                 </span>
                 <span className="text-xs font-mono tabular-nums ml-2 flex-shrink-0" style={{ color: "#9b9488" }}>
@@ -452,6 +419,43 @@ function TrafficSources({
   );
 }
 
+function useAnimatedNumber(target: number | undefined, duration = 400): number | undefined {
+  const [display, setDisplay] = useState(target);
+  const rafRef = useRef<number>(0);
+  const startRef = useRef<{ from: number; to: number; t0: number } | null>(null);
+
+  useEffect(() => {
+    if (target === undefined) {
+      setDisplay(undefined);
+      return;
+    }
+    const from = display ?? 0;
+    if (from === target) {
+      setDisplay(target);
+      return;
+    }
+    startRef.current = { from, to: target, t0: performance.now() };
+
+    function tick(now: number) {
+      const s = startRef.current;
+      if (!s) return;
+      const elapsed = now - s.t0;
+      const progress = Math.min(elapsed / duration, 1);
+      // ease-out cubic
+      const eased = 1 - Math.pow(1 - progress, 3);
+      setDisplay(Math.round(s.from + (s.to - s.from) * eased));
+      if (progress < 1) {
+        rafRef.current = requestAnimationFrame(tick);
+      }
+    }
+    rafRef.current = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(rafRef.current);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [target, duration]);
+
+  return display;
+}
+
 function StatCard({
   label,
   value,
@@ -465,6 +469,8 @@ function StatCard({
   suffix?: string;
   accent?: boolean;
 }) {
+  const animated = useAnimatedNumber(value);
+
   return (
     <div style={CARD_STYLE} className="p-5">
       <SectionLabel>{label}</SectionLabel>
@@ -472,10 +478,10 @@ function StatCard({
         className="text-4xl font-bold tracking-tight leading-none mt-2"
         style={{ color: accent ? "#e8651c" : "#1a1814" }}
       >
-        {value === undefined ? (
+        {animated === undefined ? (
           <span style={{ color: "#c4bfb2" }}>—</span>
         ) : (
-          `${value.toLocaleString()}${suffix ?? ""}`
+          `${animated.toLocaleString()}${suffix ?? ""}`
         )}
       </p>
       <p className="text-xs mt-2" style={{ color: "#9b9488" }}>{sub}</p>

@@ -1,8 +1,16 @@
 import { v } from "convex/values";
-import { action, mutation, query, internalQuery, internalMutation } from "./_generated/server";
+import { action, mutation, query, internalQuery, internalMutation, internalAction } from "./_generated/server";
 import { internal } from "./_generated/api";
 import type { ActionCtx } from "./_generated/server";
 import { validateSession, getUserTeamIds } from "./authHelpers";
+import { Resend } from "@convex-dev/resend";
+import { components } from "./_generated/api";
+import { render } from "@react-email/render";
+import { WelcomeEmail } from "./emails/WelcomeEmail";
+
+const resend = new Resend(components.resend, { testMode: false });
+const FROM = "Convalytics <notifications@convalytics.dev>";
+const REPLY_TO = ["dancleary54@gmail.com"];
 
 export const create = mutation({
   args: { sessionToken: v.string(), name: v.string(), teamId: v.id("teams") },
@@ -263,7 +271,7 @@ export const claim = action({
               await cacheDeploymentTypes(
                 ctx,
                 matched.id,
-                session.managementToken,
+                session.managementToken ?? "",
                 project.writeKey,
               );
             }
@@ -274,11 +282,19 @@ export const claim = action({
       }
     }
 
-    return await ctx.runMutation(internal.projects.finalizeClaim, {
+    const result = await ctx.runMutation(internal.projects.finalizeClaim, {
       claimToken: args.claimToken,
       sessionToken: args.sessionToken,
       convexProjectId,
     });
+
+    // Fire welcome email non-blocking — failure should not break the claim flow
+    await ctx.scheduler.runAfter(0, internal.projects.sendWelcomeEmail, {
+      sessionToken: args.sessionToken,
+      projectName: result.name,
+    });
+
+    return result;
   },
 });
 
@@ -361,5 +377,47 @@ export const listTeams = query({
       }
     }
     return teams;
+  },
+});
+
+export const sendWelcomeEmail = internalAction({
+  args: { sessionToken: v.string(), projectName: v.string() },
+  handler: async (ctx, args) => {
+    try {
+      const ownerEmail = await ctx.runQuery(internal.projects.getOwnerEmailBySession, {
+        sessionToken: args.sessionToken,
+      });
+      if (!ownerEmail) return;
+
+      const dashboardUrl = "https://convalytics.dev/dashboard";
+      await resend.sendEmail(
+        ctx,
+        FROM,
+        ownerEmail,
+        `${args.projectName} is now tracking with Convalytics`,
+        await render(WelcomeEmail({ projectName: args.projectName, dashboardUrl })),
+        undefined,
+        REPLY_TO,
+      );
+    } catch {
+      // Non-fatal — don't break the claim flow
+    }
+  },
+});
+
+export const getOwnerEmailBySession = internalQuery({
+  args: { sessionToken: v.string() },
+  handler: async (ctx, args) => {
+    const session = await ctx.db
+      .query("sessions")
+      .withIndex("by_sessionToken", (q) => q.eq("sessionToken", args.sessionToken))
+      .unique();
+    if (!session) return null;
+
+    const user = await ctx.db
+      .query("users")
+      .withIndex("by_userId", (q) => q.eq("userId", session.userId))
+      .unique();
+    return user?.email ?? null;
   },
 });

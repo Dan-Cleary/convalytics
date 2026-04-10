@@ -18,6 +18,8 @@ export default defineConfig([
       "vitest.config.ts",
       "convex/events.test.ts",
       "convex/billing.test.ts",
+      "convex/invites.test.ts",
+      "convex/emails/**",
       "component/**",
     ],
   },

@@ -4,6 +4,26 @@ import { Id } from "../../convex/_generated/dataModel";
 import { useEffect, useState } from "react";
 import { getConvexSiteUrl } from "../lib/convex";
 
+function buildAgentPrompt(projects: CreatedProject[]): string {
+  const siteUrl = getConvexSiteUrl();
+  const lines: string[] = [
+    "Set up Convalytics analytics in this Convex project.\n",
+  ];
+
+  for (const { name, writeKey } of projects) {
+    if (projects.length > 1) lines.push(`## ${name}\n`);
+    lines.push(
+      `1. Set the write key in your Convex environment:\n   npx convex env set CONVALYTICS_WRITE_KEY ${writeKey}\n`,
+      `2. Add this script tag to your HTML <head> (e.g. index.html or _document.tsx):\n   <script defer src="${siteUrl}/script.js?key=${writeKey}"></script>\n`,
+      `3. (Optional) Track custom events anywhere in your frontend:\n   window.convalytics?.track('event_name', { key: 'value' })\n`,
+      `4. (Optional) Identify users after sign-in:\n   window.convalytics?.identify(userId, { email, name })\n`,
+    );
+  }
+
+  lines.push("That's it — page views are tracked automatically. No restart needed.");
+  return lines.join("\n");
+}
+
 interface ProjectSetupProps {
   sessionToken: string;
   existingConvexProjectIds?: string[];
@@ -92,63 +112,7 @@ export function ProjectSetup({
 
   // Success screen
   if (created) {
-    return (
-      <div style={pageStyle}>
-        <div style={CARD_STYLE} className="w-full max-w-lg mx-4 p-8">
-          <p className="text-[10px] font-bold uppercase tracking-widest mb-1" style={{ color: "#9b9488" }}>
-            {created.length === 1 ? "Project connected" : `${created.length} projects connected`}
-          </p>
-          <h2 className="text-base font-bold uppercase tracking-tight mb-6" style={{ color: "#1a1814" }}>
-            {created.length === 1 ? created[0].name : "All set"}
-          </h2>
-
-          <div className="flex flex-col gap-6 mb-6">
-            {created.map(({ name, writeKey }) => (
-              <div key={writeKey}>
-                {created.length > 1 && (
-                  <p className="text-xs font-semibold uppercase tracking-wider mb-2" style={{ color: "#1a1814" }}>
-                    {name}
-                  </p>
-                )}
-                <p className="text-xs mb-1.5" style={{ color: "#6b6456" }}>
-                  Set{" "}
-                  <code className="px-1 py-0.5 text-[11px]" style={{ background: "#e9e6db" }}>
-                    CONVALYTICS_WRITE_KEY
-                  </code>{" "}
-                  in your Convex environment:
-                </p>
-                <div
-                  className="px-4 py-3 font-mono text-sm break-all mb-3"
-                  style={{ background: "#1a1814", color: "#e8651c" }}
-                >
-                  {writeKey}
-                </div>
-                <p className="text-xs mb-1.5" style={{ color: "#6b6456" }}>
-                  Add to your{" "}
-                  <code className="px-1 py-0.5 text-[11px]" style={{ background: "#e9e6db" }}>
-                    &lt;head&gt;
-                  </code>:
-                </p>
-                <pre
-                  className="text-xs overflow-auto px-3 py-2.5 whitespace-pre-wrap break-all"
-                  style={{ background: "#1a1814", color: "#e8651c" }}
-                >
-                  {`<script defer src="${getConvexSiteUrl()}/script.js?key=${writeKey}"></script>`}
-                </pre>
-              </div>
-            ))}
-          </div>
-
-          <button
-            className="block w-full text-center py-2.5 text-xs font-bold uppercase tracking-wider transition-colors cursor-pointer"
-            style={{ background: "#1a1814", color: "#e9e6db", border: "2px solid #1a1814" }}
-            onClick={onDone ?? (() => window.location.reload())}
-          >
-            {onDone ? "Back to dashboard →" : "Open dashboard →"}
-          </button>
-        </div>
-      </div>
-    );
+    return <SuccessScreen created={created} onDone={onDone} />;
   }
 
   // Selection screen
@@ -257,6 +221,130 @@ export function ProjectSetup({
             Sign out
           </button>
         )}
+      </div>
+    </div>
+  );
+}
+
+function SuccessScreen({
+  created,
+  onDone,
+}: {
+  created: CreatedProject[];
+  onDone?: () => void;
+}) {
+  const [copied, setCopied] = useState(false);
+  const siteUrl = getConvexSiteUrl();
+
+  function handleCopyPrompt() {
+    const prompt = buildAgentPrompt(created);
+    void navigator.clipboard.writeText(prompt).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  }
+
+  const pageStyle = {
+    background: "#e9e6db",
+    minHeight: "100vh",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+  };
+
+  return (
+    <div style={pageStyle}>
+      <div style={CARD_STYLE} className="w-full max-w-lg mx-4 p-8">
+        <p className="text-[10px] font-bold uppercase tracking-widest mb-1" style={{ color: "#9b9488" }}>
+          {created.length === 1 ? "Project connected" : `${created.length} projects connected`}
+        </p>
+        <h2 className="text-base font-bold uppercase tracking-tight mb-6" style={{ color: "#1a1814" }}>
+          {created.length === 1 ? created[0].name : "All set"}
+        </h2>
+
+        {/* Copy agent prompt — primary CTA */}
+        <div
+          className="flex items-start gap-3 px-4 py-3 mb-6"
+          style={{ background: "#f5f2eb", border: "1px solid #d5d0c8", borderRadius: 4 }}
+        >
+          <div className="flex-1 min-w-0">
+            <p className="text-xs font-semibold mb-0.5" style={{ color: "#1a1814" }}>
+              Set up with your agent
+            </p>
+            <p className="text-xs leading-relaxed" style={{ color: "#6b6456" }}>
+              Copy a ready-made prompt and paste it into Claude Code, Cursor, or any AI assistant.
+            </p>
+          </div>
+          <button
+            onClick={handleCopyPrompt}
+            className="flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold uppercase tracking-wider transition-all cursor-pointer"
+            style={{
+              background: copied ? "#2d7a2d" : "#e8651c",
+              color: "#fff",
+              border: "none",
+              borderRadius: 4,
+              whiteSpace: "nowrap",
+            }}
+          >
+            {copied ? (
+              <>✓ Copied</>
+            ) : (
+              <>
+                <svg width="11" height="11" viewBox="0 0 12 12" fill="none">
+                  <rect x="4" y="4" width="7" height="7" rx="1" stroke="currentColor" strokeWidth="1.5"/>
+                  <path d="M3 8H2a1 1 0 01-1-1V2a1 1 0 011-1h5a1 1 0 011 1v1" stroke="currentColor" strokeWidth="1.5"/>
+                </svg>
+                Copy prompt
+              </>
+            )}
+          </button>
+        </div>
+
+        {/* Manual instructions */}
+        <div className="flex flex-col gap-6 mb-6">
+          {created.map(({ name, writeKey }) => (
+            <div key={writeKey}>
+              {created.length > 1 && (
+                <p className="text-xs font-semibold uppercase tracking-wider mb-2" style={{ color: "#1a1814" }}>
+                  {name}
+                </p>
+              )}
+              <p className="text-xs mb-1.5" style={{ color: "#6b6456" }}>
+                Set{" "}
+                <code className="px-1 py-0.5 text-[11px]" style={{ background: "#e9e6db" }}>
+                  CONVALYTICS_WRITE_KEY
+                </code>{" "}
+                in your Convex environment:
+              </p>
+              <div
+                className="px-4 py-3 font-mono text-sm break-all mb-3"
+                style={{ background: "#1a1814", color: "#e8651c" }}
+              >
+                {writeKey}
+              </div>
+              <p className="text-xs mb-1.5" style={{ color: "#6b6456" }}>
+                Add to your{" "}
+                <code className="px-1 py-0.5 text-[11px]" style={{ background: "#e9e6db" }}>
+                  &lt;head&gt;
+                </code>:
+              </p>
+              <pre
+                className="text-xs overflow-auto px-3 py-2.5 whitespace-pre-wrap break-all"
+                style={{ background: "#1a1814", color: "#e8651c" }}
+              >
+                {`<script defer src="${siteUrl}/script.js?key=${writeKey}"></script>`}
+              </pre>
+            </div>
+          ))}
+        </div>
+
+        <button
+          className="block w-full text-center py-2.5 text-xs font-bold uppercase tracking-wider transition-colors cursor-pointer"
+          style={{ background: "#1a1814", color: "#e9e6db", border: "2px solid #1a1814" }}
+          onClick={onDone ?? (() => window.location.reload())}
+        >
+          {onDone ? "Back to dashboard →" : "Open dashboard →"}
+        </button>
       </div>
     </div>
   );

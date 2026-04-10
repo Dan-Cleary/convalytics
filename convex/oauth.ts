@@ -48,7 +48,11 @@ export const exchangeCode = action({
       throw new Error(`Failed to fetch token details (${detailsResp.status})`);
     }
 
-    const details = (await detailsResp.json()) as { teamId: number };
+    const details = (await detailsResp.json()) as {
+      teamId: number;
+      email?: string;
+      name?: string;
+    };
     const teamId = details.teamId;
     if (!teamId) throw new Error(`token_details missing teamId: ${JSON.stringify(details)}`);
 
@@ -62,6 +66,8 @@ export const exchangeCode = action({
       convexTeamId: teamId,
       managementToken: accessToken,
       expiresAt,
+      email: details.email,
+      name: details.name,
     });
 
     return sessionToken;
@@ -75,6 +81,8 @@ export const createSession = internalMutation({
     convexTeamId: v.number(),
     managementToken: v.string(),
     expiresAt: v.number(),
+    email: v.optional(v.string()),
+    name: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const now = Date.now();
@@ -112,7 +120,15 @@ export const createSession = internalMutation({
     if (!existingUser) {
       await ctx.db.insert("users", {
         userId: args.userId,
+        email: args.email,
+        name: args.name,
         createdAt: now,
+      });
+    } else if (args.email && !existingUser.email) {
+      // Backfill email/name if we now have it but didn't before
+      await ctx.db.patch("users", existingUser._id, {
+        email: args.email,
+        ...(args.name ? { name: args.name } : {}),
       });
     }
 

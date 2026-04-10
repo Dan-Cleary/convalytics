@@ -8,12 +8,15 @@ import { internal } from "./_generated/api";
 import { Resend } from "@convex-dev/resend";
 import { components } from "./_generated/api";
 import { QUOTA_NOTIFY_THRESHOLDS } from "./plans";
+import { render } from "@react-email/render";
+import { QuotaEmail } from "./emails/QuotaEmail";
 
 const resend = new Resend(components.resend, {
   testMode: false,
 });
 
 const FROM = "Convalytics <notifications@convalytics.dev>";
+const REPLY_TO = ["dancleary54@gmail.com"];
 const [QUOTA_NOTIFY_80_PCT, QUOTA_NOTIFY_100_PCT] = QUOTA_NOTIFY_THRESHOLDS;
 
 // Called after every ingest when usage crosses 80% or 100%.
@@ -46,12 +49,9 @@ export const checkAndNotify = internalAction({
         FROM,
         reservation.ownerEmail,
         "You've hit your Convalytics event limit",
-        quotaEmailHtml({
-          pct: 100,
-          usage: args.usageAfter,
-          limit: args.limit,
-          plan: reservation.plan,
-        }),
+        await render(QuotaEmail({ pct: 100, usage: args.usageAfter, limit: args.limit, plan: reservation.plan })),
+        undefined,
+        REPLY_TO,
       );
     } else {
       await resend.sendEmail(
@@ -59,12 +59,9 @@ export const checkAndNotify = internalAction({
         FROM,
         reservation.ownerEmail,
         "You've used 80% of your Convalytics event quota",
-        quotaEmailHtml({
-          pct: 80,
-          usage: args.usageAfter,
-          limit: args.limit,
-          plan: reservation.plan,
-        }),
+        await render(QuotaEmail({ pct: 80, usage: args.usageAfter, limit: args.limit, plan: reservation.plan })),
+        undefined,
+        REPLY_TO,
       );
     }
   },
@@ -174,33 +171,3 @@ export const markNotified = internalMutation({
   },
 });
 
-function quotaEmailHtml(args: {
-  pct: number;
-  usage: number;
-  limit: number;
-  plan: string;
-}): string {
-  const isOver = args.pct >= 100;
-  const usageFmt = args.usage.toLocaleString();
-  const limitFmt = args.limit.toLocaleString();
-
-  return `<!DOCTYPE html>
-<html>
-<body style="font-family: sans-serif; max-width: 560px; margin: 0 auto; padding: 32px 16px; color: #111;">
-  <h2 style="margin-top: 0;">${isOver ? "⚠️ Event quota reached" : "📊 80% of event quota used"}</h2>
-  <p>
-    ${
-      isOver
-        ? `Your team has reached its monthly event limit of <strong>${limitFmt} events</strong>. New events are being dropped until you upgrade or your quota resets next month.`
-        : `Your team has used <strong>${usageFmt} of ${limitFmt} events</strong> (80%) this month on the <strong>${args.plan}</strong> plan.`
-    }
-  </p>
-  ${
-    isOver
-      ? `<p><a href="https://convalytics.dev/settings/billing" style="background:#111;color:#fff;padding:10px 20px;border-radius:6px;text-decoration:none;display:inline-block;">Upgrade your plan</a></p>`
-      : `<p><a href="https://convalytics.dev/settings/billing" style="background:#111;color:#fff;padding:10px 20px;border-radius:6px;text-decoration:none;display:inline-block;">View billing</a></p>`
-  }
-  <p style="color:#666;font-size:13px;">You're receiving this because you're the owner of a Convalytics team. <a href="https://convalytics.dev/settings">Manage notifications</a></p>
-</body>
-</html>`;
-}

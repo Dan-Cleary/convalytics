@@ -1,49 +1,77 @@
-// Pure SVG area chart with optional secondary line overlay.
-// No chart library — renders directly to SVG for zero dependencies.
+import {
+  ResponsiveContainer,
+  AreaChart,
+  Area,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+} from "recharts";
 
-const CHART_H = 160;
-const CHART_W = 600;
-const PAD_TOP = 20;
-const PAD_BOTTOM = 28;
-const PAD_LEFT = 40;
-const PAD_RIGHT = 12;
-
-const INNER_W = CHART_W - PAD_LEFT - PAD_RIGHT;
-const INNER_H = CHART_H - PAD_TOP - PAD_BOTTOM;
+const CHART_H = 320;
 
 interface Series {
   label: string;
   color: string;
-  fillColor: string;
   data: { timestamp: number; value: number }[];
 }
 
 function formatAxisLabel(ts: number, rangeDays: number): string {
   const d = new Date(ts);
-  if (rangeDays <= 2) {
-    return `${d.getHours().toString().padStart(2, "0")}:00`;
-  }
   const months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
-  if (rangeDays <= 90) {
-    return `${months[d.getMonth()]} ${d.getDate()}`;
-  }
+  if (rangeDays <= 2) return `${d.getHours().toString().padStart(2, "0")}:00`;
   return `${months[d.getMonth()]} ${d.getDate()}`;
 }
 
-function niceMax(max: number): number {
-  if (max <= 0) return 10;
-  const magnitude = Math.pow(10, Math.floor(Math.log10(max)));
-  const normalized = max / magnitude;
-  if (normalized <= 1) return magnitude;
-  if (normalized <= 2) return 2 * magnitude;
-  if (normalized <= 5) return 5 * magnitude;
-  return 10 * magnitude;
+function formatTooltipDate(ts: number, rangeDays: number): string {
+  const d = new Date(ts);
+  const months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  if (rangeDays <= 2) return `${months[d.getMonth()]} ${d.getDate()}, ${d.getHours().toString().padStart(2, "0")}:00`;
+  return `${months[d.getMonth()]} ${d.getDate()}`;
 }
 
-function fmtValue(n: number): string {
+function fmtYAxis(n: number): string {
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1).replace(/\.0$/, "")}M`;
-  if (n >= 1_000) return `${(n / 1_000).toFixed(1).replace(/\.0$/, "")}K`;
+  if (n >= 1_000) return `${(n / 1_000).toFixed(0)}K`;
   return String(n);
+}
+
+interface CustomTooltipProps {
+  active?: boolean;
+  payload?: Array<{ name: string; value: number; color: string }>;
+  label?: number;
+  rangeDays: number;
+}
+
+function CustomTooltip({ active, payload, label, rangeDays }: CustomTooltipProps) {
+  if (!active || !payload?.length) return null;
+  return (
+    <div
+      className="px-3 py-2 text-xs"
+      style={{
+        background: "#fff",
+        border: "1px solid #e0ddd6",
+        borderRadius: 8,
+        boxShadow: "0 4px 12px rgba(0,0,0,0.08)",
+        whiteSpace: "nowrap",
+      }}
+    >
+      <div className="font-medium mb-1.5" style={{ color: "#9b9488", fontSize: 10 }}>
+        {formatTooltipDate(label as number, rangeDays)}
+      </div>
+      {payload.map((entry: { name: string; value: number; color: string }) => (
+        <div key={entry.name} className="flex items-center justify-between gap-4" style={{ lineHeight: "20px" }}>
+          <span className="flex items-center gap-1.5">
+            <span className="inline-block w-2 h-2 rounded-full flex-shrink-0" style={{ background: entry.color }} />
+            <span style={{ color: "#6b6456" }}>{entry.name}</span>
+          </span>
+          <span className="font-bold tabular-nums" style={{ color: "#1a1814" }}>
+            {fmtYAxis(entry.value ?? 0)}
+          </span>
+        </div>
+      ))}
+    </div>
+  );
 }
 
 export function TrendChart({
@@ -55,119 +83,75 @@ export function TrendChart({
 }) {
   if (series.length === 0 || series[0].data.length === 0) {
     return (
-      <div
-        className="flex items-center justify-center text-xs"
-        style={{ height: CHART_H, color: "#c4bfb2" }}
-      >
+      <div className="flex items-center justify-center text-xs" style={{ height: CHART_H, color: "#c4bfb2" }}>
         No data for this range
       </div>
     );
   }
 
-  const allData = series.flatMap((s) => s.data);
-  const minTs = Math.min(...allData.map((d) => d.timestamp));
-  const maxTs = Math.max(...allData.map((d) => d.timestamp));
-  const tsRange = maxTs - minTs || 1;
+  // Merge all series onto shared timestamps
+  const timestamps = series[0].data.map((d) => d.timestamp);
+  const chartData = timestamps.map((ts, i) => {
+    const point: Record<string, number> = { ts };
+    for (const s of series) {
+      point[s.label] = s.data[i]?.value ?? 0;
+    }
+    return point;
+  });
 
-  const rawMax = Math.max(...allData.map((d) => d.value));
-  const yMax = niceMax(rawMax);
-
-  function x(ts: number): number {
-    return PAD_LEFT + ((ts - minTs) / tsRange) * INNER_W;
-  }
-  function y(val: number): number {
-    return PAD_TOP + INNER_H - (val / yMax) * INNER_H;
-  }
-
-  // Grid lines (3 horizontal)
-  const gridLines = [0, yMax / 2, yMax];
-
-  // X-axis labels — pick ~5-6 evenly spaced
-  const data0 = series[0].data;
-  const labelStep = Math.max(1, Math.floor(data0.length / 6));
-  const xLabels: { ts: number; label: string }[] = [];
-  for (let i = 0; i < data0.length; i += labelStep) {
-    xLabels.push({
-      ts: data0[i].timestamp,
-      label: formatAxisLabel(data0[i].timestamp, rangeDays),
-    });
-  }
+  const labelStep = Math.max(1, Math.floor(timestamps.length / 6));
+  const tickTimestamps = timestamps.filter((_, i) => i % labelStep === 0);
 
   return (
-    <svg
-      viewBox={`0 0 ${CHART_W} ${CHART_H}`}
-      className="w-full"
-      style={{ height: CHART_H, maxHeight: CHART_H }}
-      preserveAspectRatio="none"
-    >
-      {/* Grid lines */}
-      {gridLines.map((val) => (
-        <g key={val}>
-          <line
-            x1={PAD_LEFT}
-            y1={y(val)}
-            x2={CHART_W - PAD_RIGHT}
-            y2={y(val)}
-            stroke="#e9e6db"
-            strokeWidth={1}
-          />
-          <text
-            x={PAD_LEFT - 6}
-            y={y(val) + 3}
-            textAnchor="end"
-            fill="#c4bfb2"
-            fontSize={9}
-            fontFamily="monospace"
-          >
-            {fmtValue(val)}
-          </text>
-        </g>
-      ))}
-
-      {/* X-axis labels */}
-      {xLabels.map(({ ts, label }) => (
-        <text
-          key={ts}
-          x={x(ts)}
-          y={CHART_H - 4}
-          textAnchor="middle"
-          fill="#c4bfb2"
-          fontSize={9}
-          fontFamily="monospace"
-        >
-          {label}
-        </text>
-      ))}
-
-      {/* Series — render in order (first series fills, rest are lines) */}
-      {series.map((s, si) => {
-        if (s.data.length === 0) return null;
-        const points = s.data.map((d) => `${x(d.timestamp)},${y(d.value)}`);
-        const linePath = `M${points.join("L")}`;
-
-        if (si === 0) {
-          // Filled area for primary series
-          const areaPath = `${linePath}L${x(s.data[s.data.length - 1].timestamp)},${y(0)}L${x(s.data[0].timestamp)},${y(0)}Z`;
-          return (
-            <g key={s.label}>
-              <path d={areaPath} fill={s.fillColor} />
-              <path d={linePath} fill="none" stroke={s.color} strokeWidth={2} />
-            </g>
-          );
-        }
-
-        // Secondary series — line only
-        return (
-          <path
+    <ResponsiveContainer width="100%" height={CHART_H}>
+      <AreaChart data={chartData} margin={{ top: 8, right: 4, bottom: 0, left: 0 }}>
+        <defs>
+          {series.map((s, si) => (
+            <linearGradient key={si} id={`fill-${si}`} x1="0" y1="0" x2="0" y2="1">
+              <stop offset="5%" stopColor={s.color} stopOpacity={0.2} />
+              <stop offset="95%" stopColor={s.color} stopOpacity={0} />
+            </linearGradient>
+          ))}
+        </defs>
+        <CartesianGrid vertical={false} stroke="#e9e6db" />
+        <XAxis
+          dataKey="ts"
+          type="number"
+          scale="time"
+          domain={["dataMin", "dataMax"]}
+          ticks={tickTimestamps}
+          tickFormatter={(ts) => formatAxisLabel(ts as number, rangeDays)}
+          tick={{ fill: "#c4bfb2", fontSize: 9, fontFamily: "monospace" }}
+          axisLine={false}
+          tickLine={false}
+          dy={6}
+        />
+        <YAxis
+          tickFormatter={fmtYAxis}
+          tick={{ fill: "#c4bfb2", fontSize: 9, fontFamily: "monospace" }}
+          axisLine={false}
+          tickLine={false}
+          width={32}
+          tickCount={4}
+        />
+        <Tooltip
+          content={<CustomTooltip rangeDays={rangeDays} />}
+          cursor={{ stroke: "#1a1814", strokeWidth: 1, strokeOpacity: 0.2 }}
+        />
+        {series.map((s, si) => (
+          <Area
             key={s.label}
-            d={linePath}
-            fill="none"
+            type="monotone"
+            dataKey={s.label}
             stroke={s.color}
-            strokeWidth={1.5}
-            strokeDasharray="4 2"
+            strokeWidth={si === 0 ? 2 : 1.5}
+            strokeDasharray={si === 0 ? undefined : "4 2"}
+            fill={si === 0 ? `url(#fill-${si})` : "none"}
+            dot={false}
+            activeDot={{ r: 4, strokeWidth: 2, stroke: "#fff" }}
           />
-        );
-      })}
-    </svg>
+        ))}
+      </AreaChart>
+    </ResponsiveContainer>
   );
 }

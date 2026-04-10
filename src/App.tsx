@@ -10,17 +10,45 @@ import { ProjectSetup } from "./pages/ProjectSetup";
 import { OAuthCallback } from "./pages/OAuthCallback";
 import { ClaimPage } from "./pages/ClaimPage";
 import { BillingPage } from "./pages/BillingPage";
-import { useState, useCallback } from "react";
+import { MembersPage } from "./pages/MembersPage";
+import { AcceptInvitePage } from "./pages/AcceptInvitePage";
+import { useState, useCallback, Component, type ReactNode } from "react";
 import { clearSession, getSessionToken } from "./lib/auth";
+import {
+  BrowserRouter,
+  Routes,
+  Route,
+  Navigate,
+  useNavigate,
+  useLocation,
+  useParams,
+} from "react-router-dom";
 
-type Page = "overview" | "pages" | "events" | "billing";
 type Environment = "all" | "production" | "development";
 type PlanId = "free" | "solo" | "pro";
 
+class PageErrorBoundary extends Component<
+  { children: ReactNode },
+  { error: Error | null }
+> {
+  state = { error: null };
+  static getDerivedStateFromError(error: Error) {
+    return { error };
+  }
+  render() {
+    if (this.state.error) {
+      return (
+        <div className="flex items-center justify-center h-64 text-xs" style={{ color: "#9b9488" }}>
+          Something went wrong. Try refreshing the page.
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 export default function App() {
-  const [sessionToken, setSessionToken] = useState<string | null>(
-    getSessionToken,
-  );
+  const [sessionToken, setSessionToken] = useState<string | null>(getSessionToken);
 
   const handleSignOut = useCallback(() => {
     clearSession();
@@ -28,30 +56,61 @@ export default function App() {
   }, []);
 
   const handleSignIn = useCallback(() => {
-    const token = getSessionToken();
-    setSessionToken(token);
+    setSessionToken(getSessionToken());
   }, []);
 
-  if (window.location.pathname === "/oauth/callback") {
-    return <OAuthCallback onSuccess={handleSignIn} />;
-  }
+  return (
+    <BrowserRouter>
+      <Routes>
+        <Route path="/oauth/callback" element={<OAuthCallback onSuccess={handleSignIn} />} />
+        <Route path="/claim/:claimToken" element={
+          <ClaimPageWrapper sessionToken={sessionToken} onSignIn={handleSignIn} />
+        } />
+        <Route path="/invite/:inviteToken" element={
+          <InvitePageWrapper onSuccess={handleSignIn} />
+        } />
+        {/* Unauthenticated home */}
+        <Route path="/" element={
+          sessionToken
+            ? <Navigate to="/overview" replace />
+            : <SignInForm />
+        } />
+        {/* Authenticated dashboard */}
+        <Route path="/*" element={
+          sessionToken
+            ? <Dashboard sessionToken={sessionToken} onSignOut={handleSignOut} />
+            : <Navigate to="/" replace />
+        } />
+      </Routes>
+    </BrowserRouter>
+  );
+}
 
-  const claimMatch = window.location.pathname.match(/^\/claim\/(.+)$/);
-  if (claimMatch) {
-    return (
-      <ClaimPage
-        claimToken={claimMatch[1]}
-        sessionToken={sessionToken}
-        onSignIn={handleSignIn}
-      />
-    );
-  }
+function InvitePageWrapper({ onSuccess }: { onSuccess: () => void }) {
+  const { inviteToken } = useParams();
+  return (
+    <AcceptInvitePage
+      token={inviteToken ?? ""}
+      onSuccess={(_token: string) => onSuccess()}
+    />
+  );
+}
 
-  if (!sessionToken) {
-    return <SignInForm />;
-  }
-
-  return <Dashboard sessionToken={sessionToken} onSignOut={handleSignOut} />;
+function ClaimPageWrapper({
+  sessionToken,
+  onSignIn,
+}: {
+  sessionToken: string | null;
+  onSignIn: () => void;
+}) {
+  const { claimToken } = useParams();
+  return (
+    <ClaimPage
+      claimToken={claimToken ?? ""}
+      sessionToken={sessionToken}
+      onSignIn={onSignIn}
+    />
+  );
 }
 
 function Dashboard({
@@ -64,21 +123,19 @@ function Dashboard({
   const projects = useQuery(api.projects.list, { sessionToken });
   const usage = useQuery(api.usage.getMyUsage, { sessionToken });
   const retentionDays = usage?.retentionDays ?? 90;
+  const navigate = useNavigate();
+  const location = useLocation();
+
   const [activeWriteKey, setActiveWriteKey] = useState<string | null>(() => {
-    const params = new URLSearchParams(window.location.search);
-    const key = params.get("project");
-    if (key) {
-      // Clean the param from the URL without triggering a navigation
-      const clean = window.location.pathname;
-      window.history.replaceState(null, "", clean);
-    }
-    return key;
+    const params = new URLSearchParams(location.search);
+    return params.get("project");
   });
+
   const [billingSuccess, setBillingSuccess] = useState<{
     open: boolean;
     expectedPlan: PlanId | null;
   }>(() => {
-    const params = new URLSearchParams(window.location.search);
+    const params = new URLSearchParams(location.search);
     const open = params.get("billing") === "success";
     const planParam = params.get("plan");
     const expectedPlan: PlanId | null =
@@ -90,7 +147,7 @@ function Dashboard({
     }
     return { open, expectedPlan };
   });
-  const [page, setPage] = useState<Page>("overview");
+
   const [addingProject, setAddingProject] = useState(false);
   const [environment, setEnvironment] = useState<Environment>("all");
 
@@ -115,66 +172,51 @@ function Dashboard({
     );
   }
 
-  const validActiveWriteKey = projects.some(
-    (p) => p.writeKey === activeWriteKey,
-  )
+  const validActiveWriteKey = projects.some((p) => p.writeKey === activeWriteKey)
     ? activeWriteKey
     : null;
   const currentWriteKey = validActiveWriteKey ?? projects[0].writeKey;
   const currentProject =
     projects.find((p) => p.writeKey === currentWriteKey) ?? projects[0];
 
+  const sharedProps = {
+    sessionToken,
+    writeKey: currentWriteKey,
+    projectName: currentProject.name,
+    environment: environment === "all" ? undefined : environment,
+    retentionDays,
+    onNavigateBilling: () => { void navigate("/billing"); },
+  };
+
   return (
     <div className="flex h-screen bg-gray-50 overflow-hidden">
       <Sidebar
         projects={projects}
         activeWriteKey={currentWriteKey}
-        onSelectProject={setActiveWriteKey}
+        onSelectProject={(key) => { setActiveWriteKey(key); void navigate("/overview"); }}
         onAddProject={() => setAddingProject(true)}
-        page={page}
-        onSelectPage={setPage}
         onSignOut={onSignOut}
         environment={environment}
         onSelectEnvironment={setEnvironment}
       />
       <main className="flex-1 overflow-auto">
-        {page === "overview" && (
-          <Overview
-            sessionToken={sessionToken}
-            writeKey={currentWriteKey}
-            projectName={currentProject.name}
-            environment={environment === "all" ? undefined : environment}
-            retentionDays={retentionDays}
-          />
-        )}
-        {page === "pages" && (
-          <PagesPage
-            sessionToken={sessionToken}
-            writeKey={currentWriteKey}
-            projectName={currentProject.name}
-            environment={environment === "all" ? undefined : environment}
-            retentionDays={retentionDays}
-          />
-        )}
-        {page === "events" && (
-          <EventsPage
-            sessionToken={sessionToken}
-            writeKey={currentWriteKey}
-            projectName={currentProject.name}
-            environment={environment === "all" ? undefined : environment}
-            retentionDays={retentionDays}
-          />
-        )}
-        {page === "billing" && <BillingPage sessionToken={sessionToken} />}
+        <PageErrorBoundary>
+        <Routes>
+          <Route path="/overview" element={<Overview {...sharedProps} />} />
+          <Route path="/pages" element={<PagesPage {...sharedProps} />} />
+          <Route path="/events" element={<EventsPage {...sharedProps} />} />
+          <Route path="/billing" element={<BillingPage sessionToken={sessionToken} />} />
+          <Route path="/members" element={<MembersPage sessionToken={sessionToken} />} />
+          <Route path="*" element={<Navigate to="/overview" replace />} />
+        </Routes>
+        </PageErrorBoundary>
       </main>
 
       {billingSuccess.open && (
         <BillingSuccessModal
           sessionToken={sessionToken}
           expectedPlan={billingSuccess.expectedPlan}
-          onClose={() =>
-            setBillingSuccess((state) => ({ ...state, open: false }))
-          }
+          onClose={() => setBillingSuccess((s) => ({ ...s, open: false }))}
         />
       )}
     </div>
