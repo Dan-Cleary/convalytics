@@ -572,6 +572,12 @@ describe("invites.finalizeInviteAccept", () => {
     );
     expect(sessions).toHaveLength(1);
     expect(sessions[0].sessionToken).toBe("new-session");
+
+    const user = await t.run((ctx) =>
+      ctx.db.query("users").withIndex("by_userId", (q) => q.eq("userId", userId)).unique()
+    );
+    expect(user).not.toBeNull();
+    expect(user!.passwordHash).toBe("new:hash");
   });
 });
 

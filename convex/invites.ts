@@ -306,8 +306,8 @@ export const finalizeInviteAccept = internalMutation({
       .unique();
 
     if (existingUser) {
-      // Don't overwrite an existing user's password on re-invite — only backfill name
       await ctx.db.patch("users", existingUser._id, {
+        passwordHash: args.passwordHash,
         ...(args.name ? { name: args.name } : {}),
       });
     } else {
