@@ -138,7 +138,7 @@ export function PagesPage({ sessionToken, writeKey, projectName, environment, re
         )}
 
         {/* Breakdowns: Countries, Devices, Browsers, OS */}
-        {breakdowns && (breakdowns.countries.length > 0 || breakdowns.devices.length > 0) && (
+        {breakdowns && (breakdowns.countries.length > 0 || breakdowns.devices.length > 0 || breakdowns.browsers.length > 0 || breakdowns.os.length > 0) && (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mt-2">
             <BreakdownCard title="Countries" label="PAGE VIEWS" items={breakdowns.countries} formatName={countryName} />
             <BreakdownCard title="Devices" label="PAGE VIEWS" items={breakdowns.devices} />

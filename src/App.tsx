@@ -200,7 +200,7 @@ function Dashboard({
         onSelectEnvironment={setEnvironment}
       />
       <main className="flex-1 overflow-auto">
-        <PageErrorBoundary>
+        <PageErrorBoundary key={location.key}>
         <Routes>
           <Route path="/overview" element={<Overview {...sharedProps} />} />
           <Route path="/pages" element={<PagesPage {...sharedProps} />} />

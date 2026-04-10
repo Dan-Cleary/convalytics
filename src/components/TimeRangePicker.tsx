@@ -90,10 +90,12 @@ export function TimeRangePicker({
             return (
               <button
                 key={range.key}
+                disabled={locked && !onUpgrade}
+                aria-disabled={locked ? true : undefined}
                 onClick={() => {
                   if (locked) {
-                    setOpen(false);
-                    onUpgrade?.();
+                    if (onUpgrade) { setOpen(false); onUpgrade(); }
+                    // no-op when no upgrade handler — button is disabled
                   } else {
                     onChange(range.key);
                     setOpen(false);
@@ -103,12 +105,13 @@ export function TimeRangePicker({
                 style={{
                   background: active ? "#f5f3ee" : "transparent",
                   color: locked ? "#8a8580" : "#1a1814",
-                  cursor: "pointer",
+                  cursor: locked ? (onUpgrade ? "pointer" : "not-allowed") : "pointer",
                   border: "none",
                   fontWeight: active ? 600 : 400,
+                  opacity: locked && !onUpgrade ? 0.5 : 1,
                 }}
                 onMouseEnter={(e) => {
-                  if (!active) {
+                  if (!active && !(locked && !onUpgrade)) {
                     e.currentTarget.style.background = locked ? "#fef8f4" : "#faf9f6";
                   }
                 }}

@@ -18,6 +18,8 @@ export function parseUA(ua: string): UAResult {
 }
 
 function parseBrowser(ua: string): string {
+  // Check bots first — Googlebot/crawlers often contain "Chrome/" which would misclassify
+  if (/bot|crawl|spider|slurp|googlebot/i.test(ua)) return "Bot";
   // Order matters — check specific browsers before generic ones
   if (/Edg\//.test(ua)) return "Edge";
   if (/OPR\/|Opera/.test(ua)) return "Opera";
@@ -30,7 +32,6 @@ function parseBrowser(ua: string): string {
   if (/Chrome\//.test(ua)) return "Chrome";
   if (/Safari\//.test(ua) && /Version\//.test(ua)) return "Safari";
   if (/MSIE|Trident/.test(ua)) return "IE";
-  if (/bot|crawl|spider|slurp|googlebot/i.test(ua)) return "Bot";
   return "Other";
 }
 

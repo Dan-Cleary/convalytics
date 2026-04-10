@@ -306,8 +306,8 @@ export const finalizeInviteAccept = internalMutation({
       .unique();
 
     if (existingUser) {
+      // Don't overwrite an existing user's password on re-invite — only backfill name
       await ctx.db.patch("users", existingUser._id, {
-        passwordHash: args.passwordHash,
         ...(args.name ? { name: args.name } : {}),
       });
     } else {
@@ -426,6 +426,14 @@ async function hashPassword(password: string): Promise<string> {
   return `${salt}:${hash}`;
 }
 
+/** Constant-time byte comparison to prevent timing attacks. */
+function constantTimeEqual(a: Uint8Array, b: Uint8Array): boolean {
+  if (a.length !== b.length) return false;
+  let diff = 0;
+  for (let i = 0; i < a.length; i++) diff |= (a[i] ?? 0) ^ (b[i] ?? 0);
+  return diff === 0;
+}
+
 /** Verify a password against a stored hash. */
 async function verifyPassword(password: string, stored: string): Promise<boolean> {
   const [salt, expectedHash] = stored.split(":");
@@ -443,17 +451,9 @@ async function verifyPassword(password: string, stored: string): Promise<boolean
     keyMaterial,
     256,
   );
-  const hash = Array.from(new Uint8Array(bits))
-    .map((b) => b.toString(16).padStart(2, "0"))
-    .join("");
-  const actual = new TextEncoder().encode(hash);
-  const expected = new TextEncoder().encode(expectedHash);
-  const maxLength = Math.max(actual.length, expected.length);
-  let diff = actual.length ^ expected.length;
-  for (let i = 0; i < maxLength; i += 1) {
-    diff |= (actual[i] ?? 0) ^ (expected[i] ?? 0);
-  }
-  return diff === 0;
+  const derived = new Uint8Array(bits);
+  const expected = new Uint8Array(expectedHash.match(/.{2}/g)!.map((h) => parseInt(h, 16)));
+  return constantTimeEqual(derived, expected);
 }
 
 /** Accept an invite by setting a password. Returns a session token. */

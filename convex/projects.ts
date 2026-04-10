@@ -444,7 +444,7 @@ export const sendWelcomeEmail = internalAction({
       );
       if (!ownerEmail) return;
 
-      const dashboardUrl = "https://convalytics.dev/dashboard";
+      const dashboardUrl = "https://convalytics.dev/overview";
       await resend.sendEmail(
         ctx,
         FROM,

@@ -89,12 +89,14 @@ export function TrendChart({
     );
   }
 
-  // Merge all series onto shared timestamps
-  const timestamps = series[0].data.map((d) => d.timestamp);
-  const chartData = timestamps.map((ts, i) => {
+  // Build union of all timestamps across series and look up by value (not index)
+  const allTs = new Set(series.flatMap((s) => s.data.map((d) => d.timestamp)));
+  const timestamps = [...allTs].sort((a, b) => a - b);
+  const chartData = timestamps.map((ts) => {
     const point: Record<string, number> = { ts };
     for (const s of series) {
-      point[s.label] = s.data[i]?.value ?? 0;
+      const found = s.data.find((d) => d.timestamp === ts);
+      point[s.label] = found?.value ?? 0;
     }
     return point;
   });

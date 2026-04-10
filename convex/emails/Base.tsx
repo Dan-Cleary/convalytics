@@ -1,6 +1,7 @@
 import {
   Html,
   Head,
+  Preview,
   Body,
   Container,
   Section,
@@ -123,9 +124,8 @@ interface BaseEmailProps {
 export function BaseEmail({ preview, children, footerText }: BaseEmailProps) {
   return (
     <Html lang="en">
-      <Head>
-        <title>{preview}</title>
-      </Head>
+      <Head />
+      <Preview>{preview}</Preview>
       <Body style={styles.body}>
         <Container style={styles.container}>
           {/* Logo */}

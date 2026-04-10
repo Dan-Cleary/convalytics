@@ -241,6 +241,8 @@ function SuccessScreen({
     void navigator.clipboard.writeText(prompt).then(() => {
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
+    }).catch(() => {
+      // Clipboard API unavailable (e.g. non-secure context) — silent no-op
     });
   }
 

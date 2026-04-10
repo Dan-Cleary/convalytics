@@ -133,11 +133,11 @@ export const createSession = internalMutation({
         name: args.name,
         createdAt: now,
       });
-    } else if (email && !existingUser.email) {
+    } else if ((email && !existingUser.email) || (args.name && !existingUser.name)) {
       // Backfill email/name if we now have it but didn't before
       await ctx.db.patch("users", existingUser._id, {
-        email,
-        ...(args.name ? { name: args.name } : {}),
+        ...(email && !existingUser.email ? { email } : {}),
+        ...(args.name && !existingUser.name ? { name: args.name } : {}),
       });
     }
 

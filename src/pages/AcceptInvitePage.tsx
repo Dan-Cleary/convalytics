@@ -16,6 +16,11 @@ export function AcceptInvitePage({ token, onSuccess }: Props) {
   const navigate = useNavigate();
 
   const [mode, setMode] = useState<"accept" | "signin">("accept");
+
+  function switchToSignIn() {
+    setMode("signin");
+    if (invite?.status === "valid") setEmail(invite.invitedEmail);
+  }
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -238,7 +243,7 @@ export function AcceptInvitePage({ token, onSuccess }: Props) {
                 <button
                   className="underline cursor-pointer"
                   style={{ color: "#6b6456" }}
-                  onClick={() => setMode("signin")}
+                  onClick={switchToSignIn}
                 >
                   Sign in instead
                 </button>

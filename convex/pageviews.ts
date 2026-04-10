@@ -429,7 +429,6 @@ export const breakdowns = query({
           .order("desc")
           .take(10000);
 
-    const total = rows.length || 1;
     const countryMap = new Map<string, number>();
     const deviceMap = new Map<string, number>();
     const browserMap = new Map<string, number>();
@@ -443,13 +442,14 @@ export const breakdowns = query({
     }
 
     function topN(map: Map<string, number>, n: number) {
+      const denom = [...map.values()].reduce((s, v) => s + v, 0) || 1;
       return [...map.entries()]
         .sort((a, b) => b[1] - a[1])
         .slice(0, n)
         .map(([name, count]) => ({
           name,
           count,
-          percentage: Math.round((count / total) * 100),
+          percentage: Math.round((count / denom) * 100),
         }));
     }
 
