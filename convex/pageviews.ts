@@ -312,3 +312,74 @@ export const listLatest = query({
     }));
   },
 });
+
+// Time-series data for trend charts. Buckets page views into intervals based on
+// the time range: <=7d → hourly, <=90d → daily, >90d → weekly.
+export const timeSeries = query({
+  args: {
+    sessionToken: v.string(),
+    writeKey: v.string(),
+    environment: v.optional(v.string()),
+    since: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const project = await validateProjectAccess(
+      ctx,
+      args.sessionToken,
+      args.writeKey,
+    );
+    if (!project) return [];
+
+    const now = Date.now();
+    const startTime = args.since ?? now - 7 * 24 * 60 * 60 * 1000;
+    const rangeDays = (now - startTime) / (24 * 60 * 60 * 1000);
+
+    const rows = args.environment
+      ? await ctx.db
+          .query("pageviews")
+          .withIndex("by_writeKey_and_environment_and_timestamp", (q) =>
+            q
+              .eq("writeKey", args.writeKey)
+              .eq("environment", args.environment)
+              .gte("timestamp", startTime),
+          )
+          .take(10000)
+      : await ctx.db
+          .query("pageviews")
+          .withIndex("by_writeKey_and_timestamp", (q) =>
+            q.eq("writeKey", args.writeKey).gte("timestamp", startTime),
+          )
+          .take(10000);
+
+    // Choose bucket size
+    const HOUR = 60 * 60 * 1000;
+    const DAY = 24 * HOUR;
+    const WEEK = 7 * DAY;
+    const bucketSize = rangeDays <= 7 ? HOUR : rangeDays <= 90 ? DAY : WEEK;
+
+    // Bucket rows
+    const buckets = new Map<number, { views: number; visitors: Set<string> }>();
+    for (const r of rows) {
+      const key = Math.floor(r.timestamp / bucketSize) * bucketSize;
+      const b = buckets.get(key) ?? { views: 0, visitors: new Set() };
+      b.views++;
+      b.visitors.add(r.visitorId);
+      buckets.set(key, b);
+    }
+
+    // Fill gaps so the chart has continuous data points
+    const bucketStart = Math.floor(startTime / bucketSize) * bucketSize;
+    const bucketEnd = Math.floor(now / bucketSize) * bucketSize;
+    const result: { timestamp: number; views: number; visitors: number }[] = [];
+    for (let t = bucketStart; t <= bucketEnd; t += bucketSize) {
+      const b = buckets.get(t);
+      result.push({
+        timestamp: t,
+        views: b?.views ?? 0,
+        visitors: b?.visitors.size ?? 0,
+      });
+    }
+
+    return result;
+  },
+});

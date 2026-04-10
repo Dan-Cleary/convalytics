@@ -41,6 +41,10 @@ export const RANGES: Range[] = [
   },
 ];
 
+export function daysForRange(key: RangeKey): number {
+  return RANGES.find((r) => r.key === key)!.days;
+}
+
 export function sinceForRange(key: RangeKey): number {
   const range = RANGES.find((r) => r.key === key)!;
   return range.days >= MAX_RETENTION_DAYS ? 0 : sinceHour(range.days);

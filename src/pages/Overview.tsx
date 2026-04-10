@@ -3,7 +3,8 @@ import { api } from "../../convex/_generated/api";
 import { getConvexSiteUrl } from "../lib/convex";
 import { useState, useCallback } from "react";
 import { TimeRangePicker } from "../components/TimeRangePicker"
-import { sinceForRange, defaultRangeForRetention, type RangeKey } from "../lib/timeRange";
+import { TrendChart } from "../components/TrendChart";
+import { sinceForRange, daysForRange, defaultRangeForRetention, type RangeKey } from "../lib/timeRange";
 
 interface OverviewProps {
   sessionToken: string;
@@ -33,6 +34,10 @@ export function Overview({ sessionToken, writeKey, projectName, environment, ret
   const liveEvents = useQuery(api.pageviews.listLatest, { sessionToken, writeKey, environment });
   const realtimeVisitors = useQuery(api.pageviews.realtimeVisitors, { sessionToken, writeKey, environment });
   const eventStats = useQuery(api.events.stats, { sessionToken, writeKey, environment, since });
+  const pvTimeSeries = useQuery(api.pageviews.timeSeries, { sessionToken, writeKey, environment, since });
+  const evTimeSeries = useQuery(api.events.timeSeries, { sessionToken, writeKey, environment, since });
+
+  const rangeDays = daysForRange(range);
 
   // Unscoped queries for setup banner (project-level data check)
   const statsUnscoped = useQuery(api.pageviews.stats, { sessionToken, writeKey });
@@ -90,6 +95,60 @@ export function Overview({ sessionToken, writeKey, projectName, environment, ret
           <StatCard label="Bounce Rate" value={stats?.bounceRate} sub="% single-page" suffix="%" />
           <StatCard label="Product Events" value={eventStats?.totalEvents} sub={rangeLabel} accent />
         </div>
+
+        {/* Trend chart */}
+        {pvTimeSeries !== undefined && (
+          <div style={CARD_STYLE} className="p-4">
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-[10px] font-bold uppercase tracking-widest" style={{ color: "#9b9488" }}>
+                Traffic Trend
+              </p>
+              <div className="flex items-center gap-4">
+                <span className="flex items-center gap-1.5 text-[10px]" style={{ color: "#1a1814" }}>
+                  <span className="inline-block w-3 h-0.5" style={{ background: "#1a1814" }} />
+                  Page views
+                </span>
+                <span className="flex items-center gap-1.5 text-[10px]" style={{ color: "#e8651c" }}>
+                  <span className="inline-block w-3 h-0.5" style={{ background: "#e8651c", borderTop: "1px dashed #e8651c" }} />
+                  Visitors
+                </span>
+                {evTimeSeries && evTimeSeries.some((d) => d.count > 0) && (
+                  <span className="flex items-center gap-1.5 text-[10px]" style={{ color: "#2d7a2d" }}>
+                    <span className="inline-block w-3 h-0.5" style={{ background: "#2d7a2d", borderTop: "1px dashed #2d7a2d" }} />
+                    Events
+                  </span>
+                )}
+              </div>
+            </div>
+            <TrendChart
+              rangeDays={rangeDays}
+              series={[
+                {
+                  label: "Page views",
+                  color: "#1a1814",
+                  fillColor: "rgba(26,24,20,0.06)",
+                  data: pvTimeSeries.map((d) => ({ timestamp: d.timestamp, value: d.views })),
+                },
+                {
+                  label: "Visitors",
+                  color: "#e8651c",
+                  fillColor: "rgba(232,101,28,0.06)",
+                  data: pvTimeSeries.map((d) => ({ timestamp: d.timestamp, value: d.visitors })),
+                },
+                ...(evTimeSeries && evTimeSeries.some((d) => d.count > 0)
+                  ? [
+                      {
+                        label: "Events",
+                        color: "#2d7a2d",
+                        fillColor: "rgba(45,122,45,0.06)",
+                        data: evTimeSeries.map((d) => ({ timestamp: d.timestamp, value: d.count })),
+                      },
+                    ]
+                  : []),
+              ]}
+            />
+          </div>
+        )}
 
         {/* Top pages + traffic sources */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">

@@ -165,3 +165,63 @@ export const stats = query({
     return { totalEvents: events.length, activeUsers: visitorSet.size };
   },
 });
+
+// Time-series data for trend charts. Buckets events into intervals based on
+// the time range: <=7d → hourly, <=90d → daily, >90d → weekly.
+export const timeSeries = query({
+  args: {
+    sessionToken: v.string(),
+    writeKey: v.string(),
+    environment: v.optional(v.string()),
+    since: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const project = await validateProjectAccess(
+      ctx,
+      args.sessionToken,
+      args.writeKey,
+    );
+    if (!project) return [];
+
+    const now = Date.now();
+    const startTime = args.since ?? now - 7 * 24 * 60 * 60 * 1000;
+    const rangeDays = (now - startTime) / (24 * 60 * 60 * 1000);
+
+    const rows = args.environment
+      ? await ctx.db
+          .query("events")
+          .withIndex("by_writeKey_and_environment_and_timestamp", (q) =>
+            q
+              .eq("writeKey", args.writeKey)
+              .eq("environment", args.environment)
+              .gte("timestamp", startTime),
+          )
+          .take(10000)
+      : await ctx.db
+          .query("events")
+          .withIndex("by_writeKey_and_timestamp", (q) =>
+            q.eq("writeKey", args.writeKey).gte("timestamp", startTime),
+          )
+          .take(10000);
+
+    const HOUR = 60 * 60 * 1000;
+    const DAY = 24 * HOUR;
+    const WEEK = 7 * DAY;
+    const bucketSize = rangeDays <= 7 ? HOUR : rangeDays <= 90 ? DAY : WEEK;
+
+    const buckets = new Map<number, number>();
+    for (const r of rows) {
+      const key = Math.floor(r.timestamp / bucketSize) * bucketSize;
+      buckets.set(key, (buckets.get(key) ?? 0) + 1);
+    }
+
+    const bucketStart = Math.floor(startTime / bucketSize) * bucketSize;
+    const bucketEnd = Math.floor(now / bucketSize) * bucketSize;
+    const result: { timestamp: number; count: number }[] = [];
+    for (let t = bucketStart; t <= bucketEnd; t += bucketSize) {
+      result.push({ timestamp: t, count: buckets.get(t) ?? 0 });
+    }
+
+    return result;
+  },
+});
