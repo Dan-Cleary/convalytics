@@ -1,5 +1,12 @@
 import { v } from "convex/values";
-import { action, mutation, query, internalQuery, internalMutation, internalAction } from "./_generated/server";
+import {
+  action,
+  mutation,
+  query,
+  internalQuery,
+  internalMutation,
+  internalAction,
+} from "./_generated/server";
 import { internal } from "./_generated/api";
 import type { ActionCtx } from "./_generated/server";
 import { validateSession, getUserTeamIds } from "./authHelpers";
@@ -80,7 +87,9 @@ export const listConvexProjects = action({
 
     if (!resp.ok) {
       const body = await resp.text().catch(() => "");
-      throw new Error(`Failed to fetch Convex projects (${resp.status}): ${body}`);
+      throw new Error(
+        `Failed to fetch Convex projects (${resp.status}): ${body}`,
+      );
     }
 
     const projects = (await resp.json()) as Array<{
@@ -91,7 +100,9 @@ export const listConvexProjects = action({
 
     // Filter out auto-generated project names and convalytics itself
     return projects
-      .filter((p) => p.slug !== "convalytics" && !p.name.match(/^m5[0-9a-z]{30,}/))
+      .filter(
+        (p) => p.slug !== "convalytics" && !p.name.match(/^m5[0-9a-z]{30,}/),
+      )
       .map((p) => ({
         id: String(p.id),
         name: p.name,
@@ -175,10 +186,16 @@ export const provision = internalMutation({
             const currentTime = current._creationTime;
             return currentTime < earliestTime ? current : earliest;
           });
-          return { writeKey: canonical.writeKey, claimToken: canonical.claimToken ?? "" };
+          return {
+            writeKey: canonical.writeKey,
+            claimToken: canonical.claimToken ?? "",
+          };
         }
         const existing = rows[0];
-        return { writeKey: existing.writeKey, claimToken: existing.claimToken ?? "" };
+        return {
+          writeKey: existing.writeKey,
+          claimToken: existing.claimToken ?? "",
+        };
       }
     }
 
@@ -230,7 +247,10 @@ async function cacheDeploymentTypes(
 // Claim an unclaimed project: resolve deployment slug via Management API, then finalize.
 export const claim = action({
   args: { sessionToken: v.string(), claimToken: v.string() },
-  handler: async (ctx, args): Promise<{ projectId: string; name: string; writeKey: string }> => {
+  handler: async (
+    ctx,
+    args,
+  ): Promise<{ projectId: string; name: string; writeKey: string }> => {
     const session = await ctx.runQuery(internal.oauth.getSessionByToken, {
       sessionToken: args.sessionToken,
     });
@@ -244,13 +264,22 @@ export const claim = action({
       claimToken: args.claimToken,
     });
     if (!project) throw new Error("Invalid or expired claim link");
-    if (project.claimed) throw new Error("This project has already been claimed");
+    if (project.claimed)
+      throw new Error("This project has already been claimed");
 
     // If we have a deployment slug, resolve it to a Management API project ID
     // and cache all deployment types for environment tagging.
     let convexProjectId: string | undefined;
-    const convexTeamId = session.userId.split(":")[1];
-    if (project.convexDeploymentSlug && convexTeamId && convexTeamId !== "undefined") {
+    const isConvexOauthUser = session.userId.startsWith("convex:");
+    const convexTeamId = isConvexOauthUser
+      ? session.userId.split(":")[1]
+      : undefined;
+    if (
+      project.convexDeploymentSlug &&
+      session.managementToken &&
+      convexTeamId &&
+      convexTeamId !== "undefined"
+    ) {
       try {
         const url = `https://api.convex.dev/v1/teams/${convexTeamId}/list_projects`;
         const resp = await fetch(url, {
@@ -315,7 +344,8 @@ export const finalizeClaim = internalMutation({
       .unique();
 
     if (!project) throw new Error("Invalid or expired claim link");
-    if (project.claimed) throw new Error("This project has already been claimed");
+    if (project.claimed)
+      throw new Error("This project has already been claimed");
 
     const teamIds = await getUserTeamIds(ctx, session.userId);
     if (teamIds.length === 0) throw new Error("No team found — sign in first");
@@ -324,10 +354,16 @@ export const finalizeClaim = internalMutation({
     await ctx.db.patch("projects", project._id, {
       teamId,
       claimed: true,
-      ...(args.convexProjectId ? { convexProjectId: args.convexProjectId } : {}),
+      ...(args.convexProjectId
+        ? { convexProjectId: args.convexProjectId }
+        : {}),
     });
 
-    return { projectId: project._id, name: project.name, writeKey: project.writeKey };
+    return {
+      projectId: project._id,
+      name: project.name,
+      writeKey: project.writeKey,
+    };
   },
 });
 
@@ -384,9 +420,12 @@ export const sendWelcomeEmail = internalAction({
   args: { sessionToken: v.string(), projectName: v.string() },
   handler: async (ctx, args) => {
     try {
-      const ownerEmail = await ctx.runQuery(internal.projects.getOwnerEmailBySession, {
-        sessionToken: args.sessionToken,
-      });
+      const ownerEmail = await ctx.runQuery(
+        internal.projects.getOwnerEmailBySession,
+        {
+          sessionToken: args.sessionToken,
+        },
+      );
       if (!ownerEmail) return;
 
       const dashboardUrl = "https://convalytics.dev/dashboard";
@@ -395,7 +434,9 @@ export const sendWelcomeEmail = internalAction({
         FROM,
         ownerEmail,
         `${args.projectName} is now tracking with Convalytics`,
-        await render(WelcomeEmail({ projectName: args.projectName, dashboardUrl })),
+        await render(
+          WelcomeEmail({ projectName: args.projectName, dashboardUrl }),
+        ),
         undefined,
         REPLY_TO,
       );
@@ -410,7 +451,9 @@ export const getOwnerEmailBySession = internalQuery({
   handler: async (ctx, args) => {
     const session = await ctx.db
       .query("sessions")
-      .withIndex("by_sessionToken", (q) => q.eq("sessionToken", args.sessionToken))
+      .withIndex("by_sessionToken", (q) =>
+        q.eq("sessionToken", args.sessionToken),
+      )
       .unique();
     if (!session) return null;
 
