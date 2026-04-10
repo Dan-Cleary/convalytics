@@ -74,7 +74,7 @@ export const listMembers = query({
     );
 
     const myMembership = memberships.find((m) => m.teamId === teamId);
-    return { teamId, members, myRole: myMembership?.role ?? "member" };
+    return { teamId, members, myRole: myMembership?.role ?? "member", myUserId: session.userId };
   },
 });
 
@@ -446,7 +446,14 @@ async function verifyPassword(password: string, stored: string): Promise<boolean
   const hash = Array.from(new Uint8Array(bits))
     .map((b) => b.toString(16).padStart(2, "0"))
     .join("");
-  return hash === expectedHash;
+  const actual = new TextEncoder().encode(hash);
+  const expected = new TextEncoder().encode(expectedHash);
+  const maxLength = Math.max(actual.length, expected.length);
+  let diff = actual.length ^ expected.length;
+  for (let i = 0; i < maxLength; i += 1) {
+    diff |= (actual[i] ?? 0) ^ (expected[i] ?? 0);
+  }
+  return diff === 0;
 }
 
 /** Accept an invite by setting a password. Returns a session token. */

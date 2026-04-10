@@ -109,7 +109,7 @@ export function MembersPage({ sessionToken }: { sessionToken: string }) {
             </div>
             <div className="flex items-center gap-3">
               <RoleBadge role={member.role} />
-              {data.myRole === "owner" && member.userId !== data.members.find(m => m.role === "owner")?.userId && (
+              {data.myRole === "owner" && member.userId !== data.myUserId && (
                 <button
                   className="text-[10px] uppercase tracking-wider transition-colors cursor-pointer"
                   style={{ color: "#c4bfb2" }}

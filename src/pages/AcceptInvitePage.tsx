@@ -59,6 +59,7 @@ export function AcceptInvitePage({ token, onSuccess }: Props) {
 
   function saveAndRedirect(token: string) {
     setSessionToken(token);
+    window.history.replaceState({}, "", "/overview");
     onSuccess(token);
   }
 
