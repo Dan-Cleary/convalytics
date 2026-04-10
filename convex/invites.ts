@@ -14,8 +14,10 @@ import {
   internalAction,
   internalMutation,
   internalQuery,
+  type MutationCtx,
   mutation,
   query,
+  type QueryCtx,
 } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { validateSession, getTeamMembership } from "./authHelpers";
@@ -24,6 +26,32 @@ import { InviteEmail } from "./emails/InviteEmail";
 import { FROM, REPLY_TO, resend } from "./emailConfig";
 const INVITE_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
 const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
+
+async function hashInviteToken(token: string): Promise<string> {
+  const bytes = new TextEncoder().encode(token);
+  const digest = await crypto.subtle.digest("SHA-256", bytes);
+  return Array.from(new Uint8Array(digest))
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+}
+
+async function findInviteByToken(
+  ctx: Pick<QueryCtx | MutationCtx, "db">,
+  token: string,
+) {
+  const tokenHash = await hashInviteToken(token);
+  const inviteByHash = await ctx.db
+    .query("teamInvites")
+    .withIndex("by_tokenHash", (q) => q.eq("tokenHash", tokenHash))
+    .unique();
+  if (inviteByHash) return inviteByHash;
+
+  // Legacy fallback for pre-hash invites still stored with plaintext tokens.
+  return await ctx.db
+    .query("teamInvites")
+    .withIndex("by_token", (q) => q.eq("token", token))
+    .unique();
+}
 
 // ---------------------------------------------------------------------------
 // Queries
@@ -111,10 +139,7 @@ export const listPendingInvites = query({
 export const getInviteByToken = query({
   args: { token: v.string() },
   handler: async (ctx, args) => {
-    const invite = await ctx.db
-      .query("teamInvites")
-      .withIndex("by_token", (q) => q.eq("token", args.token))
-      .unique();
+    const invite = await findInviteByToken(ctx, args.token);
 
     if (!invite) return { status: "not_found" as const };
     if (invite.acceptedAt) return { status: "already_accepted" as const };
@@ -191,11 +216,12 @@ export const createInvite = mutation({
     const token =
       crypto.randomUUID().replace(/-/g, "") +
       crypto.randomUUID().replace(/-/g, "");
+    const tokenHash = await hashInviteToken(token);
 
     await ctx.db.insert("teamInvites", {
       teamId,
       invitedEmail: email,
-      token,
+      tokenHash,
       role: args.role,
       invitedBy: session.userId,
       expiresAt: now + INVITE_TTL_MS,
@@ -299,10 +325,7 @@ export const finalizeInviteAccept = internalMutation({
     expiresAt: v.number(),
   },
   handler: async (ctx, args) => {
-    const invite = await ctx.db
-      .query("teamInvites")
-      .withIndex("by_token", (q) => q.eq("token", args.token))
-      .unique();
+    const invite = await findInviteByToken(ctx, args.token);
 
     if (!invite) return { error: "Invite not found" };
     if (invite.acceptedAt) return { error: "Invite already accepted" };
@@ -371,6 +394,18 @@ export const finalizeInviteAccept = internalMutation({
     }
 
     return { ok: true, sessionToken: args.sessionToken };
+  },
+});
+
+export const getInviteStatusForAccept = internalQuery({
+  args: { token: v.string() },
+  handler: async (ctx, args) => {
+    const invite = await findInviteByToken(ctx, args.token);
+
+    if (!invite) return { status: "not_found" as const };
+    if (invite.acceptedAt) return { status: "already_accepted" as const };
+    if (invite.expiresAt < Date.now()) return { status: "expired" as const };
+    return { status: "valid" as const };
   },
 });
 
@@ -508,6 +543,19 @@ export const acceptInviteWithPassword = action({
     if (args.password.length < 8) {
       return { error: "Password must be at least 8 characters" };
     }
+
+    const inviteStatus = await ctx.runQuery(
+      internal.invites.getInviteStatusForAccept,
+      {
+        token: args.token,
+      },
+    );
+    if (inviteStatus.status === "not_found")
+      return { error: "Invite not found" };
+    if (inviteStatus.status === "already_accepted")
+      return { error: "Invite already accepted" };
+    if (inviteStatus.status === "expired")
+      return { error: "Invite has expired" };
 
     const passwordHash = await hashPassword(args.password);
     const sessionToken = crypto.randomUUID();

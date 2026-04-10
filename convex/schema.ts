@@ -69,12 +69,14 @@ export default defineSchema({
   teamInvites: defineTable({
     teamId: v.id("teams"),
     invitedEmail: v.string(),
-    token: v.string(), // secure random token for the invite URL
+    tokenHash: v.optional(v.string()), // SHA-256 hash of invite token
+    token: v.optional(v.string()), // legacy plaintext token kept for backcompat lookup
     role: v.union(v.literal("admin"), v.literal("member")),
     invitedBy: v.string(), // userId of the person who sent the invite
     expiresAt: v.number(), // epoch ms — invites expire after 7 days
     acceptedAt: v.optional(v.number()), // set when the invite is accepted
   })
+    .index("by_tokenHash", ["tokenHash"])
     .index("by_token", ["token"])
     .index("by_teamId", ["teamId"])
     .index("by_teamId_and_email", ["teamId", "invitedEmail"]),
@@ -140,10 +142,10 @@ export default defineSchema({
     utm_medium: v.optional(v.string()),
     utm_campaign: v.optional(v.string()),
     // Enriched server-side from request headers (optional for backcompat with existing rows)
-    country: v.optional(v.string()),     // ISO 2-letter code from cf-ipcountry
-    deviceType: v.optional(v.string()),  // "Desktop" | "Mobile" | "Tablet"
-    browser: v.optional(v.string()),     // "Chrome" | "Firefox" | "Safari" | etc.
-    osName: v.optional(v.string()),      // "Windows" | "macOS" | "iOS" | "Android" | etc.
+    country: v.optional(v.string()), // ISO 2-letter code from cf-ipcountry
+    deviceType: v.optional(v.string()), // "Desktop" | "Mobile" | "Tablet"
+    browser: v.optional(v.string()), // "Chrome" | "Firefox" | "Safari" | etc.
+    osName: v.optional(v.string()), // "Windows" | "macOS" | "iOS" | "Android" | etc.
   })
     .index("by_writeKey_and_timestamp", ["writeKey", "timestamp"])
     .index("by_writeKey_and_environment_and_timestamp", [

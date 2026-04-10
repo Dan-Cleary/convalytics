@@ -13,25 +13,54 @@ const CHART_H = 320;
 interface Series {
   label: string;
   color: string;
+  fillColor?: string;
   data: { timestamp: number; value: number }[];
 }
 
 function formatAxisLabel(ts: number, rangeDays: number): string {
   const d = new Date(ts);
-  const months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  const months = [
+    "Jan",
+    "Feb",
+    "Mar",
+    "Apr",
+    "May",
+    "Jun",
+    "Jul",
+    "Aug",
+    "Sep",
+    "Oct",
+    "Nov",
+    "Dec",
+  ];
   if (rangeDays <= 2) return `${d.getHours().toString().padStart(2, "0")}:00`;
   return `${months[d.getMonth()]} ${d.getDate()}`;
 }
 
 function formatTooltipDate(ts: number, rangeDays: number): string {
   const d = new Date(ts);
-  const months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
-  if (rangeDays <= 2) return `${months[d.getMonth()]} ${d.getDate()}, ${d.getHours().toString().padStart(2, "0")}:00`;
+  const months = [
+    "Jan",
+    "Feb",
+    "Mar",
+    "Apr",
+    "May",
+    "Jun",
+    "Jul",
+    "Aug",
+    "Sep",
+    "Oct",
+    "Nov",
+    "Dec",
+  ];
+  if (rangeDays <= 2)
+    return `${months[d.getMonth()]} ${d.getDate()}, ${d.getHours().toString().padStart(2, "0")}:00`;
   return `${months[d.getMonth()]} ${d.getDate()}`;
 }
 
 function fmtYAxis(n: number): string {
-  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1).replace(/\.0$/, "")}M`;
+  if (n >= 1_000_000)
+    return `${(n / 1_000_000).toFixed(1).replace(/\.0$/, "")}M`;
   if (n >= 1_000) return `${(n / 1_000).toFixed(0)}K`;
   return String(n);
 }
@@ -43,7 +72,12 @@ interface CustomTooltipProps {
   rangeDays: number;
 }
 
-function CustomTooltip({ active, payload, label, rangeDays }: CustomTooltipProps) {
+function CustomTooltip({
+  active,
+  payload,
+  label,
+  rangeDays,
+}: CustomTooltipProps) {
   if (!active || !payload?.length) return null;
   return (
     <div
@@ -56,13 +90,23 @@ function CustomTooltip({ active, payload, label, rangeDays }: CustomTooltipProps
         whiteSpace: "nowrap",
       }}
     >
-      <div className="font-medium mb-1.5" style={{ color: "#9b9488", fontSize: 10 }}>
+      <div
+        className="font-medium mb-1.5"
+        style={{ color: "#9b9488", fontSize: 10 }}
+      >
         {formatTooltipDate(label as number, rangeDays)}
       </div>
       {payload.map((entry: { name: string; value: number; color: string }) => (
-        <div key={entry.name} className="flex items-center justify-between gap-4" style={{ lineHeight: "20px" }}>
+        <div
+          key={entry.name}
+          className="flex items-center justify-between gap-4"
+          style={{ lineHeight: "20px" }}
+        >
           <span className="flex items-center gap-1.5">
-            <span className="inline-block w-2 h-2 rounded-full flex-shrink-0" style={{ background: entry.color }} />
+            <span
+              className="inline-block w-2 h-2 rounded-full flex-shrink-0"
+              style={{ background: entry.color }}
+            />
             <span style={{ color: "#6b6456" }}>{entry.name}</span>
           </span>
           <span className="font-bold tabular-nums" style={{ color: "#1a1814" }}>
@@ -83,7 +127,10 @@ export function TrendChart({
 }) {
   if (series.length === 0 || series[0].data.length === 0) {
     return (
-      <div className="flex items-center justify-center text-xs" style={{ height: CHART_H, color: "#c4bfb2" }}>
+      <div
+        className="flex items-center justify-center text-xs"
+        style={{ height: CHART_H, color: "#c4bfb2" }}
+      >
         No data for this range
       </div>
     );
@@ -106,12 +153,30 @@ export function TrendChart({
 
   return (
     <ResponsiveContainer width="100%" height={CHART_H}>
-      <AreaChart data={chartData} margin={{ top: 8, right: 4, bottom: 0, left: 0 }}>
+      <AreaChart
+        data={chartData}
+        margin={{ top: 8, right: 4, bottom: 0, left: 0 }}
+      >
         <defs>
           {series.map((s, si) => (
-            <linearGradient key={si} id={`fill-${si}`} x1="0" y1="0" x2="0" y2="1">
-              <stop offset="5%" stopColor={s.color} stopOpacity={0.2} />
-              <stop offset="95%" stopColor={s.color} stopOpacity={0} />
+            <linearGradient
+              key={si}
+              id={`fill-${si}`}
+              x1="0"
+              y1="0"
+              x2="0"
+              y2="1"
+            >
+              <stop
+                offset="5%"
+                stopColor={s.fillColor ?? s.color}
+                stopOpacity={0.2}
+              />
+              <stop
+                offset="95%"
+                stopColor={s.fillColor ?? s.color}
+                stopOpacity={0}
+              />
             </linearGradient>
           ))}
         </defs>

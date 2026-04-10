@@ -10,6 +10,14 @@ const modules = import.meta.glob("./**/*.ts");
 const SESSION_EXPIRY = Date.now() + 30 * 24 * 60 * 60 * 1000;
 const INVITE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
+async function hashInviteToken(token: string): Promise<string> {
+  const bytes = new TextEncoder().encode(token);
+  const digest = await crypto.subtle.digest("SHA-256", bytes);
+  return Array.from(new Uint8Array(digest))
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+}
+
 // ---------------------------------------------------------------------------
 // Test helpers
 // ---------------------------------------------------------------------------
@@ -101,7 +109,9 @@ describe("invites.listMembers", () => {
 
   test("returns null for invalid session", async () => {
     const t = convexTest(schema, modules);
-    const result = await t.query(api.invites.listMembers, { sessionToken: "bad" });
+    const result = await t.query(api.invites.listMembers, {
+      sessionToken: "bad",
+    });
     expect(result).toBeNull();
   });
 
@@ -132,7 +142,9 @@ describe("invites.createInvite", () => {
     expect(result).toEqual({ ok: true });
 
     // Invite should appear in pending list
-    const invites = await t.query(api.invites.listPendingInvites, { sessionToken });
+    const invites = await t.query(api.invites.listPendingInvites, {
+      sessionToken,
+    });
     expect(invites).toHaveLength(1);
     expect(invites![0].invitedEmail).toBe("alice@example.com");
     expect(invites![0].role).toBe("member");
@@ -158,7 +170,10 @@ describe("invites.createInvite", () => {
   test("member cannot invite", async () => {
     const t = convexTest(schema, modules);
     const { teamId } = await setupOwner(t);
-    const { sessionToken } = await setupMember(t, teamId, { userId: "convex:2", role: "member" });
+    const { sessionToken } = await setupMember(t, teamId, {
+      userId: "convex:2",
+      role: "member",
+    });
 
     const result = await t.mutation(api.invites.createInvite, {
       sessionToken,
@@ -166,7 +181,9 @@ describe("invites.createInvite", () => {
       role: "member",
     });
 
-    expect(result).toEqual({ error: "Only owners and admins can invite members" });
+    expect(result).toEqual({
+      error: "Only owners and admins can invite members",
+    });
   });
 
   test("duplicate invite returns error", async () => {
@@ -185,7 +202,9 @@ describe("invites.createInvite", () => {
       role: "member",
     });
 
-    expect(result).toEqual({ error: "A pending invite already exists for this email" });
+    expect(result).toEqual({
+      error: "A pending invite already exists for this email",
+    });
   });
 
   test("existing team member returns error", async () => {
@@ -226,7 +245,9 @@ describe("invites.createInvite", () => {
       role: "member",
     });
 
-    const invites = await t.query(api.invites.listPendingInvites, { sessionToken });
+    const invites = await t.query(api.invites.listPendingInvites, {
+      sessionToken,
+    });
     expect(invites![0].invitedEmail).toBe("frank@example.com");
   });
 
@@ -262,7 +283,9 @@ describe("invites.listPendingInvites", () => {
       });
     });
 
-    const invites = await t.query(api.invites.listPendingInvites, { sessionToken });
+    const invites = await t.query(api.invites.listPendingInvites, {
+      sessionToken,
+    });
     expect(invites).toHaveLength(0);
   });
 
@@ -281,7 +304,9 @@ describe("invites.listPendingInvites", () => {
       });
     });
 
-    const invites = await t.query(api.invites.listPendingInvites, { sessionToken });
+    const invites = await t.query(api.invites.listPendingInvites, {
+      sessionToken,
+    });
     expect(invites).toHaveLength(0);
   });
 });
@@ -301,7 +326,9 @@ describe("invites.revokeInvite", () => {
       role: "member",
     });
 
-    const invitesBefore = await t.query(api.invites.listPendingInvites, { sessionToken });
+    const invitesBefore = await t.query(api.invites.listPendingInvites, {
+      sessionToken,
+    });
     expect(invitesBefore).toHaveLength(1);
     const inviteId = invitesBefore![0]._id;
 
@@ -311,14 +338,18 @@ describe("invites.revokeInvite", () => {
     });
     expect(result).toEqual({ ok: true });
 
-    const invitesAfter = await t.query(api.invites.listPendingInvites, { sessionToken });
+    const invitesAfter = await t.query(api.invites.listPendingInvites, {
+      sessionToken,
+    });
     expect(invitesAfter).toHaveLength(0);
   });
 
   test("member cannot revoke", async () => {
     const t = convexTest(schema, modules);
     const { sessionToken: ownerSession, teamId } = await setupOwner(t);
-    const { sessionToken: memberSession } = await setupMember(t, teamId, { userId: "convex:2" });
+    const { sessionToken: memberSession } = await setupMember(t, teamId, {
+      userId: "convex:2",
+    });
 
     await t.mutation(api.invites.createInvite, {
       sessionToken: ownerSession,
@@ -326,14 +357,18 @@ describe("invites.revokeInvite", () => {
       role: "member",
     });
 
-    const invites = await t.query(api.invites.listPendingInvites, { sessionToken: ownerSession });
+    const invites = await t.query(api.invites.listPendingInvites, {
+      sessionToken: ownerSession,
+    });
     const inviteId = invites![0]._id;
 
     const result = await t.mutation(api.invites.revokeInvite, {
       sessionToken: memberSession,
       inviteId,
     });
-    expect(result).toEqual({ error: "Only owners and admins can revoke invites" });
+    expect(result).toEqual({
+      error: "Only owners and admins can revoke invites",
+    });
   });
 });
 
@@ -344,18 +379,19 @@ describe("invites.revokeInvite", () => {
 describe("invites.getInviteByToken", () => {
   test("returns valid invite details", async () => {
     const t = convexTest(schema, modules);
-    const { sessionToken } = await setupOwner(t);
+    const { teamId } = await setupOwner(t);
+    const token = "newuser-token";
+    const tokenHash = await hashInviteToken(token);
 
-    await t.mutation(api.invites.createInvite, {
-      sessionToken,
-      email: "newuser@example.com",
-      role: "admin",
-    });
-
-    const invites = await t.query(api.invites.listPendingInvites, { sessionToken });
-    const token = await t.run(async (ctx) => {
-      const invite = await ctx.db.get("teamInvites", invites![0]._id);
-      return invite!.token;
+    await t.run(async (ctx) => {
+      await ctx.db.insert("teamInvites", {
+        teamId,
+        invitedEmail: "newuser@example.com",
+        tokenHash,
+        role: "admin",
+        invitedBy: "convex:1",
+        expiresAt: Date.now() + INVITE_TTL_MS,
+      });
     });
 
     const result = await t.query(api.invites.getInviteByToken, { token });
@@ -369,7 +405,9 @@ describe("invites.getInviteByToken", () => {
 
   test("returns not_found for unknown token", async () => {
     const t = convexTest(schema, modules);
-    const result = await t.query(api.invites.getInviteByToken, { token: "doesnotexist" });
+    const result = await t.query(api.invites.getInviteByToken, {
+      token: "doesnotexist",
+    });
     expect(result.status).toBe("not_found");
   });
 
@@ -389,7 +427,9 @@ describe("invites.getInviteByToken", () => {
       });
     });
 
-    const result = await t.query(api.invites.getInviteByToken, { token: "used-token" });
+    const result = await t.query(api.invites.getInviteByToken, {
+      token: "used-token",
+    });
     expect(result.status).toBe("already_accepted");
   });
 
@@ -408,7 +448,9 @@ describe("invites.getInviteByToken", () => {
       });
     });
 
-    const result = await t.query(api.invites.getInviteByToken, { token: "old-token" });
+    const result = await t.query(api.invites.getInviteByToken, {
+      token: "old-token",
+    });
     expect(result.status).toBe("expired");
   });
 });
@@ -446,7 +488,12 @@ describe("invites.finalizeInviteAccept", () => {
 
     // Verify user was created
     const user = await t.run((ctx) =>
-      ctx.db.query("users").withIndex("by_userId", (q) => q.eq("userId", "invited:invited@example.com")).unique()
+      ctx.db
+        .query("users")
+        .withIndex("by_userId", (q) =>
+          q.eq("userId", "invited:invited@example.com"),
+        )
+        .unique(),
     );
     expect(user).not.toBeNull();
     expect(user!.email).toBe("invited@example.com");
@@ -455,24 +502,34 @@ describe("invites.finalizeInviteAccept", () => {
 
     // Verify team membership
     const membership = await t.run((ctx) =>
-      ctx.db.query("teamMembers")
+      ctx.db
+        .query("teamMembers")
         .withIndex("by_teamId_and_userId", (q) =>
-          q.eq("teamId", teamId).eq("userId", "invited:invited@example.com"))
-        .unique()
+          q.eq("teamId", teamId).eq("userId", "invited:invited@example.com"),
+        )
+        .unique(),
     );
     expect(membership).not.toBeNull();
     expect(membership!.role).toBe("member");
 
     // Verify session was created
     const session = await t.run((ctx) =>
-      ctx.db.query("sessions").withIndex("by_userId", (q) => q.eq("userId", "invited:invited@example.com")).unique()
+      ctx.db
+        .query("sessions")
+        .withIndex("by_userId", (q) =>
+          q.eq("userId", "invited:invited@example.com"),
+        )
+        .unique(),
     );
     expect(session).not.toBeNull();
     expect(session!.sessionToken).toBe("new-session-tok");
 
     // Verify invite was marked accepted
     const invite = await t.run((ctx) =>
-      ctx.db.query("teamInvites").withIndex("by_token", (q) => q.eq("token", token)).unique()
+      ctx.db
+        .query("teamInvites")
+        .withIndex("by_token", (q) => q.eq("token", token))
+        .unique(),
     );
     expect(invite!.acceptedAt).toBeDefined();
   });
@@ -568,13 +625,19 @@ describe("invites.finalizeInviteAccept", () => {
 
     // Session should be updated, not duplicated
     const sessions = await t.run((ctx) =>
-      ctx.db.query("sessions").withIndex("by_userId", (q) => q.eq("userId", userId)).collect()
+      ctx.db
+        .query("sessions")
+        .withIndex("by_userId", (q) => q.eq("userId", userId))
+        .collect(),
     );
     expect(sessions).toHaveLength(1);
     expect(sessions[0].sessionToken).toBe("new-session");
 
     const user = await t.run((ctx) =>
-      ctx.db.query("users").withIndex("by_userId", (q) => q.eq("userId", userId)).unique()
+      ctx.db
+        .query("users")
+        .withIndex("by_userId", (q) => q.eq("userId", userId))
+        .unique(),
     );
     expect(user).not.toBeNull();
     expect(user!.passwordHash).toBe("new:hash");
@@ -589,7 +652,9 @@ describe("invites.removeMember", () => {
   test("owner can remove a member", async () => {
     const t = convexTest(schema, modules);
     const { sessionToken, teamId } = await setupOwner(t);
-    const { userId: memberId } = await setupMember(t, teamId, { userId: "convex:2" });
+    const { userId: memberId } = await setupMember(t, teamId, {
+      userId: "convex:2",
+    });
 
     const result = await t.mutation(api.invites.removeMember, {
       sessionToken,
@@ -615,7 +680,9 @@ describe("invites.removeMember", () => {
   test("member cannot remove another member", async () => {
     const t = convexTest(schema, modules);
     const { teamId } = await setupOwner(t);
-    const { sessionToken } = await setupMember(t, teamId, { userId: "convex:2" });
+    const { sessionToken } = await setupMember(t, teamId, {
+      userId: "convex:2",
+    });
     await setupMember(t, teamId, { userId: "convex:3" });
 
     const result = await t.mutation(api.invites.removeMember, {
@@ -628,7 +695,9 @@ describe("invites.removeMember", () => {
   test("member can remove themselves", async () => {
     const t = convexTest(schema, modules);
     const { teamId } = await setupOwner(t);
-    const { sessionToken, userId } = await setupMember(t, teamId, { userId: "convex:2" });
+    const { sessionToken, userId } = await setupMember(t, teamId, {
+      userId: "convex:2",
+    });
 
     const result = await t.mutation(api.invites.removeMember, {
       sessionToken,
@@ -689,7 +758,10 @@ describe("invites.createInvitedSession", () => {
     });
 
     const sessions = await t.run((ctx) =>
-      ctx.db.query("sessions").withIndex("by_userId", (q) => q.eq("userId", userId)).collect()
+      ctx.db
+        .query("sessions")
+        .withIndex("by_userId", (q) => q.eq("userId", userId))
+        .collect(),
     );
     expect(sessions).toHaveLength(1);
     expect(sessions[0].sessionToken).toBe("new-tok");
