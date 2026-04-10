@@ -43,11 +43,8 @@ export function AcceptInvitePage({ token, onSuccess }: Props) {
         saveAndRedirect(result.sessionToken);
       }
     } catch (err) {
-      setError(
-        err instanceof Error
-          ? err.message
-          : "An unexpected error occurred. Please try again."
-      );
+      console.error(err);
+      setError("An unexpected error occurred. Please try again.");
     } finally {
       setLoading(false);
     }
@@ -65,11 +62,8 @@ export function AcceptInvitePage({ token, onSuccess }: Props) {
         saveAndRedirect(result.sessionToken);
       }
     } catch (err) {
-      setError(
-        err instanceof Error
-          ? err.message
-          : "An unexpected error occurred. Please try again."
-      );
+      console.error(err);
+      setError("An unexpected error occurred. Please try again.");
     } finally {
       setLoading(false);
     }
@@ -174,7 +168,11 @@ export function AcceptInvitePage({ token, onSuccess }: Props) {
                 onSubmit={(e) => void handleAccept(e)}
                 className="flex flex-col gap-3"
               >
+                <label htmlFor="accept-name" className="sr-only">
+                  Your name (optional)
+                </label>
                 <input
+                  id="accept-name"
                   type="text"
                   placeholder="Your name (optional)"
                   value={name}
@@ -182,7 +180,11 @@ export function AcceptInvitePage({ token, onSuccess }: Props) {
                   className="w-full px-3 py-2 text-xs outline-none"
                   style={{ border: "1px solid #e0ddd6", color: "#1a1814" }}
                 />
+                <label htmlFor="accept-password" className="sr-only">
+                  Password (min 8 characters)
+                </label>
                 <input
+                  id="accept-password"
                   type="password"
                   placeholder="Password (min 8 characters)"
                   value={password}
@@ -192,7 +194,11 @@ export function AcceptInvitePage({ token, onSuccess }: Props) {
                   className="w-full px-3 py-2 text-xs outline-none"
                   style={{ border: "1px solid #e0ddd6", color: "#1a1814" }}
                 />
+                <label htmlFor="accept-confirm" className="sr-only">
+                  Confirm password
+                </label>
                 <input
+                  id="accept-confirm"
                   type="password"
                   placeholder="Confirm password"
                   value={confirm}
@@ -202,7 +208,11 @@ export function AcceptInvitePage({ token, onSuccess }: Props) {
                   style={{ border: "1px solid #e0ddd6", color: "#1a1814" }}
                 />
                 {error && (
-                  <p className="text-[10px]" style={{ color: "#b94040" }}>
+                  <p
+                    role="alert"
+                    className="text-[10px]"
+                    style={{ color: "#b94040" }}
+                  >
                     {error}
                   </p>
                 )}
@@ -308,7 +318,11 @@ function SignInForm({
 }) {
   return (
     <form onSubmit={onSubmit} className="flex flex-col gap-3">
+      <label htmlFor="signin-email" className="sr-only">
+        Email
+      </label>
       <input
+        id="signin-email"
         type="email"
         placeholder="Email"
         value={email}
@@ -317,7 +331,11 @@ function SignInForm({
         className="w-full px-3 py-2 text-xs outline-none"
         style={{ border: "1px solid #e0ddd6", color: "#1a1814" }}
       />
+      <label htmlFor="signin-password" className="sr-only">
+        Password
+      </label>
       <input
+        id="signin-password"
         type="password"
         placeholder="Password"
         value={password}
@@ -327,7 +345,7 @@ function SignInForm({
         style={{ border: "1px solid #e0ddd6", color: "#1a1814" }}
       />
       {error && (
-        <p className="text-[10px]" style={{ color: "#b94040" }}>
+        <p role="alert" className="text-[10px]" style={{ color: "#b94040" }}>
           {error}
         </p>
       )}

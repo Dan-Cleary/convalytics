@@ -190,7 +190,7 @@ export const provision = internalMutation({
           let claimToken = canonical.claimToken;
           if (!claimToken) {
             claimToken = crypto.randomUUID();
-            await ctx.db.patch(canonical._id, { claimToken });
+            await ctx.db.patch("projects", canonical._id, { claimToken });
           }
           return {
             writeKey: canonical.writeKey,
@@ -202,7 +202,7 @@ export const provision = internalMutation({
         let claimToken = existing.claimToken;
         if (!claimToken) {
           claimToken = crypto.randomUUID();
-          await ctx.db.patch(existing._id, { claimToken });
+          await ctx.db.patch("projects", existing._id, { claimToken });
         }
         return {
           writeKey: existing.writeKey,
@@ -335,7 +335,7 @@ export const claim = action({
         sessionToken: args.sessionToken,
         projectName: result.name,
       });
-    } catch (err) {
+    } catch {
       // Swallow scheduling errors to ensure claim succeeds
     }
 
