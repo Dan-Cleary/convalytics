@@ -16,7 +16,8 @@ export const exchangeCode = action({
   },
   handler: async (ctx, args) => {
     const clientSecret = process.env.CONVEX_OAUTH_CLIENT_SECRET;
-    if (!clientSecret) throw new Error("CONVEX_OAUTH_CLIENT_SECRET not configured");
+    if (!clientSecret)
+      throw new Error("CONVEX_OAUTH_CLIENT_SECRET not configured");
 
     // Exchange authorization code for access token
     const tokenResp = await fetch(TOKEN_EXCHANGE_URL, {
@@ -34,7 +35,9 @@ export const exchangeCode = action({
 
     if (!tokenResp.ok) {
       const text = await tokenResp.text();
-      throw new Error(`Token exchange failed (HTTP ${tokenResp.status}): ${text || "(empty body)"}`);
+      throw new Error(
+        `Token exchange failed (HTTP ${tokenResp.status}): ${text || "(empty body)"}`,
+      );
     }
 
     const tokenData = (await tokenResp.json()) as { access_token: string };
@@ -54,7 +57,10 @@ export const exchangeCode = action({
       name?: string;
     };
     const teamId = details.teamId;
-    if (!teamId) throw new Error(`token_details missing teamId: ${JSON.stringify(details)}`);
+    if (!teamId)
+      throw new Error(
+        `token_details missing teamId: ${JSON.stringify(details)}`,
+      );
 
     const userId = `convex:${teamId}`;
     const sessionToken = crypto.randomUUID();
@@ -86,11 +92,14 @@ export const createSession = internalMutation({
   },
   handler: async (ctx, args) => {
     const now = Date.now();
+    const email = args.email?.toLowerCase().trim() || undefined;
 
     // 1. Find or create the team (by Convex team ID)
     const existingTeam = await ctx.db
       .query("teams")
-      .withIndex("by_convexTeamId", (q) => q.eq("convexTeamId", args.convexTeamId))
+      .withIndex("by_convexTeamId", (q) =>
+        q.eq("convexTeamId", args.convexTeamId),
+      )
       .unique();
 
     let teamId: import("./_generated/dataModel").Id<"teams">;
@@ -120,14 +129,14 @@ export const createSession = internalMutation({
     if (!existingUser) {
       await ctx.db.insert("users", {
         userId: args.userId,
-        email: args.email,
+        email,
         name: args.name,
         createdAt: now,
       });
-    } else if (args.email && !existingUser.email) {
+    } else if (email && !existingUser.email) {
       // Backfill email/name if we now have it but didn't before
       await ctx.db.patch("users", existingUser._id, {
-        email: args.email,
+        email,
         ...(args.name ? { name: args.name } : {}),
       });
     }
