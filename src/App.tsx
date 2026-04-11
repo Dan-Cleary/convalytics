@@ -55,8 +55,8 @@ export default function App() {
     setSessionToken(null);
   }, []);
 
-  const handleSignIn = useCallback(() => {
-    setSessionToken(getSessionToken());
+  const handleSignIn = useCallback((nextSessionToken?: string) => {
+    setSessionToken(nextSessionToken ?? getSessionToken());
   }, []);
 
   return (
@@ -86,12 +86,16 @@ export default function App() {
   );
 }
 
-function InvitePageWrapper({ onSuccess }: { onSuccess: () => void }) {
+function InvitePageWrapper({
+  onSuccess,
+}: {
+  onSuccess: (sessionToken: string) => void;
+}) {
   const { inviteToken } = useParams();
   return (
     <AcceptInvitePage
       token={inviteToken ?? ""}
-      onSuccess={(_token: string) => onSuccess()}
+      onSuccess={onSuccess}
     />
   );
 }

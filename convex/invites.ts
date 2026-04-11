@@ -27,43 +27,6 @@ import { FROM, REPLY_TO, resend } from "./emailConfig";
 const INVITE_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
 const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
 
-function hexToBytes(hex: string): Uint8Array {
-  const pairs = hex.match(/.{1,2}/g);
-  if (!pairs) return new Uint8Array();
-  return new Uint8Array(pairs.map((pair) => parseInt(pair, 16)));
-}
-
-async function getInviteTokenKey(): Promise<CryptoKey> {
-  const secret =
-    process.env.INVITE_TOKEN_SECRET ??
-    process.env.CONVEX_OAUTH_CLIENT_SECRET;
-  if (!secret) {
-    throw new Error(
-      "Missing invite token secret; set INVITE_TOKEN_SECRET or CONVEX_OAUTH_CLIENT_SECRET",
-    );
-  }
-  const secretBytes = new TextEncoder().encode(secret);
-  const digest = await crypto.subtle.digest("SHA-256", secretBytes);
-  return await crypto.subtle.importKey("raw", digest, "AES-GCM", false, [
-    "encrypt",
-    "decrypt",
-  ]);
-}
-
-async function decryptInviteToken(ciphertext: string): Promise<string> {
-  const [ivHex, payloadHex] = ciphertext.split(":");
-  if (!ivHex || !payloadHex) throw new Error("Invalid invite token payload");
-  const iv = hexToBytes(ivHex);
-  const payload = hexToBytes(payloadHex);
-  const key = await getInviteTokenKey();
-  const decrypted = await crypto.subtle.decrypt(
-    { name: "AES-GCM", iv },
-    key,
-    payload,
-  );
-  return new TextDecoder().decode(new Uint8Array(decrypted));
-}
-
 async function hashInviteToken(token: string): Promise<string> {
   const bytes = new TextEncoder().encode(token);
   const digest = await crypto.subtle.digest("SHA-256", bytes);
@@ -669,18 +632,11 @@ export const sendInviteEmail = internalAction({
   args: {
     toEmail: v.string(),
     teamName: v.string(),
-    token: v.optional(v.string()),
-    tokenCiphertext: v.optional(v.string()),
+    token: v.string(),
     role: v.union(v.literal("admin"), v.literal("member")),
   },
   handler: async (ctx, args) => {
-    const token =
-      args.token ??
-      (args.tokenCiphertext
-        ? await decryptInviteToken(args.tokenCiphertext)
-        : null);
-    if (!token) return;
-    const inviteUrl = `https://convalytics.dev/invite/${token}`;
+    const inviteUrl = `https://convalytics.dev/invite/${args.token}`;
     await resend.sendEmail(
       ctx,
       FROM,

@@ -76,8 +76,8 @@ export function AcceptInvitePage({ token, onSuccess }: Props) {
 
   function saveAndRedirect(sessionToken: string) {
     setSessionToken(sessionToken);
-    void navigate("/overview", { replace: true });
     onSuccess(sessionToken);
+    void navigate("/overview", { replace: true });
   }
 
   return (
