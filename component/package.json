@@ -1,5 +1,5 @@
 {
-  "name": "@convalytics/convex",
+  "name": "convalytics-dev",
   "version": "0.1.0",
   "description": "Convex component for server-side analytics tracking with Convalytics",
   "type": "module",
