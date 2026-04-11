@@ -260,6 +260,55 @@ describe("invites.createInvite", () => {
     });
     expect(result).toEqual({ error: "Unauthorized" });
   });
+
+  test("handles duplicate user emails without crashing", async () => {
+    const t = convexTest(schema, modules);
+    const { sessionToken } = await setupOwner(t);
+
+    await t.run(async (ctx) => {
+      await ctx.db.insert("users", {
+        userId: "convex:200",
+        email: "dupe@example.com",
+        createdAt: Date.now(),
+      });
+      await ctx.db.insert("users", {
+        userId: "invited:dupe@example.com",
+        email: "dupe@example.com",
+        passwordHash: "salt:hash",
+        createdAt: Date.now(),
+      });
+    });
+
+    const result = await t.mutation(api.invites.createInvite, {
+      sessionToken,
+      email: "dupe@example.com",
+      role: "member",
+    });
+
+    expect(result).toEqual({ ok: true });
+  });
+
+  test("schedules encrypted invite token instead of plaintext token", async () => {
+    const t = convexTest(schema, modules);
+    const { sessionToken } = await setupOwner(t);
+
+    const result = await t.mutation(api.invites.createInvite, {
+      sessionToken,
+      email: "cipher@example.com",
+      role: "member",
+    });
+    expect(result).toEqual({ ok: true });
+
+    const scheduled = await t.run(async (ctx) => {
+      return await ctx.db.system.query("_scheduled_functions").collect();
+    });
+
+    expect(scheduled).toHaveLength(1);
+    const args = scheduled[0].args[0] as Record<string, unknown>;
+    expect(typeof args.tokenCiphertext).toBe("string");
+    expect((args.tokenCiphertext as string).includes(":")).toBe(true);
+    expect("token" in args).toBe(false);
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -810,5 +859,32 @@ describe("invites.getUserForSignIn", () => {
       email: "nobody@example.com",
     });
     expect(user).toBeNull();
+  });
+
+  test("returns invited user when oauth and invited users share email", async () => {
+    const t = convexTest(schema, modules);
+
+    await t.run(async (ctx) => {
+      await ctx.db.insert("users", {
+        userId: "convex:1",
+        email: "shared@example.com",
+        createdAt: Date.now(),
+      });
+      await ctx.db.insert("users", {
+        userId: "invited:shared@example.com",
+        email: "shared@example.com",
+        passwordHash: "salt:hash",
+        createdAt: Date.now(),
+      });
+    });
+
+    const user = await t.query(internal.invites.getUserForSignIn, {
+      email: "shared@example.com",
+    });
+
+    expect(user).toEqual({
+      userId: "invited:shared@example.com",
+      passwordHash: "salt:hash",
+    });
   });
 });

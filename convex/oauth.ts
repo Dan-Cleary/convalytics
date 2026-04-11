@@ -1,5 +1,10 @@
 import { v } from "convex/values";
-import { action, internalMutation, internalQuery } from "./_generated/server";
+import {
+  action,
+  internalMutation,
+  internalQuery,
+  type MutationCtx,
+} from "./_generated/server";
 import { internal } from "./_generated/api";
 
 const CLIENT_ID = "a89dda460f9b4d42";
@@ -7,6 +12,20 @@ const TOKEN_EXCHANGE_URL = "https://api.convex.dev/oauth/token";
 const TOKEN_DETAILS_URL = "https://api.convex.dev/v1/token_details";
 
 const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
+
+async function resolveSafeEmail(
+  ctx: Pick<MutationCtx, "db">,
+  userId: string,
+  email: string | undefined,
+): Promise<string | undefined> {
+  if (!email) return undefined;
+  const existingUsers = await ctx.db
+    .query("users")
+    .withIndex("by_email", (q) => q.eq("email", email))
+    .collect();
+  const hasConflict = existingUsers.some((user) => user.userId !== userId);
+  return hasConflict ? undefined : email;
+}
 
 export const exchangeCode = action({
   args: {
@@ -92,7 +111,8 @@ export const createSession = internalMutation({
   },
   handler: async (ctx, args) => {
     const now = Date.now();
-    const email = args.email?.toLowerCase().trim() || undefined;
+    const normalizedEmail = args.email?.toLowerCase().trim() || undefined;
+    const email = await resolveSafeEmail(ctx, args.userId, normalizedEmail);
 
     // 1. Find or create the team (by Convex team ID)
     const existingTeam = await ctx.db
@@ -133,7 +153,10 @@ export const createSession = internalMutation({
         name: args.name,
         createdAt: now,
       });
-    } else if ((email && !existingUser.email) || (args.name && !existingUser.name)) {
+    } else if (
+      (email && !existingUser.email) ||
+      (args.name && !existingUser.name)
+    ) {
       // Backfill email/name if we now have it but didn't before
       await ctx.db.patch("users", existingUser._id, {
         ...(email && !existingUser.email ? { email } : {}),
