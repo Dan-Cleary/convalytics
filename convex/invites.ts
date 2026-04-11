@@ -584,6 +584,15 @@ export const signInWithPassword = action({
     password: v.string(),
   },
   handler: async (ctx, args) => {
+    // Rate limit: 10 attempts per minute per email address
+    const rl = await ctx.runMutation(internal.rateLimit.check, {
+      key: `signin:${args.email.toLowerCase()}`,
+      limit: 10,
+    });
+    if (!rl.allowed) {
+      return { error: "Too many sign-in attempts. Please try again later." };
+    }
+
     const user = await ctx.runQuery(internal.invites.getUserForSignIn, {
       email: args.email,
     });
