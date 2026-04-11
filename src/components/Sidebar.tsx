@@ -1,7 +1,7 @@
 import { Doc } from "../../convex/_generated/dataModel";
 import { useState, useRef, useEffect } from "react";
+import { useNavigate, useLocation } from "react-router-dom";
 
-type Page = "overview" | "pages" | "events" | "billing";
 type Environment = "all" | "production" | "development";
 
 interface SidebarProps {
@@ -9,8 +9,6 @@ interface SidebarProps {
   activeWriteKey: string;
   onSelectProject: (writeKey: string) => void;
   onAddProject: () => void;
-  page: Page;
-  onSelectPage: (page: Page) => void;
   onSignOut: () => void;
   environment: Environment;
   onSelectEnvironment: (env: Environment) => void;
@@ -21,12 +19,12 @@ export function Sidebar({
   activeWriteKey,
   onSelectProject,
   onAddProject,
-  page,
-  onSelectPage,
   onSignOut,
   environment,
   onSelectEnvironment,
 }: SidebarProps) {
+  const navigate = useNavigate();
+  const { pathname } = useLocation();
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
@@ -135,12 +133,13 @@ export function Sidebar({
       {/* Navigation */}
       <div className="flex-1 py-2">
         <SectionLabel>Web Analytics</SectionLabel>
-        <NavItem label="Overview" active={page === "overview"} onClick={() => onSelectPage("overview")} />
-        <NavItem label="Pages" active={page === "pages"} onClick={() => onSelectPage("pages")} />
+        <NavItem label="Overview" active={pathname === "/overview"} onClick={() => { void navigate("/overview"); }} />
+        <NavItem label="Pages" active={pathname === "/pages"} onClick={() => { void navigate("/pages"); }} />
         <SectionLabel>Product Analytics</SectionLabel>
-        <NavItem label="Events" active={page === "events"} onClick={() => onSelectPage("events")} />
+        <NavItem label="Events" active={pathname === "/events"} onClick={() => { void navigate("/events"); }} />
         <SectionLabel>Settings</SectionLabel>
-        <NavItem label="Billing" active={page === "billing"} onClick={() => onSelectPage("billing")} />
+        <NavItem label="Members" active={pathname === "/members"} onClick={() => { void navigate("/members"); }} />
+        <NavItem label="Billing" active={pathname === "/billing"} onClick={() => { void navigate("/billing"); }} />
       </div>
 
       {/* Environment toggle */}
@@ -203,7 +202,7 @@ function Chevron({ open }: { open: boolean }) {
 
 function SectionLabel({ children }: { children: React.ReactNode }) {
   return (
-    <p className="px-4 pt-3 pb-1 text-[9px] font-bold uppercase tracking-widest" style={{ color: "#3e3a32" }}>
+    <p className="px-4 pt-3 pb-1 text-[9px] font-bold uppercase tracking-widest" style={{ color: "#6b6456" }}>
       {children}
     </p>
   );

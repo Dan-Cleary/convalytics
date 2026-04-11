@@ -1,5 +1,10 @@
 import { v } from "convex/values";
-import { action, internalMutation, internalQuery } from "./_generated/server";
+import {
+  action,
+  internalMutation,
+  internalQuery,
+  type MutationCtx,
+} from "./_generated/server";
 import { internal } from "./_generated/api";
 
 const CLIENT_ID = "a89dda460f9b4d42";
@@ -7,6 +12,20 @@ const TOKEN_EXCHANGE_URL = "https://api.convex.dev/oauth/token";
 const TOKEN_DETAILS_URL = "https://api.convex.dev/v1/token_details";
 
 const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
+
+async function resolveSafeEmail(
+  ctx: Pick<MutationCtx, "db">,
+  userId: string,
+  email: string | undefined,
+): Promise<string | undefined> {
+  if (!email) return undefined;
+  const existingUsers = await ctx.db
+    .query("users")
+    .withIndex("by_email", (q) => q.eq("email", email))
+    .collect();
+  const hasConflict = existingUsers.some((user) => user.userId !== userId);
+  return hasConflict ? undefined : email;
+}
 
 export const exchangeCode = action({
   args: {
@@ -16,7 +35,8 @@ export const exchangeCode = action({
   },
   handler: async (ctx, args) => {
     const clientSecret = process.env.CONVEX_OAUTH_CLIENT_SECRET;
-    if (!clientSecret) throw new Error("CONVEX_OAUTH_CLIENT_SECRET not configured");
+    if (!clientSecret)
+      throw new Error("CONVEX_OAUTH_CLIENT_SECRET not configured");
 
     // Exchange authorization code for access token
     const tokenResp = await fetch(TOKEN_EXCHANGE_URL, {
@@ -34,7 +54,9 @@ export const exchangeCode = action({
 
     if (!tokenResp.ok) {
       const text = await tokenResp.text();
-      throw new Error(`Token exchange failed (HTTP ${tokenResp.status}): ${text || "(empty body)"}`);
+      throw new Error(
+        `Token exchange failed (HTTP ${tokenResp.status}): ${text || "(empty body)"}`,
+      );
     }
 
     const tokenData = (await tokenResp.json()) as { access_token: string };
@@ -48,9 +70,16 @@ export const exchangeCode = action({
       throw new Error(`Failed to fetch token details (${detailsResp.status})`);
     }
 
-    const details = (await detailsResp.json()) as { teamId: number };
+    const details = (await detailsResp.json()) as {
+      teamId: number;
+      email?: string;
+      name?: string;
+    };
     const teamId = details.teamId;
-    if (!teamId) throw new Error(`token_details missing teamId: ${JSON.stringify(details)}`);
+    if (!teamId)
+      throw new Error(
+        `token_details missing teamId: ${JSON.stringify(details)}`,
+      );
 
     const userId = `convex:${teamId}`;
     const sessionToken = crypto.randomUUID();
@@ -62,6 +91,8 @@ export const exchangeCode = action({
       convexTeamId: teamId,
       managementToken: accessToken,
       expiresAt,
+      email: details.email,
+      name: details.name,
     });
 
     return sessionToken;
@@ -75,14 +106,20 @@ export const createSession = internalMutation({
     convexTeamId: v.number(),
     managementToken: v.string(),
     expiresAt: v.number(),
+    email: v.optional(v.string()),
+    name: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const now = Date.now();
+    const normalizedEmail = args.email?.toLowerCase().trim() || undefined;
+    const email = await resolveSafeEmail(ctx, args.userId, normalizedEmail);
 
     // 1. Find or create the team (by Convex team ID)
     const existingTeam = await ctx.db
       .query("teams")
-      .withIndex("by_convexTeamId", (q) => q.eq("convexTeamId", args.convexTeamId))
+      .withIndex("by_convexTeamId", (q) =>
+        q.eq("convexTeamId", args.convexTeamId),
+      )
       .unique();
 
     let teamId: import("./_generated/dataModel").Id<"teams">;
@@ -112,7 +149,18 @@ export const createSession = internalMutation({
     if (!existingUser) {
       await ctx.db.insert("users", {
         userId: args.userId,
+        email,
+        name: args.name,
         createdAt: now,
+      });
+    } else if (
+      (email && !existingUser.email) ||
+      (args.name && !existingUser.name)
+    ) {
+      // Backfill email/name if we now have it but didn't before
+      await ctx.db.patch("users", existingUser._id, {
+        ...(email && !existingUser.email ? { email } : {}),
+        ...(args.name && !existingUser.name ? { name: args.name } : {}),
       });
     }
 

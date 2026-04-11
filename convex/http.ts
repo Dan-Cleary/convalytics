@@ -7,6 +7,7 @@ import {
   QUOTA_NOTIFY_THRESHOLDS,
   UNCLAIMED_PROJECTS_PER_IP_PER_HOUR,
 } from "./plans";
+import { parseUA } from "./ua";
 
 const http = httpRouter();
 const [QUOTA_NOTIFY_80_PCT, QUOTA_NOTIFY_100_PCT] = QUOTA_NOTIFY_THRESHOLDS;
@@ -210,6 +211,8 @@ http.route({
     const visitorId = userId;
 
     if (name === "page_view") {
+      const country = req.headers.get("cf-ipcountry") ?? undefined;
+      const ua = parseUA(req.headers.get("user-agent") ?? "");
       await ctx.runMutation(internal.pageviews.ingest, {
         writeKey,
         visitorId,
@@ -242,6 +245,10 @@ http.route({
           typeof cleanProps.utm_campaign === "string"
             ? cleanProps.utm_campaign
             : undefined,
+        country,
+        deviceType: ua.deviceType,
+        browser: ua.browser,
+        osName: ua.osName,
       });
     } else {
       await ctx.runMutation(internal.events.ingest, {
@@ -848,6 +855,10 @@ http.route({
       utm_source?: string;
       utm_medium?: string;
       utm_campaign?: string;
+      country?: string;
+      deviceType?: string;
+      browser?: string;
+      osName?: string;
     };
     const valid: Array<ValidatedEvent | ValidatedPageview> = [];
 
@@ -986,6 +997,8 @@ http.route({
             /* ignore */
           }
         }
+        const batchCountry = req.headers.get("cf-ipcountry") ?? undefined;
+        const batchUA = parseUA(req.headers.get("user-agent") ?? "");
         valid.push({
           type: "pageview",
           writeKey,
@@ -1017,6 +1030,10 @@ http.route({
             typeof cleanProps.utm_campaign === "string"
               ? cleanProps.utm_campaign
               : undefined,
+          country: batchCountry,
+          deviceType: batchUA.deviceType,
+          browser: batchUA.browser,
+          osName: batchUA.osName,
         });
       } else {
         valid.push({

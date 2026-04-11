@@ -13,8 +13,13 @@ import type * as authHelpers from "../authHelpers.js";
 import type * as billing from "../billing.js";
 import type * as crons from "../crons.js";
 import type * as deploymentTypes from "../deploymentTypes.js";
+import type * as emails_Base from "../emails/Base.js";
+import type * as emails_InviteEmail from "../emails/InviteEmail.js";
+import type * as emails_QuotaEmail from "../emails/QuotaEmail.js";
+import type * as emails_WelcomeEmail from "../emails/WelcomeEmail.js";
 import type * as events from "../events.js";
 import type * as http from "../http.js";
+import type * as invites from "../invites.js";
 import type * as notifications from "../notifications.js";
 import type * as oauth from "../oauth.js";
 import type * as pageviews from "../pageviews.js";
@@ -23,6 +28,7 @@ import type * as projects from "../projects.js";
 import type * as rateLimit from "../rateLimit.js";
 import type * as retention from "../retention.js";
 import type * as stats from "../stats.js";
+import type * as ua from "../ua.js";
 import type * as usage from "../usage.js";
 
 import type {
@@ -37,8 +43,13 @@ declare const fullApi: ApiFromModules<{
   billing: typeof billing;
   crons: typeof crons;
   deploymentTypes: typeof deploymentTypes;
+  "emails/Base": typeof emails_Base;
+  "emails/InviteEmail": typeof emails_InviteEmail;
+  "emails/QuotaEmail": typeof emails_QuotaEmail;
+  "emails/WelcomeEmail": typeof emails_WelcomeEmail;
   events: typeof events;
   http: typeof http;
+  invites: typeof invites;
   notifications: typeof notifications;
   oauth: typeof oauth;
   pageviews: typeof pageviews;
@@ -47,6 +58,7 @@ declare const fullApi: ApiFromModules<{
   rateLimit: typeof rateLimit;
   retention: typeof retention;
   stats: typeof stats;
+  ua: typeof ua;
   usage: typeof usage;
 }>;
 

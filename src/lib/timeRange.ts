@@ -28,10 +28,16 @@ export interface Range {
 }
 
 export const RANGES: Range[] = [
-  { key: "7d",  label: "7D",  days: 7,    minRetentionDays: 0    },
-  { key: "30d", label: "30D", days: 30,   minRetentionDays: 0    },
-  { key: "90d", label: "90D", days: 90,   minRetentionDays: 90   },
-  { key: "1y",  label: "1Y",  days: 365,  minRetentionDays: 365, upgradeLabel: "Solo" },
+  { key: "7d", label: "7D", days: 7, minRetentionDays: 0 },
+  { key: "30d", label: "30D", days: 30, minRetentionDays: 0 },
+  { key: "90d", label: "90D", days: 90, minRetentionDays: 90 },
+  {
+    key: "1y",
+    label: "1Y",
+    days: 365,
+    minRetentionDays: 365,
+    upgradeLabel: "Solo",
+  },
   {
     key: "all",
     label: "All",
@@ -54,14 +60,6 @@ export function sinceForRange(key: RangeKey): number {
 // so the extra history is immediately visible rather than hidden behind a click.
 export function defaultRangeForRetention(retentionDays: number): RangeKey {
   if (retentionDays >= MAX_RETENTION_DAYS) return "90d"; // Pro
-  if (retentionDays >= 365) return "30d";               // Solo
-  return "7d";                                          // Free
-}
-
-// The best range the plan can actually show — used for the "more history" hint.
-export function maxRangeForRetention(retentionDays: number): RangeKey {
-  if (retentionDays >= MAX_RETENTION_DAYS) return "all";
-  if (retentionDays >= 365) return "1y";
-  if (retentionDays >= 90) return "90d";
-  return "30d";
+  if (retentionDays >= 365) return "30d"; // Solo
+  return "7d"; // Free
 }

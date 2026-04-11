@@ -11,6 +11,7 @@ interface EventsPageProps {
   projectName: string;
   environment?: string;
   retentionDays: number;
+  onNavigateBilling?: () => void;
 }
 
 const CARD_STYLE = {
@@ -19,7 +20,7 @@ const CARD_STYLE = {
   boxShadow: "4px 4px 0px #1a1814",
 };
 
-export function EventsPage({ sessionToken, writeKey, projectName, environment, retentionDays }: EventsPageProps) {
+export function EventsPage({ sessionToken, writeKey, projectName, environment, retentionDays, onNavigateBilling }: EventsPageProps) {
   const [userRange, setUserRange] = useState<RangeKey | null>(null);
   const range = userRange ?? defaultRangeForRetention(retentionDays);
   const since = sinceForRange(range);
@@ -49,7 +50,7 @@ export function EventsPage({ sessionToken, writeKey, projectName, environment, r
           <span style={{ color: "#c4bfb2" }}>·</span>
           <span className="text-xs" style={{ color: "#9b9488" }}>{projectName}</span>
         </div>
-        <TimeRangePicker value={range} onChange={setUserRange} retentionDays={retentionDays} />
+        <TimeRangePicker value={range} onChange={setUserRange} retentionDays={retentionDays} onUpgrade={onNavigateBilling} />
       </div>
 
       <div className="p-6 flex flex-col gap-5">

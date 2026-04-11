@@ -10,6 +10,7 @@ interface PagesPageProps {
   projectName: string;
   environment?: string;
   retentionDays: number;
+  onNavigateBilling?: () => void;
 }
 
 const CARD_STYLE = {
@@ -18,12 +19,13 @@ const CARD_STYLE = {
   boxShadow: "4px 4px 0px #1a1814",
 };
 
-export function PagesPage({ sessionToken, writeKey, projectName, environment, retentionDays }: PagesPageProps) {
+export function PagesPage({ sessionToken, writeKey, projectName, environment, retentionDays, onNavigateBilling }: PagesPageProps) {
   const [userRange, setUserRange] = useState<RangeKey | null>(null);
   const range = userRange ?? defaultRangeForRetention(retentionDays);
   const rangeLabel = range === "all" ? "all time" : `last ${range}`;
   const since = sinceForRange(range);
   const topPages = useQuery(api.pageviews.topPages, { sessionToken, writeKey, environment, since });
+  const breakdowns = useQuery(api.pageviews.breakdowns, { sessionToken, writeKey, environment, since });
   const [filter, setFilter] = useState("");
 
   const filtered = (topPages ?? []).filter((p) =>
@@ -50,7 +52,7 @@ export function PagesPage({ sessionToken, writeKey, projectName, environment, re
               {filtered.length} page{filtered.length !== 1 ? "s" : ""}
             </span>
           )}
-          <TimeRangePicker value={range} onChange={setUserRange} retentionDays={retentionDays} />
+          <TimeRangePicker value={range} onChange={setUserRange} retentionDays={retentionDays} onUpgrade={onNavigateBilling} />
         </div>
       </div>
 
@@ -134,6 +136,16 @@ export function PagesPage({ sessionToken, writeKey, projectName, environment, re
             Showing top {Math.min(20, topPages.length)} pages for {rangeLabel}.
           </p>
         )}
+
+        {/* Breakdowns: Countries, Devices, Browsers, OS */}
+        {breakdowns && (breakdowns.countries.length > 0 || breakdowns.devices.length > 0 || breakdowns.browsers.length > 0 || breakdowns.os.length > 0) && (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mt-2">
+            <BreakdownCard title="Countries" label="PAGE VIEWS" items={breakdowns.countries} formatName={countryName} />
+            <BreakdownCard title="Devices" label="PAGE VIEWS" items={breakdowns.devices} />
+            <BreakdownCard title="Browsers" label="PAGE VIEWS" items={breakdowns.browsers} />
+            <BreakdownCard title="Operating Systems" label="PAGE VIEWS" items={breakdowns.os} />
+          </div>
+        )}
       </div>
     </div>
   );
@@ -154,4 +166,75 @@ function Th({
       {children}
     </th>
   );
+}
+
+function BreakdownCard({
+  title,
+  label,
+  items,
+  formatName,
+}: {
+  title: string;
+  label: string;
+  items: { name: string; count: number; percentage: number }[];
+  formatName?: (name: string) => string;
+}) {
+  return (
+    <div style={CARD_STYLE} className="flex flex-col">
+      <div
+        className="flex items-center justify-between px-4 py-2.5"
+        style={{ borderBottom: "2px solid #1a1814" }}
+      >
+        <span className="text-xs font-bold" style={{ color: "#1a1814" }}>
+          {title}
+        </span>
+        <span className="text-[10px] font-bold uppercase tracking-wider" style={{ color: "#9b9488" }}>
+          {label}
+        </span>
+      </div>
+      {items.length === 0 ? (
+        <p className="px-4 py-6 text-xs text-center" style={{ color: "#c4bfb2" }}>
+          No data yet
+        </p>
+      ) : (
+        <div className="flex flex-col">
+          {items.map((item) => (
+            <div
+              key={item.name}
+              className="flex items-center justify-between px-4 py-2 transition-colors"
+              style={{ borderBottom: "1px solid #f0ede6" }}
+              onMouseEnter={(e) => (e.currentTarget.style.background = "#f5f2eb")}
+              onMouseLeave={(e) => (e.currentTarget.style.background = "")}
+            >
+              <span className="text-xs" style={{ color: "#1a1814" }}>
+                {formatName ? formatName(item.name) : item.name}
+              </span>
+              <span className="text-xs font-bold tabular-nums" style={{ color: "#1a1814" }}>
+                {item.percentage}%
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+const COUNTRY_NAMES: Record<string, string> = {
+  US: "United States", GB: "United Kingdom", CA: "Canada", AU: "Australia",
+  DE: "Germany", FR: "France", JP: "Japan", CN: "China", IN: "India",
+  BR: "Brazil", KR: "South Korea", MX: "Mexico", IT: "Italy", ES: "Spain",
+  NL: "Netherlands", SE: "Sweden", NO: "Norway", DK: "Denmark", FI: "Finland",
+  CH: "Switzerland", AT: "Austria", BE: "Belgium", PL: "Poland", PT: "Portugal",
+  IE: "Ireland", NZ: "New Zealand", SG: "Singapore", HK: "Hong Kong",
+  TW: "Taiwan", IL: "Israel", ZA: "South Africa", AR: "Argentina",
+  CO: "Colombia", CL: "Chile", TR: "Turkey", RU: "Russia", UA: "Ukraine",
+  CZ: "Czech Republic", RO: "Romania", GR: "Greece", TH: "Thailand",
+  PH: "Philippines", MY: "Malaysia", ID: "Indonesia", VN: "Vietnam",
+  EG: "Egypt", NG: "Nigeria", KE: "Kenya", PK: "Pakistan", BD: "Bangladesh",
+  AE: "UAE", SA: "Saudi Arabia", QA: "Qatar", PE: "Peru",
+};
+
+function countryName(code: string): string {
+  return COUNTRY_NAMES[code] ?? code;
 }

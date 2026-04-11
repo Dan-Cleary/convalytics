@@ -21,6 +21,10 @@ export const ingestBatch = internalMutation({
         utm_source: v.optional(v.string()),
         utm_medium: v.optional(v.string()),
         utm_campaign: v.optional(v.string()),
+        country: v.optional(v.string()),
+        deviceType: v.optional(v.string()),
+        browser: v.optional(v.string()),
+        osName: v.optional(v.string()),
       }),
     ),
   },
@@ -46,6 +50,10 @@ export const ingest = internalMutation({
     utm_source: v.optional(v.string()),
     utm_medium: v.optional(v.string()),
     utm_campaign: v.optional(v.string()),
+    country: v.optional(v.string()),
+    deviceType: v.optional(v.string()),
+    browser: v.optional(v.string()),
+    osName: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     let referrerHost = "";
@@ -381,5 +389,75 @@ export const timeSeries = query({
     }
 
     return result;
+  },
+});
+
+// Breakdowns for countries, devices, browsers, and OS — single query, four dimensions.
+export const breakdowns = query({
+  args: {
+    sessionToken: v.string(),
+    writeKey: v.string(),
+    environment: v.optional(v.string()),
+    since: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const project = await validateProjectAccess(
+      ctx,
+      args.sessionToken,
+      args.writeKey,
+    );
+    if (!project)
+      return { countries: [], devices: [], browsers: [], os: [] };
+
+    const startTime = args.since ?? Date.now() - 7 * 24 * 60 * 60 * 1000;
+    const rows = args.environment
+      ? await ctx.db
+          .query("pageviews")
+          .withIndex("by_writeKey_and_environment_and_timestamp", (q) =>
+            q
+              .eq("writeKey", args.writeKey)
+              .eq("environment", args.environment)
+              .gte("timestamp", startTime),
+          )
+          .order("desc")
+          .take(10000)
+      : await ctx.db
+          .query("pageviews")
+          .withIndex("by_writeKey_and_timestamp", (q) =>
+            q.eq("writeKey", args.writeKey).gte("timestamp", startTime),
+          )
+          .order("desc")
+          .take(10000);
+
+    const countryMap = new Map<string, number>();
+    const deviceMap = new Map<string, number>();
+    const browserMap = new Map<string, number>();
+    const osMap = new Map<string, number>();
+
+    for (const r of rows) {
+      if (r.country) countryMap.set(r.country, (countryMap.get(r.country) ?? 0) + 1);
+      if (r.deviceType) deviceMap.set(r.deviceType, (deviceMap.get(r.deviceType) ?? 0) + 1);
+      if (r.browser) browserMap.set(r.browser, (browserMap.get(r.browser) ?? 0) + 1);
+      if (r.osName) osMap.set(r.osName, (osMap.get(r.osName) ?? 0) + 1);
+    }
+
+    function topN(map: Map<string, number>, n: number) {
+      const denom = [...map.values()].reduce((s, v) => s + v, 0) || 1;
+      return [...map.entries()]
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, n)
+        .map(([name, count]) => ({
+          name,
+          count,
+          percentage: Math.round((count / denom) * 100),
+        }));
+    }
+
+    return {
+      countries: topN(countryMap, 10),
+      devices: topN(deviceMap, 5),
+      browsers: topN(browserMap, 10),
+      os: topN(osMap, 10),
+    };
   },
 });
