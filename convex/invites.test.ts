@@ -288,7 +288,7 @@ describe("invites.createInvite", () => {
     expect(result).toEqual({ ok: true });
   });
 
-  test("schedules encrypted invite token instead of plaintext token", async () => {
+  test("schedules plaintext invite token for email action", async () => {
     const t = convexTest(schema, modules);
     const { sessionToken } = await setupOwner(t);
 
@@ -305,9 +305,9 @@ describe("invites.createInvite", () => {
 
     expect(scheduled).toHaveLength(1);
     const args = scheduled[0].args[0] as Record<string, unknown>;
-    expect(typeof args.tokenCiphertext).toBe("string");
-    expect((args.tokenCiphertext as string).includes(":")).toBe(true);
-    expect("token" in args).toBe(false);
+    expect(typeof args.token).toBe("string");
+    expect((args.token as string).length).toBeGreaterThan(0);
+    expect("tokenCiphertext" in args).toBe(false);
   });
 });
 

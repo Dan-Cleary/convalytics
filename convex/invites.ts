@@ -27,12 +27,6 @@ import { FROM, REPLY_TO, resend } from "./emailConfig";
 const INVITE_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
 const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
 
-function bytesToHex(bytes: Uint8Array): string {
-  return Array.from(bytes)
-    .map((b) => b.toString(16).padStart(2, "0"))
-    .join("");
-}
-
 function hexToBytes(hex: string): Uint8Array {
   const pairs = hex.match(/.{1,2}/g);
   if (!pairs) return new Uint8Array();
@@ -42,25 +36,18 @@ function hexToBytes(hex: string): Uint8Array {
 async function getInviteTokenKey(): Promise<CryptoKey> {
   const secret =
     process.env.INVITE_TOKEN_SECRET ??
-    process.env.CONVEX_OAUTH_CLIENT_SECRET ??
-    "convalytics-invite-token-default-secret";
+    process.env.CONVEX_OAUTH_CLIENT_SECRET;
+  if (!secret) {
+    throw new Error(
+      "Missing invite token secret; set INVITE_TOKEN_SECRET or CONVEX_OAUTH_CLIENT_SECRET",
+    );
+  }
   const secretBytes = new TextEncoder().encode(secret);
   const digest = await crypto.subtle.digest("SHA-256", secretBytes);
   return await crypto.subtle.importKey("raw", digest, "AES-GCM", false, [
     "encrypt",
     "decrypt",
   ]);
-}
-
-async function encryptInviteToken(token: string): Promise<string> {
-  const iv = crypto.getRandomValues(new Uint8Array(12));
-  const key = await getInviteTokenKey();
-  const encrypted = await crypto.subtle.encrypt(
-    { name: "AES-GCM", iv },
-    key,
-    new TextEncoder().encode(token),
-  );
-  return `${bytesToHex(iv)}:${bytesToHex(new Uint8Array(encrypted))}`;
 }
 
 async function decryptInviteToken(ciphertext: string): Promise<string> {
@@ -274,7 +261,6 @@ export const createInvite = mutation({
       crypto.randomUUID().replace(/-/g, "") +
       crypto.randomUUID().replace(/-/g, "");
     const tokenHash = await hashInviteToken(token);
-    const tokenCiphertext = await encryptInviteToken(token);
 
     await ctx.db.insert("teamInvites", {
       teamId,
@@ -290,7 +276,7 @@ export const createInvite = mutation({
     await ctx.scheduler.runAfter(0, internal.invites.sendInviteEmail, {
       toEmail: email,
       teamName: team?.name ?? "your team",
-      tokenCiphertext,
+      token,
       role: args.role,
     });
 
