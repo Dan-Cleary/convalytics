@@ -104,16 +104,14 @@ export const stripeWebhook = httpAction(async (ctx, req) => {
 | `writeKey` | `string` | Yes | Your Convalytics project write key |
 | `ingestUrl` | `string` | No | Override ingest endpoint (for local dev) |
 
-### `analytics.configure(ctx)`
-
-Stores config in the component's database. Call once on deploy. Safe to call repeatedly — upserts.
-
 ### `analytics.track(ctx, event)`
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
 | `name` | `string` | Yes | Event name (e.g. `"user_signed_up"`) |
 | `userId` | `string` | Yes | Stable user identifier |
+| `userEmail` | `string` | No | User email — shown in dashboard instead of raw ID |
+| `userName` | `string` | No | User display name — shown in dashboard |
 | `sessionId` | `string` | No | Session ID (auto-generated if omitted) |
 | `timestamp` | `number` | No | Unix ms timestamp (defaults to `Date.now()`) |
 | `props` | `Record<string, string \| number \| boolean>` | No | Additional properties |
@@ -125,16 +123,22 @@ Events are delivered asynchronously and never throw — analytics failures are l
 For browser page view tracking, add to your `<head>`:
 
 ```html
-<script defer src="https://peaceful-bobcat-731.convex.site/script.js?key=YOUR_WRITE_KEY"></script>
+<script defer src="https://YOUR_CONVEX_SITE_URL/script.js?key=YOUR_WRITE_KEY"></script>
 ```
+
+Your Convex site URL is shown in the [Convalytics dashboard](https://convalytics.dev) after claiming your project, or use the CLI (below) to insert it automatically.
 
 ## Quick setup via CLI
 
 ```bash
-npx convalytics init YOUR_WRITE_KEY
+npx convalytics init
 ```
 
-Installs the package, patches `convex.config.ts`, creates `convex/analytics.ts`, sets the env var, and inserts the script tag automatically. No configure() call or setup mutation needed.
+Auto-provisions a project, installs the package, patches `convex.config.ts`, creates `convex/analytics.ts`, sets env vars, and inserts the script tag. No write key required — one is created for you. Pass an existing key to reuse a project:
+
+```bash
+npx convalytics init YOUR_WRITE_KEY
+```
 
 Verify the pipeline:
 ```bash
