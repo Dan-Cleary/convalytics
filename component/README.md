@@ -1,4 +1,4 @@
-# @convalytics/convex
+# convalytics-dev
 
 Server-side analytics for Convex apps. Track events reliably from mutations and actions — never blocked by ad blockers, never dropped on page unload.
 
@@ -7,7 +7,7 @@ Pairs with the Convalytics browser script for full-stack analytics: web traffic 
 ## Install
 
 ```bash
-npm install @convalytics/convex
+npm install convalytics-dev
 ```
 
 ## Setup
@@ -18,7 +18,7 @@ Add to `convex/convex.config.ts` (create it if it doesn't exist):
 
 ```typescript
 import { defineApp } from "convex/server";
-import analytics from "@convalytics/convex/convex.config";
+import analytics from "convalytics-dev/convex.config";
 
 const app = defineApp();
 app.use(analytics);
@@ -32,7 +32,7 @@ Create `convex/analytics.ts`:
 
 ```typescript
 import { components } from "./_generated/api";
-import { Convalytics } from "@convalytics/convex";
+import { Convalytics } from "convalytics-dev";
 
 export const analytics = new Convalytics(components.convalytics, {
   writeKey: process.env.CONVALYTICS_WRITE_KEY!,

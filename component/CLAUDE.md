@@ -1,6 +1,6 @@
 # Convalytics — Convex Component
 
-This project uses `@convalytics/convex` for server-side analytics.
+This project uses `convalytics-dev` for server-side analytics.
 
 ## Tracking events
 

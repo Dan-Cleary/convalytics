@@ -172,13 +172,13 @@ npx convalytics verify YOUR_WRITE_KEY
 
 **1. Install the package**
 ```bash
-npm install @convalytics/convex
+npm install convalytics-dev
 ```
 
 **2. Register the component** in `convex/convex.config.ts` (create if missing):
 ```typescript
 import { defineApp } from "convex/server";
-import analytics from "@convalytics/convex/convex.config";
+import analytics from "convalytics-dev/convex.config";
 
 const app = defineApp();
 app.use(analytics);
@@ -189,7 +189,7 @@ export default app;
 **3. Create the singleton** at `convex/analytics.ts`:
 ```typescript
 import { components } from "./_generated/api";
-import { Convalytics } from "@convalytics/convex";
+import { Convalytics } from "convalytics-dev";
 
 export const analytics = new Convalytics(components.convalytics, {
   writeKey: process.env.CONVALYTICS_WRITE_KEY!,
