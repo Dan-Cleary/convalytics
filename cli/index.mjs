@@ -9,7 +9,7 @@ import { createInterface } from "readline";
 
 // ─── Config ─────────────────────────────────────────────────────────────────
 
-const SITE_URL = "https://peaceful-bobcat-731.convex.site";
+const SITE_URL = "https://basic-goshawk-557.convex.site";
 const INGEST_URL = `${SITE_URL}/ingest`;
 const PROVISION_URL = `${SITE_URL}/api/provision`;
 const SCRIPT_URL = `${SITE_URL}/script.js`;
@@ -104,15 +104,15 @@ async function init() {
   }
 
   // 3. Install the component package
-  step("Installing @convalytics/convex...");
+  step("Installing convalytics-dev...");
   const localComponentPath = join(__dirname, "..", "component");
   const useLocal = existsSync(join(localComponentPath, "package.json"));
   try {
     const installTarget = useLocal
       ? `file:${localComponentPath}`
-      : "@convalytics/convex";
+      : "convalytics-dev";
     execSync(`npm install ${installTarget}`, { stdio: "inherit" });
-    ok(`Installed @convalytics/convex${useLocal ? " (local)" : ""}`);
+    ok(`Installed convalytics-dev${useLocal ? " (local)" : ""}`);
   } catch {
     bail("npm install failed. Check your network connection and try again.");
   }
@@ -123,7 +123,7 @@ async function init() {
   if (!existsSync(configPath)) {
     writeFileSync(configPath, [
       `import { defineApp } from "convex/server";`,
-      `import analytics from "@convalytics/convex/convex.config";`,
+      `import analytics from "convalytics-dev/convex.config";`,
       ``,
       `const app = defineApp();`,
       `app.use(analytics);`,
@@ -134,13 +134,13 @@ async function init() {
     ok("Created convex/convex.config.ts");
   } else {
     const src = readFileSync(configPath, "utf8");
-    if (src.includes("@convalytics/convex")) {
+    if (src.includes("convalytics-dev")) {
       ok("convex/convex.config.ts already includes Convalytics");
     } else {
       // Inject import after last import line, and app.use() before export default
       let patched = src;
 
-      const importLine = `import analytics from "@convalytics/convex/convex.config";`;
+      const importLine = `import analytics from "convalytics-dev/convex.config";`;
       // Insert import after the last existing import line
       const lastImportIdx = [...patched.matchAll(/^import .+$/gm)].at(-1);
       if (lastImportIdx !== undefined) {
@@ -169,7 +169,7 @@ async function init() {
   } else {
     writeFileSync(analyticsPath, [
       `import { components } from "./_generated/api";`,
-      `import { Convalytics } from "@convalytics/convex";`,
+      `import { Convalytics } from "convalytics-dev";`,
       ``,
       `// Singleton — import this wherever you need to track events.`,
       `export const analytics = new Convalytics(components.convalytics, {`,
@@ -244,7 +244,7 @@ async function init() {
 
   // 8. Install SKILL.md into project for AI agents
   step("Installing agent skill file...");
-  const skillSrcNpm = join(process.cwd(), "node_modules", "@convalytics", "convex", "SKILL.md");
+  const skillSrcNpm = join(process.cwd(), "node_modules", "convalytics-dev", "SKILL.md");
   const skillSrcLocal = join(localComponentPath, "SKILL.md");
   const skillSrc = existsSync(skillSrcNpm) ? skillSrcNpm : existsSync(skillSrcLocal) ? skillSrcLocal : null;
   const skillDst = join(process.cwd(), ".claude", "skills", "convalytics", "SKILL.md");

@@ -1,5 +1,5 @@
 {
-  "name": "@convalytics/cli",
+  "name": "convalytics",
   "version": "0.1.0",
   "description": "CLI for setting up Convalytics in a Convex project",
   "type": "module",
