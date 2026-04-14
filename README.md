@@ -1,45 +1,63 @@
-# Welcome to your Convex + React (Vite) + Convex Auth app
+# Convalytics
 
-This is a [Convex](https://convex.dev/) project created with [`npm create convex`](https://www.npmjs.com/package/create-convex).
+Web analytics and product event tracking built for [Convex](https://convex.dev) apps.
 
-After the initial setup (<2 minutes) you'll have a working full-stack app using:
+**Dashboard:** [convalytics.dev](https://convalytics.dev)
 
-- Convex as your backend (database, server logic)
-- [React](https://react.dev/) as your frontend (web page interactivity)
-- [Vite](https://vitest.dev/) for optimized web hosting
-- [Tailwind](https://tailwindcss.com/) for building great looking UI
-- [Convex Auth](https://labs.convex.dev/auth) for authentication
+## What is Convalytics?
 
-## Get started
+Convalytics gives Convex apps two things:
 
-If you just cloned this codebase and didn't use `npm create convex`, run:
+1. **Web analytics** — automatic page views, sessions, bounce rate, referrers, and device/browser breakdowns via a lightweight script tag.
+2. **Product event tracking** — track signups, payments, feature usage, and any custom event directly from Convex mutations and actions. Server-side events can't be blocked by ad blockers.
+
+Everything flows into a single dashboard. Projects auto-provision on first event — no account required to start tracking.
+
+## Quick start
+
+```bash
+npx convalytics init
+```
+
+This auto-provisions a project, installs the Convex component, patches your config, sets environment variables, and inserts the browser script tag. Works with Cursor, Claude Code, and other AI coding agents out of the box.
+
+## Packages
+
+| Package | Description |
+|---------|-------------|
+| [`convalytics-dev`](https://www.npmjs.com/package/convalytics-dev) | Convex component for server-side event tracking |
+| [`convalytics`](https://www.npmjs.com/package/convalytics) | CLI for zero-config project setup |
+
+## Project structure
 
 ```
+convalytics/
+  convex/          # Convex backend — dashboard API, ingest, billing, auth
+  src/             # React frontend — dashboard UI
+  component/       # Convex component (published as convalytics-dev on npm)
+  cli/             # CLI (published as convalytics on npm)
+```
+
+## Tech stack
+
+- **Backend:** [Convex](https://convex.dev) — database, server functions, scheduled jobs, real-time queries
+- **Frontend:** React 19, React Router v7, TailwindCSS v4, Vite, Recharts
+- **Hosting:** Vercel (frontend), Convex Cloud (backend)
+- **Billing:** Stripe (usage-based tiers)
+- **Email:** Resend + React Email
+
+## Development
+
+```bash
 npm install
 npm run dev
 ```
 
-If you're reading this README on GitHub and want to use this template, run:
+This starts both the Vite frontend and `convex dev` in parallel.
 
-```
-npm create convex@latest -- -t react-vite-convexauth
-```
+## Links
 
-For more information on how to configure Convex Auth, check out the [Convex Auth docs](https://labs.convex.dev/auth/).
-
-For more examples of different Convex Auth flows, check out this [example repo](https://www.convex.dev/templates/convex-auth).
-
-## Learn more
-
-To learn more about developing your project with Convex, check out:
-
-- The [Tour of Convex](https://docs.convex.dev/get-started) for a thorough introduction to Convex principles.
-- The rest of [Convex docs](https://docs.convex.dev/) to learn about all Convex features.
-- [Stack](https://stack.convex.dev/) for in-depth articles on advanced topics.
-
-## Join the community
-
-Join thousands of developers building full-stack apps with Convex:
-
-- Join the [Convex Discord community](https://convex.dev/community) to get help in real-time.
-- Follow [Convex on GitHub](https://github.com/get-convex/), star and contribute to the open-source implementation of Convex.
+- [Dashboard](https://convalytics.dev)
+- [Component README](./component/README.md)
+- [GitHub](https://github.com/Dan-Cleary/convalytics)
+- [Twitter](https://x.com/DanJCleary)
