@@ -13,6 +13,7 @@ import type * as authHelpers from "../authHelpers.js";
 import type * as billing from "../billing.js";
 import type * as crons from "../crons.js";
 import type * as deploymentTypes from "../deploymentTypes.js";
+import type * as emailConfig from "../emailConfig.js";
 import type * as emails_Base from "../emails/Base.js";
 import type * as emails_InviteEmail from "../emails/InviteEmail.js";
 import type * as emails_QuotaEmail from "../emails/QuotaEmail.js";
@@ -43,6 +44,7 @@ declare const fullApi: ApiFromModules<{
   billing: typeof billing;
   crons: typeof crons;
   deploymentTypes: typeof deploymentTypes;
+  emailConfig: typeof emailConfig;
   "emails/Base": typeof emails_Base;
   "emails/InviteEmail": typeof emails_InviteEmail;
   "emails/QuotaEmail": typeof emails_QuotaEmail;
