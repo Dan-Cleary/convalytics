@@ -1,6 +1,6 @@
 {
   "name": "convalytics-dev",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "description": "Convex component for server-side analytics tracking with Convalytics",
   "type": "module",
   "license": "MIT",
@@ -21,6 +21,14 @@
       "default": "./dist/_generated/component.js"
     }
   },
+  "files": [
+    "dist",
+    "src",
+    "example",
+    "SKILL.md",
+    "CLAUDE.md",
+    "README.md"
+  ],
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "scripts": {

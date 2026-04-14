@@ -134,8 +134,24 @@ async function init() {
     ok("Created convex/convex.config.ts");
   } else {
     const src = readFileSync(configPath, "utf8");
-    if (src.includes("convalytics-dev")) {
-      ok("convex/convex.config.ts already includes Convalytics");
+    // Check for any existing Convalytics config (current or legacy package names)
+    const alreadyConfigured = src.includes("convalytics-dev") || src.includes("@convalytics/convex") || src.includes("convalytics");
+    if (alreadyConfigured) {
+      // If using a legacy package name, update the import to convalytics-dev
+      if (!src.includes("convalytics-dev") && (src.includes("@convalytics/convex"))) {
+        const patched = src.replace(
+          /from\s+["']@convalytics\/convex\/convex\.config["']/g,
+          `from "convalytics-dev/convex.config"`,
+        );
+        if (patched !== src) {
+          writeFileSync(configPath, patched);
+          ok("Updated convex/convex.config.ts import from @convalytics/convex → convalytics-dev");
+        } else {
+          ok("convex/convex.config.ts already includes Convalytics");
+        }
+      } else {
+        ok("convex/convex.config.ts already includes Convalytics");
+      }
     } else {
       // Inject import after last import line, and app.use() before export default
       let patched = src;

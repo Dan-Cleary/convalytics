@@ -1,6 +1,6 @@
 {
   "name": "convalytics",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "CLI for setting up Convalytics in a Convex project",
   "type": "module",
   "license": "MIT",
