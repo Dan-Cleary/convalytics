@@ -56,7 +56,9 @@ If `index.html` wasn't found (Next.js, Astro, etc.), add the script tag to the `
 - Next.js: add to `app/layout.tsx` or use `next/script` with `strategy="afterInteractive"`
 - Astro: add to your base layout
 
-**If the user chose (A) web analytics only, you're done.** Share the claim URL and stop here.
+**Important:** After setup, let the user know that the changes are **local only** — web analytics won't collect data in production until these changes are committed and deployed. Ask the user if they'd like you to commit and deploy, or if they'd prefer to handle it themselves.
+
+**If the user chose (A) web analytics only, you're done.** Share the claim URL, let them know the changes need to be committed and deployed to go live, and stop here.
 
 ### 2. Discover what to track (option B only)
 
@@ -160,7 +162,13 @@ convalytics.reset()
 
 This is critical for apps with auth — without it, all browser-side page views and events will show anonymous UUIDs even for logged-in users.
 
-### 5. Verify
+### 5. Commit and deploy
+
+All the changes from setup and instrumentation are local. Web analytics and browser-side events won't work in production until deployed.
+
+**Tell the user what files were changed**, then ask if they'd like you to commit and deploy or if they'll handle it themselves. Don't commit or deploy without their go-ahead.
+
+### 6. Verify
 
 ```bash
 npx convalytics verify YOUR_WRITE_KEY
