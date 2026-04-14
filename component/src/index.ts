@@ -2,7 +2,7 @@ import type { FunctionReference } from "convex/server";
 
 // The production Convalytics ingest endpoint.
 // Override via options.ingestUrl for local development or self-hosting.
-const DEFAULT_INGEST_URL = "https://peaceful-bobcat-731.convex.site/ingest";
+const DEFAULT_INGEST_URL = "https://basic-goshawk-557.convex.site/ingest";
 
 type TrackArgs = {
   name: string;
@@ -44,7 +44,7 @@ export type { ConvalyticsComponent };
  * ```typescript
  * // convex/analytics.ts
  * import { components } from "./_generated/api";
- * import { Convalytics } from "@convalytics/convex";
+ * import { Convalytics } from "convalytics-dev";
  *
  * export const analytics = new Convalytics(components.convalytics, {
  *   writeKey: process.env.CONVALYTICS_WRITE_KEY!,
