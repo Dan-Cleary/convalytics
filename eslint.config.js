@@ -20,7 +20,6 @@ export default defineConfig([
       "convex/billing.test.ts",
       "convex/invites.test.ts",
       "convex/emails/**",
-      "component/**",
     ],
   },
   {

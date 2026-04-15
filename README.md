@@ -34,9 +34,11 @@ This auto-provisions a project, installs the Convex component, patches your conf
 convalytics/
   convex/          # Convex backend — dashboard API, ingest, billing, auth
   src/             # React frontend — dashboard UI
-  component/       # Convex component (published as convalytics-dev on npm)
   cli/             # CLI (published as convalytics on npm)
 ```
+
+The Convex component (`convalytics-dev` on npm) lives in its own repo:
+[Dan-Cleary/convalytics-convex-component](https://github.com/Dan-Cleary/convalytics-convex-component)
 
 ## Tech stack
 
@@ -58,6 +60,6 @@ This starts both the Vite frontend and `convex dev` in parallel.
 ## Links
 
 - [Dashboard](https://convalytics.dev)
-- [Component README](./component/README.md)
+- [Component repo](https://github.com/Dan-Cleary/convalytics-convex-component)
 - [GitHub](https://github.com/Dan-Cleary/convalytics)
 - [Twitter](https://x.com/DanJCleary)
