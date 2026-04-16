@@ -3,6 +3,7 @@ import { api } from "../../convex/_generated/api";
 import { useState } from "react";
 import { TimeRangePicker } from "../components/TimeRangePicker"
 import { sinceForRange, defaultRangeForRetention, type RangeKey } from "../lib/timeRange";
+import { CountryIcon, DeviceIcon, BrowserIcon, OSIcon } from "../lib/breakdownIcons";
 
 interface PagesPageProps {
   sessionToken: string;
@@ -149,10 +150,31 @@ export function PagesPage({ sessionToken, writeKey, projectName, environment, re
         {/* Breakdowns: Countries, Devices, Browsers, OS */}
         {breakdowns && (breakdowns.countries.length > 0 || breakdowns.devices.length > 0 || breakdowns.browsers.length > 0 || breakdowns.os.length > 0) && (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mt-2">
-            <BreakdownCard title="Countries" label="PAGE VIEWS" items={breakdowns.countries} formatName={countryName} />
-            <BreakdownCard title="Devices" label="PAGE VIEWS" items={breakdowns.devices} />
-            <BreakdownCard title="Browsers" label="PAGE VIEWS" items={breakdowns.browsers} />
-            <BreakdownCard title="Operating Systems" label="PAGE VIEWS" items={breakdowns.os} />
+            <BreakdownCard
+              title="Countries"
+              label="PAGE VIEWS"
+              items={breakdowns.countries}
+              formatName={countryName}
+              renderIcon={(name) => <CountryIcon code={name} />}
+            />
+            <BreakdownCard
+              title="Devices"
+              label="PAGE VIEWS"
+              items={breakdowns.devices}
+              renderIcon={(name) => <DeviceIcon name={name} />}
+            />
+            <BreakdownCard
+              title="Browsers"
+              label="PAGE VIEWS"
+              items={breakdowns.browsers}
+              renderIcon={(name) => <BrowserIcon name={name} />}
+            />
+            <BreakdownCard
+              title="Operating Systems"
+              label="PAGE VIEWS"
+              items={breakdowns.os}
+              renderIcon={(name) => <OSIcon name={name} />}
+            />
           </div>
         )}
       </div>
@@ -182,11 +204,13 @@ function BreakdownCard({
   label,
   items,
   formatName,
+  renderIcon,
 }: {
   title: string;
   label: string;
   items: { name: string; count: number; percentage: number }[];
   formatName?: (name: string) => string;
+  renderIcon?: (name: string) => React.ReactNode;
 }) {
   return (
     <div style={CARD_STYLE} className="flex flex-col">
@@ -215,10 +239,11 @@ function BreakdownCard({
               onMouseEnter={(e) => (e.currentTarget.style.background = "#f5f2eb")}
               onMouseLeave={(e) => (e.currentTarget.style.background = "")}
             >
-              <span className="text-xs" style={{ color: "#1a1814" }}>
-                {formatName ? formatName(item.name) : item.name}
+              <span className="flex items-center gap-2 text-xs truncate" style={{ color: "#1a1814" }}>
+                {renderIcon?.(item.name)}
+                <span className="truncate">{formatName ? formatName(item.name) : item.name}</span>
               </span>
-              <span className="text-xs font-bold tabular-nums" style={{ color: "#1a1814" }}>
+              <span className="text-xs font-bold tabular-nums ml-2 flex-shrink-0" style={{ color: "#1a1814" }}>
                 {item.percentage}%
               </span>
             </div>
