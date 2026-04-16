@@ -302,6 +302,19 @@ function SuccessScreen({
           </button>
         </div>
 
+        <p className="text-[11px] mb-6" style={{ color: "#9b9488" }}>
+          Or point your agent at the full reference:{" "}
+          <a
+            href="/skill.md"
+            target="_blank"
+            rel="noreferrer"
+            className="underline"
+            style={{ color: "#6b6456" }}
+          >
+            convalytics.dev/skill.md
+          </a>
+        </p>
+
         {/* Manual instructions */}
         <div className="flex flex-col gap-6 mb-6">
           {created.map(({ name, writeKey }) => (
