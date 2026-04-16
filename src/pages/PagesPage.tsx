@@ -92,6 +92,15 @@ export function PagesPage({ sessionToken, writeKey, projectName, environment, re
               <p className="text-sm" style={{ color: "#9b9488" }}>
                 {topPages.length === 0 ? "No page views tracked yet." : "No pages match your filter."}
               </p>
+              {topPages.length === 0 && (
+                <p className="text-xs mt-1" style={{ color: "#c4bfb2" }}>
+                  Add the script tag to start tracking. See the{" "}
+                  <a href="/skill.md" target="_blank" rel="noreferrer" className="underline" style={{ color: "#9b9488" }}>
+                    skill file
+                  </a>
+                  .
+                </p>
+              )}
             </div>
           ) : (
             <table className="w-full">

@@ -160,6 +160,15 @@ export function EventsPage({ sessionToken, writeKey, projectName, environment, r
                   <p className="text-sm" style={{ color: "#9b9488" }}>
                     {events.length === 0 ? "No events tracked yet." : "No events match your filter."}
                   </p>
+                  {events.length === 0 && (
+                    <p className="text-xs mt-1" style={{ color: "#c4bfb2" }}>
+                      Instrument event tracking with the{" "}
+                      <a href="/skill.md" target="_blank" rel="noreferrer" className="underline" style={{ color: "#9b9488" }}>
+                        skill file
+                      </a>
+                      .
+                    </p>
+                  )}
                 </div>
               ) : (
                 <table className="w-full">

@@ -207,7 +207,11 @@ export function Overview({ sessionToken, writeKey, projectName, environment, ret
             <div className="px-5 py-10 text-center">
               <p className="text-sm" style={{ color: "#9b9488" }}>No page views yet.</p>
               <p className="text-xs mt-1" style={{ color: "#c4bfb2" }}>
-                Add the script tag to see traffic in real time.
+                Add the script tag to see traffic in real time. See the{" "}
+                <a href="/skill.md" target="_blank" rel="noreferrer" className="underline" style={{ color: "#9b9488" }}>
+                  skill file
+                </a>
+                .
               </p>
             </div>
           ) : (
@@ -303,6 +307,13 @@ Full reference: .claude/skills/convalytics/SKILL.md`;
         </h2>
         <p className="text-xs leading-relaxed" style={{ color: "#6b6456" }}>
           Paste the agent prompt into Claude Code, Cursor, or any AI assistant — it handles the full setup.
+        </p>
+        <p className="text-[11px] mt-2" style={{ color: "#9b9488" }}>
+          Or point your agent at the{" "}
+          <a href="/skill.md" target="_blank" rel="noreferrer" className="underline" style={{ color: "#6b6456" }}>
+            skill file
+          </a>
+          .
         </p>
       </div>
 

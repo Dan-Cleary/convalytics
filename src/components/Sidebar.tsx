@@ -165,8 +165,19 @@ export function Sidebar({
         </div>
       </div>
 
-      {/* Sign out */}
-      <div className="px-4 py-3 border-t border-[#2e2a22]">
+      {/* Footer links */}
+      <div className="px-4 py-3 border-t border-[#2e2a22] flex items-center justify-between">
+        <a
+          href="/skill.md"
+          target="_blank"
+          rel="noreferrer"
+          className="text-xs uppercase tracking-wider transition-colors cursor-pointer"
+          style={{ color: "#6b6456" }}
+          onMouseEnter={(e) => (e.currentTarget.style.color = "#e9e6db")}
+          onMouseLeave={(e) => (e.currentTarget.style.color = "#6b6456")}
+        >
+          Skill file
+        </a>
         <button
           className="text-xs uppercase tracking-wider transition-colors cursor-pointer"
           style={{ color: "#6b6456" }}
