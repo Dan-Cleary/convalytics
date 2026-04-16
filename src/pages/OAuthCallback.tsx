@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useAction } from "convex/react";
+import { useNavigate } from "react-router-dom";
 import { api } from "../../convex/_generated/api";
 import { clearPkce, getStoredPkce, getReturnTo, setSessionToken } from "../lib/auth";
 
@@ -11,6 +12,7 @@ export function OAuthCallback({ onSuccess }: OAuthCallbackProps) {
   const exchangeCode = useAction(api.oauth.exchangeCode);
   const [error, setError] = useState<string | null>(null);
   const ran = useRef(false);
+  const navigate = useNavigate();
 
   useEffect(() => {
     if (ran.current) return;
@@ -46,14 +48,14 @@ export function OAuthCallback({ onSuccess }: OAuthCallbackProps) {
         clearPkce();
         setSessionToken(sessionToken);
         const returnTo = getReturnTo();
-        window.history.replaceState({}, "", returnTo ?? "/");
         onSuccess();
+        void navigate(returnTo ?? "/", { replace: true });
       } catch (err) {
         clearPkce();
         setError((err as Error).message ?? "Sign-in failed. Please try again.");
       }
     })();
-  }, [exchangeCode, onSuccess]);
+  }, [exchangeCode, onSuccess, navigate]);
 
   const bg = { background: "#e9e6db" };
 

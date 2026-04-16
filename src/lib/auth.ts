@@ -47,6 +47,8 @@ export async function startOAuthFlow(returnTo?: string) {
   localStorage.setItem(OAUTH_STATE_KEY, state);
   if (returnTo) {
     localStorage.setItem(RETURN_TO_KEY, returnTo);
+  } else {
+    localStorage.removeItem(RETURN_TO_KEY);
   }
 
   const redirectUri = `${window.location.origin}/oauth/callback`;
