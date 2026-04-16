@@ -929,8 +929,8 @@ http.route({
     }
 
     const originHeader = req.headers.get("Origin") ?? "";
-    const batchCountry = await getCountry(req);
-    const batchUA = parseUA(req.headers.get("user-agent") ?? "");
+    let batchCountry: string | undefined | null = null;
+    let batchUA: ReturnType<typeof parseUA> | null = null;
 
     for (const raw of events) {
       if (typeof raw !== "object" || raw === null) {
@@ -1012,6 +1012,10 @@ http.route({
       );
 
       if (name === "page_view") {
+        if (batchCountry === null || batchUA === null) {
+          batchCountry = await getCountry(req);
+          batchUA = parseUA(req.headers.get("user-agent") ?? "");
+        }
         let referrerHost = "";
         const referrer = (
           typeof cleanProps.referrer === "string" ? cleanProps.referrer : ""
