@@ -19,6 +19,7 @@ import type * as emails_InviteEmail from "../emails/InviteEmail.js";
 import type * as emails_QuotaEmail from "../emails/QuotaEmail.js";
 import type * as emails_WelcomeEmail from "../emails/WelcomeEmail.js";
 import type * as events from "../events.js";
+import type * as health from "../health.js";
 import type * as http from "../http.js";
 import type * as invites from "../invites.js";
 import type * as notifications from "../notifications.js";
@@ -50,6 +51,7 @@ declare const fullApi: ApiFromModules<{
   "emails/QuotaEmail": typeof emails_QuotaEmail;
   "emails/WelcomeEmail": typeof emails_WelcomeEmail;
   events: typeof events;
+  health: typeof health;
   http: typeof http;
   invites: typeof invites;
   notifications: typeof notifications;
