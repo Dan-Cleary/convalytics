@@ -2,15 +2,15 @@ name: Uptime check
 
 on:
   schedule:
-    # Every 10 minutes. GitHub cron minimum granularity is 5 min but delivery
-    # is best-effort; 10 min is a reasonable balance of signal and quota.
-    - cron: "*/10 * * * *"
+    # TEMP: every 5 min + force_fail default true to test Slack failure alerts.
+    # REVERT after testing: back to */10 and default: false.
+    - cron: "*/5 * * * *"
   workflow_dispatch:
     inputs:
       force_fail:
         description: "Force the job to fail (for testing Slack alerts)"
         type: boolean
-        default: false
+        default: true
 
 jobs:
   health:
@@ -19,7 +19,8 @@ jobs:
       - name: Check /health
         run: |
           set -euo pipefail
-          if [ "${{ inputs.force_fail }}" = "true" ]; then
+          # TEMP: force fail unless explicitly disabled. Revert this block after testing.
+          if [ "${{ inputs.force_fail }}" != "false" ]; then
             echo "::error::Forced failure for alert testing"
             exit 1
           fi
