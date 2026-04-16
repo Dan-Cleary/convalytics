@@ -2,9 +2,8 @@ name: Uptime check
 
 on:
   schedule:
-    # Every 10 minutes. GitHub cron minimum granularity is 5 min but delivery
-    # is best-effort; 10 min is a reasonable balance of signal and quota.
-    - cron: "*/10 * * * *"
+    # Once a day at 14:00 UTC (10am ET / 7am PT).
+    - cron: "0 14 * * *"
   workflow_dispatch:
     inputs:
       force_fail:
@@ -32,13 +31,3 @@ jobs:
             echo "::error::Health check failed: HTTP $status"
             exit 1
           fi
-
-      - name: Notify Slack on failure
-        if: failure() && env.SLACK_WEBHOOK_URL != ''
-        env:
-          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
-          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-        run: |
-          curl -sS -X POST -H 'Content-Type: application/json' \
-            --data "{\"text\":\":rotating_light: Convalytics uptime check FAILED — <${RUN_URL}|view run>\"}" \
-            "$SLACK_WEBHOOK_URL"
