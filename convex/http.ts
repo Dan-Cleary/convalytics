@@ -663,6 +663,35 @@ http.route({
   }),
 });
 
+// Lightweight health check for uptime monitors (BetterStack, UptimeRobot, etc.).
+// Returns 200 if the Convex deployment is reachable and the DB responds.
+// Never auths, never writes, never reveals internal state.
+http.route({
+  path: "/health",
+  method: "GET",
+  handler: httpAction(async (ctx) => {
+    try {
+      // Touch the DB with the cheapest possible query to confirm it's reachable.
+      await ctx.runQuery(internal.health.ping, {});
+      return new Response(JSON.stringify({ status: "ok" }), {
+        status: 200,
+        headers: {
+          "Content-Type": "application/json",
+          "Cache-Control": "no-store",
+        },
+      });
+    } catch {
+      return new Response(JSON.stringify({ status: "error" }), {
+        status: 503,
+        headers: {
+          "Content-Type": "application/json",
+          "Cache-Control": "no-store",
+        },
+      });
+    }
+  }),
+});
+
 // Agent-first: provision an unclaimed project without auth.
 // Returns writeKey + claimUrl. Agent can start tracking immediately.
 http.route({

@@ -1,0 +1,25 @@
+name: Uptime check
+
+on:
+  schedule:
+    # Every 10 minutes. GitHub cron minimum granularity is 5 min but delivery
+    # is best-effort; 10 min is a reasonable balance of signal and quota.
+    - cron: "*/10 * * * *"
+  workflow_dispatch: {}
+
+jobs:
+  health:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check /health
+        run: |
+          set -euo pipefail
+          URL="https://basic-goshawk-557.convex.site/health"
+          status=$(curl -sS -o /tmp/body -w "%{http_code}" --max-time 10 "$URL" || true)
+          echo "HTTP $status"
+          cat /tmp/body || true
+          echo
+          if [ "$status" != "200" ]; then
+            echo "::error::Health check failed: HTTP $status"
+            exit 1
+          fi
