@@ -929,6 +929,8 @@ http.route({
     }
 
     const originHeader = req.headers.get("Origin") ?? "";
+    const batchCountry = await getCountry(req);
+    const batchUA = parseUA(req.headers.get("user-agent") ?? "");
 
     for (const raw of events) {
       if (typeof raw !== "object" || raw === null) {
@@ -1021,8 +1023,6 @@ http.route({
             /* ignore */
           }
         }
-        const batchCountry = req.headers.get("cf-ipcountry") ?? undefined;
-        const batchUA = parseUA(req.headers.get("user-agent") ?? "");
         valid.push({
           type: "pageview",
           writeKey,
