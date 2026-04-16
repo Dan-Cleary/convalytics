@@ -12,15 +12,55 @@ import { parseUA } from "./ua";
 const http = httpRouter();
 const [QUOTA_NOTIFY_80_PCT, QUOTA_NOTIFY_100_PCT] = QUOTA_NOTIFY_THRESHOLDS;
 
+function isValidIpv4(ip: string): boolean {
+  const parts = ip.split(".");
+  if (parts.length !== 4) return false;
+  return parts.every((part) => {
+    if (!/^\d{1,3}$/.test(part)) return false;
+    const value = Number(part);
+    return value >= 0 && value <= 255;
+  });
+}
+
+function isValidIpv6(ip: string): boolean {
+  if (!ip.includes(":") || ip.includes(":::")) return false;
+  if (ip.indexOf("::") !== ip.lastIndexOf("::")) return false;
+
+  const [left = "", right = ""] = ip.split("::");
+  const leftParts = left ? left.split(":") : [];
+  const rightParts = right ? right.split(":") : [];
+  const parts = [...leftParts, ...rightParts];
+
+  let hasIpv4Tail = false;
+  const lastPart = parts[parts.length - 1];
+  if (lastPart?.includes(".")) {
+    if (!isValidIpv4(lastPart)) return false;
+    parts.pop();
+    hasIpv4Tail = true;
+  }
+
+  if (!parts.every((part) => /^[0-9a-fA-F]{1,4}$/.test(part))) return false;
+  const segmentCount = parts.length + (hasIpv4Tail ? 2 : 0);
+  if (ip.includes("::")) return segmentCount < 8;
+  return segmentCount === 8;
+}
+
+function isValidIp(ip: string): boolean {
+  return isValidIpv4(ip) || isValidIpv6(ip);
+}
+
 async function getCountry(req: Request): Promise<string | undefined> {
   // Cloudflare sets this when the request flows through their edge — fast path.
   const cfCountry = req.headers.get("cf-ipcountry");
   if (cfCountry && cfCountry !== "XX") return cfCountry;
 
-  // Fall back to IP geolocation using the client IP from the forwarded header.
-  const forwarded = req.headers.get("x-forwarded-for");
-  const ip = forwarded?.split(",")[0].trim();
-  if (!ip || ip === "127.0.0.1" || ip === "::1") return undefined;
+  // Fall back to IP geolocation using the request IP headers.
+  const ip =
+    req.headers.get("cf-connecting-ip") ??
+    req.headers.get("x-forwarded-for")?.split(",")[0].trim();
+  if (!ip || ip === "127.0.0.1" || ip === "::1" || !isValidIp(ip)) {
+    return undefined;
+  }
 
   try {
     const res = await fetch(`https://api.country.is/${ip}`, {
@@ -292,7 +332,11 @@ http.route({
     // consume quota without storing data.
     if (quotaNotification) {
       try {
-        await ctx.scheduler.runAfter(0, internal.notifications.checkAndNotify, quotaNotification);
+        await ctx.scheduler.runAfter(
+          0,
+          internal.notifications.checkAndNotify,
+          quotaNotification,
+        );
       } catch {
         // Notification failures are non-fatal — data is already written.
       }
