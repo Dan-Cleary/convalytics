@@ -5,7 +5,12 @@ on:
     # Every 10 minutes. GitHub cron minimum granularity is 5 min but delivery
     # is best-effort; 10 min is a reasonable balance of signal and quota.
     - cron: "*/10 * * * *"
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      force_fail:
+        description: "Force the job to fail (for testing Slack alerts)"
+        type: boolean
+        default: false
 
 jobs:
   health:
@@ -14,6 +19,10 @@ jobs:
       - name: Check /health
         run: |
           set -euo pipefail
+          if [ "${{ inputs.force_fail }}" = "true" ]; then
+            echo "::error::Forced failure for alert testing"
+            exit 1
+          fi
           URL="https://basic-goshawk-557.convex.site/health"
           status=$(curl -sS -o /tmp/body -w "%{http_code}" --max-time 10 "$URL" || true)
           echo "HTTP $status"
