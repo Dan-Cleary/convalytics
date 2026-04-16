@@ -119,7 +119,7 @@ describe("projects", () => {
     expect(user2Projects[0].name).toBe("user2-project");
   });
 
-  test("list returns empty array for invalid session token", async () => {
+  test("list returns null for invalid session token", async () => {
     const t = convexTest(schema, modules);
     const { sessionToken, teamId } = await setupSession(t, "user1");
     await t.mutation(api.projects.create, { sessionToken, teamId, name: "my-app" });
@@ -127,7 +127,7 @@ describe("projects", () => {
     const projects = await t.query(api.projects.list, {
       sessionToken: "invalid-token",
     });
-    expect(projects).toEqual([]);
+    expect(projects).toBeNull();
   });
 });
 

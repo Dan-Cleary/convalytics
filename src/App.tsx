@@ -163,6 +163,11 @@ function Dashboard({
     );
   }
 
+  if (projects === null) {
+    onSignOut();
+    return null;
+  }
+
   if (projects.length === 0 || addingProject) {
     return (
       <ProjectSetup

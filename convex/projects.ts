@@ -43,7 +43,7 @@ export const list = query({
   args: { sessionToken: v.string() },
   handler: async (ctx, args) => {
     const session = await validateSession(ctx, args.sessionToken);
-    if (!session) return [];
+    if (!session) return null;
 
     // Get all teams the user is a member of
     const teamIds = await getUserTeamIds(ctx, session.userId);
