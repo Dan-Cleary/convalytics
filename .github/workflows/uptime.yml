@@ -15,7 +15,7 @@ jobs:
         run: |
           set -euo pipefail
           URL="https://basic-goshawk-557.convex.site/health"
-          status=$(curl -sS -o /tmp/body -w "%{http_code}" --max-time 10 "$URL" || echo "000")
+          status=$(curl -sS -o /tmp/body -w "%{http_code}" --max-time 10 "$URL" || true)
           echo "HTTP $status"
           cat /tmp/body || true
           echo
