@@ -2,15 +2,15 @@ name: Uptime check
 
 on:
   schedule:
-    # TEMP: every 5 min + force_fail default true to test Slack failure alerts.
-    # REVERT after testing: back to */10 and default: false.
-    - cron: "*/5 * * * *"
+    # Every 10 minutes. GitHub cron minimum granularity is 5 min but delivery
+    # is best-effort; 10 min is a reasonable balance of signal and quota.
+    - cron: "*/10 * * * *"
   workflow_dispatch:
     inputs:
       force_fail:
         description: "Force the job to fail (for testing Slack alerts)"
         type: boolean
-        default: true
+        default: false
 
 jobs:
   health:
@@ -19,8 +19,7 @@ jobs:
       - name: Check /health
         run: |
           set -euo pipefail
-          # TEMP: force fail unless explicitly disabled. Revert this block after testing.
-          if [ "${{ inputs.force_fail }}" != "false" ]; then
+          if [ "${{ inputs.force_fail }}" = "true" ]; then
             echo "::error::Forced failure for alert testing"
             exit 1
           fi
@@ -33,3 +32,13 @@ jobs:
             echo "::error::Health check failed: HTTP $status"
             exit 1
           fi
+
+      - name: Notify Slack on failure
+        if: failure() && env.SLACK_WEBHOOK_URL != ''
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          curl -sS -X POST -H 'Content-Type: application/json' \
+            --data "{\"text\":\":rotating_light: Convalytics uptime check FAILED — <${RUN_URL}|view run>\"}" \
+            "$SLACK_WEBHOOK_URL"
