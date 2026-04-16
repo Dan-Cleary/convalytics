@@ -186,7 +186,7 @@ async function init() {
       `// The write key is safe to commit: it's a public ingest identifier that`,
       `// ships in the browser script tag too.`,
       `export const analytics = new Convalytics(components.convalytics, {`,
-      `  writeKey: "${writeKey}",`,
+      `  writeKey: ${JSON.stringify(writeKey)},`,
       `});`,
       ``,
     ].join("\n"));
