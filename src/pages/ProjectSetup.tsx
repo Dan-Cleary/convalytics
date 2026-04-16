@@ -6,10 +6,11 @@ import { getConvexSiteUrl } from "../lib/convex";
 
 function buildAgentPrompt(projects: CreatedProject[]): string {
   const sections: string[] = [];
+  const siteUrl = getConvexSiteUrl();
 
   for (const { name, writeKey } of projects) {
     const header = projects.length > 1 ? `## ${name}\n\n` : "";
-    const scriptTag = `<script defer src="https://YOUR_CONVEX_SITE_URL/script.js?key=${writeKey}"></script>`;
+    const scriptTag = `<script defer src="${siteUrl}/script.js?key=${writeKey}"></script>`;
     sections.push(
       `${header}First, ask me: do I want (A) web analytics only — page views, sessions, bounce\nrate — or (B) web analytics + product analytics for signups, payments, etc.?\n\n` +
       `## Option A — Web analytics only\n\n` +
