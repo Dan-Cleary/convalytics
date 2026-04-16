@@ -12,6 +12,30 @@ import { parseUA } from "./ua";
 const http = httpRouter();
 const [QUOTA_NOTIFY_80_PCT, QUOTA_NOTIFY_100_PCT] = QUOTA_NOTIFY_THRESHOLDS;
 
+async function getCountry(req: Request): Promise<string | undefined> {
+  // Cloudflare sets this when the request flows through their edge — fast path.
+  const cfCountry = req.headers.get("cf-ipcountry");
+  if (cfCountry && cfCountry !== "XX") return cfCountry;
+
+  // Fall back to IP geolocation using the client IP from the forwarded header.
+  const forwarded = req.headers.get("x-forwarded-for");
+  const ip = forwarded?.split(",")[0].trim();
+  if (!ip || ip === "127.0.0.1" || ip === "::1") return undefined;
+
+  try {
+    const res = await fetch(`https://api.country.is/${ip}`, {
+      signal: AbortSignal.timeout(500),
+    });
+    if (res.ok) {
+      const data = (await res.json()) as { country?: string };
+      return typeof data.country === "string" ? data.country : undefined;
+    }
+  } catch {
+    // Lookup failed or timed out — country stays undefined.
+  }
+  return undefined;
+}
+
 function corsHeaders(req: Request) {
   const origin = req.headers.get("Origin") ?? "*";
   return {
@@ -211,7 +235,7 @@ http.route({
     const visitorId = userId;
 
     if (name === "page_view") {
-      const country = req.headers.get("cf-ipcountry") ?? undefined;
+      const country = await getCountry(req);
       const ua = parseUA(req.headers.get("user-agent") ?? "");
       await ctx.runMutation(internal.pageviews.ingest, {
         writeKey,
