@@ -8,7 +8,6 @@ import {
   internalAction,
 } from "./_generated/server";
 import { internal } from "./_generated/api";
-import type { ActionCtx } from "./_generated/server";
 import { validateSession, getUserTeamIds } from "./authHelpers";
 import { render } from "@react-email/render";
 import { WelcomeEmail } from "./emails/WelcomeEmail";
@@ -219,38 +218,6 @@ export const provision = internalMutation({
   },
 });
 
-async function cacheDeploymentTypes(
-  ctx: ActionCtx,
-  projectId: number,
-  managementToken: string,
-  writeKey: string,
-) {
-  try {
-    const url = `https://api.convex.dev/v1/projects/${projectId}/list_deployments`;
-    const resp = await fetch(url, {
-      headers: { Authorization: `Bearer ${managementToken}` },
-    });
-    if (!resp.ok) return;
-
-    const deployments = (await resp.json()) as Array<{
-      name: string;
-      deploymentType: string;
-    }>;
-
-    for (const d of deployments) {
-      if (d.name && d.deploymentType) {
-        await ctx.runMutation(internal.deploymentTypes.cache, {
-          writeKey,
-          deploymentName: d.name,
-          deploymentType: d.deploymentType,
-        });
-      }
-    }
-  } catch {
-    // Non-fatal
-  }
-}
-
 // Claim an unclaimed project: resolve deployment slug via Management API, then finalize.
 export const claim = action({
   args: { sessionToken: v.string(), claimToken: v.string() },
@@ -276,6 +243,11 @@ export const claim = action({
 
     // If we have a deployment slug, resolve it to a Management API project ID
     // and cache all deployment types for environment tagging.
+    //
+    // The deployment slug (e.g. "uncommon-sandpiper-123") identifies a *deployment*,
+    // not a *project*, so we can't compare it against the project list directly.
+    // Instead, walk each project's deployments and find the one whose `name`
+    // matches our stored slug.
     let convexProjectId: string | undefined;
     const isConvexOauthUser = session.userId.startsWith("convex:");
     const convexTeamId = isConvexOauthUser
@@ -288,28 +260,57 @@ export const claim = action({
       convexTeamId !== "undefined"
     ) {
       try {
-        const url = `https://api.convex.dev/v1/teams/${convexTeamId}/list_projects`;
-        const resp = await fetch(url, {
+        const listProjectsUrl = `https://api.convex.dev/v1/teams/${convexTeamId}/list_projects`;
+        const projectsResp = await fetch(listProjectsUrl, {
           headers: { Authorization: `Bearer ${session.managementToken}` },
         });
-        if (resp.ok) {
-          const apiProjects = (await resp.json()) as Array<{
+        if (projectsResp.ok) {
+          const apiProjects = (await projectsResp.json()) as Array<{
             id: number;
             name: string;
             slug: string;
           }>;
-          const matched = apiProjects.find(
-            (p) => p.slug === project.convexDeploymentSlug,
+
+          // Walk each project's deployments looking for a name match.
+          // Query in parallel; stop at the first match.
+          const matches = await Promise.all(
+            apiProjects.map(async (p) => {
+              try {
+                const depUrl = `https://api.convex.dev/v1/projects/${p.id}/list_deployments`;
+                const depResp = await fetch(depUrl, {
+                  headers: {
+                    Authorization: `Bearer ${session.managementToken}`,
+                  },
+                });
+                if (!depResp.ok) return null;
+                const deployments = (await depResp.json()) as Array<{
+                  name: string;
+                  deploymentType: string;
+                }>;
+                const hit = deployments.find(
+                  (d) => d.name === project.convexDeploymentSlug,
+                );
+                return hit ? { project: p, deployments } : null;
+              } catch {
+                return null;
+              }
+            }),
           );
+
+          const matched = matches.find((m) => m !== null);
           if (matched) {
-            convexProjectId = String(matched.id);
+            convexProjectId = String(matched.project.id);
             if (project.writeKey) {
-              await cacheDeploymentTypes(
-                ctx,
-                matched.id,
-                session.managementToken ?? "",
-                project.writeKey,
-              );
+              // Reuse the deployments we already fetched rather than round-tripping again.
+              for (const d of matched.deployments) {
+                if (d.name && d.deploymentType) {
+                  await ctx.runMutation(internal.deploymentTypes.cache, {
+                    writeKey: project.writeKey,
+                    deploymentName: d.name,
+                    deploymentType: d.deploymentType,
+                  });
+                }
+              }
             }
           }
         }

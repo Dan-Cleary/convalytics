@@ -6,14 +6,19 @@ import { getConvexSiteUrl } from "../lib/convex";
 
 function buildAgentPrompt(projects: CreatedProject[]): string {
   const sections: string[] = [];
+  const siteUrl = getConvexSiteUrl();
 
   for (const { name, writeKey } of projects) {
     const header = projects.length > 1 ? `## ${name}\n\n` : "";
+    const scriptTag = `<script defer src="${siteUrl}/script.js?key=${writeKey}"></script>`;
     sections.push(
       `${header}First, ask me: do I want (A) web analytics only — page views, sessions, bounce\nrate — or (B) web analytics + product analytics for signups, payments, etc.?\n\n` +
       `## Option A — Web analytics only\n\n` +
       `  npx convalytics init ${writeKey}\n\n` +
-      `This adds the script tag to index.html. Page views start flowing automatically.\nDone — no further setup needed.\n\n` +
+      `This adds the script tag to index.html. Page views start flowing automatically.\n` +
+      `For non-Vite projects (Next.js, Astro, etc.), add this to <head> manually:\n\n` +
+      `  ${scriptTag}\n\n` +
+      `Done — no further setup needed.\n\n` +
       `## Option B — Web + product analytics\n\n` +
       `  npx convalytics init ${writeKey}\n\n` +
       `Same as above, plus installs the Convex component. Then read convex/schema.ts\n` +

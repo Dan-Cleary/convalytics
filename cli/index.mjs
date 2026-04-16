@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { execSync, spawnSync } from "child_process";
+import { execSync } from "child_process";
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from "fs";
 import { join, dirname } from "path";
 import { fileURLToPath } from "url";
@@ -183,49 +183,17 @@ async function init() {
       `import { Convalytics } from "convalytics-dev";`,
       ``,
       `// Singleton — import this wherever you need to track events.`,
+      `// The write key is safe to commit: it's a public ingest identifier that`,
+      `// ships in the browser script tag too.`,
       `export const analytics = new Convalytics(components.convalytics, {`,
-      `  writeKey: process.env.CONVALYTICS_WRITE_KEY!,`,
-      `  deploymentName: process.env.CONVALYTICS_DEPLOYMENT_NAME,`,
+      `  writeKey: ${JSON.stringify(writeKey)},`,
       `});`,
       ``,
     ].join("\n"));
     ok("Created convex/analytics.ts");
   }
 
-  // 6. Set environment variables via Convex CLI
-  step("Setting CONVALYTICS_WRITE_KEY in Convex environment...");
-  const envResult = spawnSync(
-    "npx",
-    ["convex", "env", "set", "CONVALYTICS_WRITE_KEY", writeKey],
-    { stdio: "inherit" },
-  );
-  if (envResult.status === 0) {
-    ok("Set CONVALYTICS_WRITE_KEY in Convex environment");
-  } else {
-    warn("Could not set env var automatically. Run manually:");
-    warn(`  npx convex env set CONVALYTICS_WRITE_KEY ${writeKey}`);
-  }
-
-  if (convexDeploymentSlug) {
-    if (!isValidDeploymentSlug(convexDeploymentSlug)) {
-      warn(`"${convexDeploymentSlug}" doesn't look like a Convex deployment slug (expected format: word-word-123).`);
-      warn(`Environment tagging may not work correctly. Check your .env.local for the CONVEX_DEPLOYMENT value.`);
-    }
-    step("Setting CONVALYTICS_DEPLOYMENT_NAME for environment tagging...");
-    const dnResult = spawnSync(
-      "npx",
-      ["convex", "env", "set", "CONVALYTICS_DEPLOYMENT_NAME", convexDeploymentSlug],
-      { stdio: "inherit" },
-    );
-    if (dnResult.status === 0) {
-      ok(`Set CONVALYTICS_DEPLOYMENT_NAME = ${convexDeploymentSlug}`);
-    } else {
-      warn("Could not set env var automatically. Run manually:");
-      warn(`  npx convex env set CONVALYTICS_DEPLOYMENT_NAME ${convexDeploymentSlug}`);
-    }
-  }
-
-  // 7. Patch index.html if it exists
+  // 6. Patch index.html if it exists
   const scriptVersion = "2";
   const htmlPath = join(process.cwd(), "index.html");
   if (existsSync(htmlPath)) {
@@ -253,7 +221,7 @@ async function init() {
     }
   }
 
-  // 8. Install SKILL.md into project for AI agents
+  // 7. Install SKILL.md into project for AI agents
   step("Installing agent skill file...");
   const skillSrc = join(process.cwd(), "node_modules", "convalytics-dev", "SKILL.md");
   const skillDst = join(process.cwd(), ".claude", "skills", "convalytics", "SKILL.md");
@@ -271,7 +239,7 @@ async function init() {
     warn("Could not install skill file — add it manually from the docs");
   }
 
-  // 9. Save .convalytics dotfile for claim URL recovery
+  // 8. Save .convalytics dotfile for claim URL recovery
   const dotfilePath = join(process.cwd(), ".convalytics");
   const dotfileData = { writeKey };
   if (claimUrl) dotfileData.claimUrl = claimUrl;
@@ -295,16 +263,15 @@ async function init() {
     warn("Could not save .convalytics config file");
   }
 
-  // 10. Done
+  // 9. Done
   print("\n" + "─".repeat(50));
   print("✅  Setup complete!\n");
 
-  if (claimUrl || (dotfile && dotfile.claimUrl && dotfile.writeKey === writeKey)) {
-    const displayClaimUrl = claimUrl || dotfile.claimUrl;
+  if (claimUrl) {
     print("╔══════════════════════════════════════════════════╗");
     print("║  CLAIM YOUR PROJECT                             ║");
     print("║                                                  ║");
-    print(`║  ${displayClaimUrl}`);
+    print(`║  ${claimUrl}`);
     print("║                                                  ║");
     print("║  Share this link with the project owner to       ║");
     print("║  connect analytics to their Convalytics account. ║");
@@ -426,11 +393,6 @@ function error(msg) { process.stderr.write(`  ✗ ${msg}\n`); }
 function bail(msg) {
   error(msg);
   process.exit(1);
-}
-
-function isValidDeploymentSlug(slug) {
-  // Expect Convex production deployment slug format: word-word-123
-  return /^[a-z]+-[a-z]+-\d+$/.test(slug);
 }
 
 function prompt(question) {
