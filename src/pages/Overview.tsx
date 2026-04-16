@@ -291,7 +291,7 @@ Wait for me to approve, then instrument each with:
 
 Verify: npx convalytics verify ${writeKey}
 
-Full reference: .claude/skills/convalytics/SKILL.md`;
+Full reference: convalytics.dev/skill.md`;
 
   return (
     <div

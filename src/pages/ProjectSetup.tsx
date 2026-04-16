@@ -5,23 +5,29 @@ import { useEffect, useState } from "react";
 import { getConvexSiteUrl } from "../lib/convex";
 
 function buildAgentPrompt(projects: CreatedProject[]): string {
-  const siteUrl = getConvexSiteUrl();
-  const lines: string[] = [
-    "Set up Convalytics analytics in this Convex project.\n",
-  ];
+  const sections: string[] = [];
 
   for (const { name, writeKey } of projects) {
-    if (projects.length > 1) lines.push(`## ${name}\n`);
-    lines.push(
-      `1. Set the write key in your Convex environment:\n   npx convex env set CONVALYTICS_WRITE_KEY ${writeKey}\n`,
-      `2. Add this script tag to your HTML <head> (e.g. index.html or _document.tsx):\n   <script defer src="${siteUrl}/script.js?key=${writeKey}"></script>\n`,
-      `3. (Optional) Track custom events anywhere in your frontend:\n   window.convalytics?.track('event_name', { key: 'value' })\n`,
-      `4. (Optional) Identify users after sign-in:\n   window.convalytics?.identify(userId, { email, name })\n`,
+    const header = projects.length > 1 ? `## ${name}\n\n` : "";
+    sections.push(
+      `${header}First, ask me: do I want (A) web analytics only — page views, sessions, bounce\nrate — or (B) web analytics + product analytics for signups, payments, etc.?\n\n` +
+      `## Option A — Web analytics only\n\n` +
+      `  npx convalytics init ${writeKey}\n\n` +
+      `This adds the script tag to index.html. Page views start flowing automatically.\nDone — no further setup needed.\n\n` +
+      `## Option B — Web + product analytics\n\n` +
+      `  npx convalytics init ${writeKey}\n\n` +
+      `Same as above, plus installs the Convex component. Then read convex/schema.ts\n` +
+      `and all files in convex/. Propose a tracking plan:\n\n` +
+      `  1. event_name — file.ts → functionName — props: { key }\n\n` +
+      `Wait for me to approve, then instrument each with:\n\n` +
+      `  import { analytics } from "./analytics";\n` +
+      `  await analytics.track(ctx, { name: "event_name", userId: String(userId), props: {} });\n\n` +
+      `Verify: npx convalytics verify ${writeKey}\n\n` +
+      `Full reference: convalytics.dev/skill.md`
     );
   }
 
-  lines.push("That's it — page views are tracked automatically. No restart needed.");
-  return lines.join("\n");
+  return `Set up Convalytics analytics in this Convex project.\n\n${sections.join("\n\n---\n\n")}`;
 }
 
 interface ProjectSetupProps {
