@@ -1,10 +1,8 @@
 // Tiny icon helpers for Pages breakdown cards.
 // - Countries: flag emoji from ISO-3166 code
 // - Devices: inline SVG (no brand)
-// - Browsers / OS: Simple Icons CDN, consistent with the favicon CDN already used
-//   for referrers. Single-color (#1a1814) to match the design.
-
-const ICON_COLOR = "1a1814";
+// - Browsers / OS: Simple Icons CDN in brand colors, consistent with the
+//   favicon CDN already used for referrers.
 
 // ISO-3166 alpha-2 → flag emoji (regional indicator symbols)
 function countryFlag(code: string): string {
@@ -50,7 +48,7 @@ function BrandIcon({ slug }: { slug: string | undefined }) {
   if (!slug) return null;
   return (
     <img
-      src={`https://cdn.simpleicons.org/${slug}/${ICON_COLOR}`}
+      src={`https://cdn.simpleicons.org/${slug}`}
       alt=""
       width={12}
       height={12}
