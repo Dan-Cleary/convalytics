@@ -13,6 +13,7 @@ export default defineSchema({
   // phoneVerificationTime, isAnonymous. Identified by Id<"users">.
   // -------------------------------------------------------------------------
   ...authTables,
+  users: authTables.users.index("email", ["email"]),
 
   // -------------------------------------------------------------------------
   // Teams (unit of ownership and billing)
