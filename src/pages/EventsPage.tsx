@@ -6,7 +6,6 @@ import { TimeRangePicker } from "../components/TimeRangePicker"
 import { sinceForRange, defaultRangeForRetention, type RangeKey } from "../lib/timeRange";
 
 interface EventsPageProps {
-  sessionToken: string;
   writeKey: string;
   projectName: string;
   environment?: string;
@@ -20,13 +19,13 @@ const CARD_STYLE = {
   boxShadow: "4px 4px 0px #1a1814",
 };
 
-export function EventsPage({ sessionToken, writeKey, projectName, environment, retentionDays, onNavigateBilling }: EventsPageProps) {
+export function EventsPage({ writeKey, projectName, environment, retentionDays, onNavigateBilling }: EventsPageProps) {
   const [userRange, setUserRange] = useState<RangeKey | null>(null);
   const range = userRange ?? defaultRangeForRetention(retentionDays);
   const since = sinceForRange(range);
-  const events = useQuery(api.events.listLatest, { sessionToken, writeKey, limit: 100, environment });
-  const stats = useQuery(api.events.stats, { sessionToken, writeKey, environment, since });
-  const topEvents = useQuery(api.events.topEventNames, { sessionToken, writeKey, environment, since });
+  const events = useQuery(api.events.listLatest, { writeKey, limit: 100, environment });
+  const stats = useQuery(api.events.stats, { writeKey, environment, since });
+  const topEvents = useQuery(api.events.topEventNames, { writeKey, environment, since });
   const [filter, setFilter] = useState("");
 
   const filtered = (events ?? []).filter((e) => {

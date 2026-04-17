@@ -7,7 +7,6 @@ import { TrendChart } from "../components/TrendChart";
 import { sinceForRange, daysForRange, defaultRangeForRetention, type RangeKey } from "../lib/timeRange";
 
 interface OverviewProps {
-  sessionToken: string;
   writeKey: string;
   projectName: string;
   environment?: string;
@@ -23,27 +22,27 @@ const CARD_STYLE = {
 
 const SETUP_DISMISSED_KEY = (writeKey: string) => `cnv_setup_dismissed_${writeKey}`;
 
-export function Overview({ sessionToken, writeKey, projectName, environment, retentionDays, onNavigateBilling }: OverviewProps) {
+export function Overview({ writeKey, projectName, environment, retentionDays, onNavigateBilling }: OverviewProps) {
   const [userRange, setUserRange] = useState<RangeKey | null>(null);
   const range = userRange ?? defaultRangeForRetention(retentionDays);
   const since = sinceForRange(range);
   const rangeLabel = range === "all" ? "all time" : `last ${range}`;
 
-  const stats = useQuery(api.pageviews.stats, { sessionToken, writeKey, environment, since });
-  const topPages = useQuery(api.pageviews.topPages, { sessionToken, writeKey, environment, since });
-  const topSources = useQuery(api.pageviews.topSources, { sessionToken, writeKey, environment, since });
-  const liveEvents = useQuery(api.pageviews.listLatest, { sessionToken, writeKey, environment });
-  const realtimeVisitors = useQuery(api.pageviews.realtimeVisitors, { sessionToken, writeKey, environment });
-  const eventStats = useQuery(api.events.stats, { sessionToken, writeKey, environment, since });
-  const pvTimeSeries = useQuery(api.pageviews.timeSeries, { sessionToken, writeKey, environment, since });
-  const evTimeSeries = useQuery(api.events.timeSeries, { sessionToken, writeKey, environment, since });
+  const stats = useQuery(api.pageviews.stats, { writeKey, environment, since });
+  const topPages = useQuery(api.pageviews.topPages, { writeKey, environment, since });
+  const topSources = useQuery(api.pageviews.topSources, { writeKey, environment, since });
+  const liveEvents = useQuery(api.pageviews.listLatest, { writeKey, environment });
+  const realtimeVisitors = useQuery(api.pageviews.realtimeVisitors, { writeKey, environment });
+  const eventStats = useQuery(api.events.stats, { writeKey, environment, since });
+  const pvTimeSeries = useQuery(api.pageviews.timeSeries, { writeKey, environment, since });
+  const evTimeSeries = useQuery(api.events.timeSeries, { writeKey, environment, since });
 
   const rangeDays = daysForRange(range);
 
   // Unscoped queries for setup banner (project-level data check)
-  const statsUnscoped = useQuery(api.pageviews.stats, { sessionToken, writeKey });
-  const liveEventsUnscoped = useQuery(api.pageviews.listLatest, { sessionToken, writeKey });
-  const eventStatsUnscoped = useQuery(api.events.stats, { sessionToken, writeKey });
+  const statsUnscoped = useQuery(api.pageviews.stats, { writeKey });
+  const liveEventsUnscoped = useQuery(api.pageviews.listLatest, { writeKey });
+  const eventStatsUnscoped = useQuery(api.events.stats, { writeKey });
 
   const [setupDismissed, setSetupDismissed] = useState(() => {
     try { return localStorage.getItem(SETUP_DISMISSED_KEY(writeKey)) === "1"; } catch { return false; }

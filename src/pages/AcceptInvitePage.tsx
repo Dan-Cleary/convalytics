@@ -1,84 +1,84 @@
-import { useQuery, useAction } from "convex/react";
+import { useQuery, useMutation, useConvexAuth } from "convex/react";
+import { useAuthActions } from "@convex-dev/auth/react";
 import { api } from "../../convex/_generated/api";
-import { useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { setSessionToken } from "../lib/auth";
+import { GoogleLogo } from "../components/GoogleLogo";
 
 interface Props {
   token: string;
-  onSuccess: (sessionToken: string) => void;
 }
 
-export function AcceptInvitePage({ token, onSuccess }: Props) {
+export function AcceptInvitePage({ token }: Props) {
+  const { isAuthenticated, isLoading: authLoading } = useConvexAuth();
+  const { signIn, signOut } = useAuthActions();
   const invite = useQuery(api.invites.getInviteByToken, { token });
-  const acceptInvite = useAction(api.invites.acceptInviteWithPassword);
-  const signIn = useAction(api.invites.signInWithPassword);
+  const acceptInvite = useMutation(api.invites.acceptInvite);
   const navigate = useNavigate();
 
-  const [mode, setMode] = useState<"accept" | "signin">("accept");
-
-  function switchToSignIn() {
-    setMode("signin");
-    if (invite?.status === "valid") setEmail(invite.invitedEmail);
-  }
-  const [name, setName] = useState("");
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [confirm, setConfirm] = useState("");
+  const [accepting, setAccepting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [accepted, setAccepted] = useState(false);
+  const attempted = useRef(false);
 
-  async function handleAccept(e: React.FormEvent) {
-    e.preventDefault();
-    if (password !== confirm) {
-      setError("Passwords do not match");
+  const attemptAccept = useCallback(async () => {
+    if (accepting || accepted) return;
+    setAccepting(true);
+    setError(null);
+    try {
+      const result = await acceptInvite({ token });
+      if ("error" in result) {
+        setError(result.error ?? "Failed to accept invite");
+      } else {
+        setAccepted(true);
+        void navigate("/overview", { replace: true });
+      }
+    } catch (err) {
+      const msg =
+        err instanceof Error ? err.message : "Failed to accept invite";
+      setError(msg);
+    } finally {
+      setAccepting(false);
+    }
+  }, [accepting, accepted, acceptInvite, token, navigate]);
+
+  // Reset one-shot guard when signed out so a fresh sign-in can auto-retry.
+  useEffect(() => {
+    if (!isAuthenticated) {
+      attempted.current = false;
+      setError(null);
+    }
+  }, [isAuthenticated]);
+
+  // Manual retry handler
+  const handleRetry = useCallback(() => {
+    attempted.current = false;
+    setError(null);
+    void attemptAccept();
+  }, [attemptAccept]);
+
+  // Auto-accept once the user is signed in and the invite is valid
+  useEffect(() => {
+    if (
+      !isAuthenticated ||
+      authLoading ||
+      invite?.status !== "valid" ||
+      accepted ||
+      accepting ||
+      attempted.current
+    ) {
       return;
     }
-    setError(null);
-    setLoading(true);
-    try {
-      const result = await acceptInvite({
-        token,
-        password,
-        name: name || undefined,
-      });
-      if ("error" in result && result.error) {
-        setError(result.error);
-      } else if ("sessionToken" in result && result.sessionToken) {
-        saveAndRedirect(result.sessionToken);
-      }
-    } catch (err) {
-      console.error(err);
-      setError("An unexpected error occurred. Please try again.");
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  async function handleSignIn(e: React.FormEvent) {
-    e.preventDefault();
-    setError(null);
-    setLoading(true);
-    try {
-      const result = await signIn({ email, password });
-      if ("error" in result && result.error) {
-        setError(result.error);
-      } else if ("sessionToken" in result && result.sessionToken) {
-        saveAndRedirect(result.sessionToken);
-      }
-    } catch (err) {
-      console.error(err);
-      setError("An unexpected error occurred. Please try again.");
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  function saveAndRedirect(sessionToken: string) {
-    setSessionToken(sessionToken);
-    onSuccess(sessionToken);
-    void navigate("/overview", { replace: true });
-  }
+    attempted.current = true;
+    void attemptAccept();
+  }, [
+    isAuthenticated,
+    authLoading,
+    invite,
+    accepted,
+    accepting,
+    attemptAccept,
+  ]);
 
   return (
     <div
@@ -109,8 +109,8 @@ export function AcceptInvitePage({ token, onSuccess }: Props) {
             </h1>
           </div>
 
-          {/* Invite status */}
-          {invite === undefined && (
+          {(invite === undefined ||
+            (authLoading && invite?.status === "valid")) && (
             <p
               className="text-xs text-center py-8"
               style={{ color: "#9b9488" }}
@@ -134,29 +134,13 @@ export function AcceptInvitePage({ token, onSuccess }: Props) {
           )}
 
           {invite?.status === "already_accepted" && (
-            <div>
-              <p
-                className="text-sm font-bold mb-1"
-                style={{ color: "#1a1814" }}
-              >
-                Already joined
-              </p>
-              <p className="text-xs mb-5" style={{ color: "#6b6456" }}>
-                This invite has already been accepted. Sign in below.
-              </p>
-              <SignInForm
-                email={email}
-                password={password}
-                error={error}
-                loading={loading}
-                onEmailChange={setEmail}
-                onPasswordChange={setPassword}
-                onSubmit={(e) => void handleSignIn(e)}
-              />
-            </div>
+            <InviteMessage
+              title="Already joined"
+              body="This invite has already been accepted."
+            />
           )}
 
-          {invite?.status === "valid" && mode === "accept" && (
+          {invite?.status === "valid" && !authLoading && (
             <div>
               <p
                 className="text-sm font-bold mb-1"
@@ -166,123 +150,105 @@ export function AcceptInvitePage({ token, onSuccess }: Props) {
               </p>
               <p className="text-xs mb-5" style={{ color: "#6b6456" }}>
                 Joining as <strong>{invite.invitedEmail}</strong> with role{" "}
-                <strong>{invite.role}</strong>. Set a password to get started.
+                <strong>{invite.role}</strong>. Sign in with the Google account
+                for <strong>{invite.invitedEmail}</strong> to accept.
               </p>
 
-              <form
-                onSubmit={(e) => void handleAccept(e)}
-                className="flex flex-col gap-3"
-              >
-                <label htmlFor="accept-name" className="sr-only">
-                  Your name (optional)
-                </label>
-                <input
-                  id="accept-name"
-                  type="text"
-                  placeholder="Your name (optional)"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  className="w-full px-3 py-2 text-xs outline-none"
-                  style={{ border: "1px solid #e0ddd6", color: "#1a1814" }}
-                />
-                <label htmlFor="accept-password" className="sr-only">
-                  Password (min 8 characters)
-                </label>
-                <input
-                  id="accept-password"
-                  type="password"
-                  placeholder="Password (min 8 characters)"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  required
-                  minLength={8}
-                  className="w-full px-3 py-2 text-xs outline-none"
-                  style={{ border: "1px solid #e0ddd6", color: "#1a1814" }}
-                />
-                <label htmlFor="accept-confirm" className="sr-only">
-                  Confirm password
-                </label>
-                <input
-                  id="accept-confirm"
-                  type="password"
-                  placeholder="Confirm password"
-                  value={confirm}
-                  onChange={(e) => setConfirm(e.target.value)}
-                  required
-                  className="w-full px-3 py-2 text-xs outline-none"
-                  style={{ border: "1px solid #e0ddd6", color: "#1a1814" }}
-                />
-                {error && (
-                  <p
-                    role="alert"
-                    className="text-[10px]"
-                    style={{ color: "#b94040" }}
-                  >
-                    {error}
-                  </p>
-                )}
-                <button
-                  type="submit"
-                  disabled={loading}
-                  className="w-full py-3 text-xs font-bold uppercase tracking-wider cursor-pointer disabled:opacity-50"
+              {error && (
+                <p
+                  className="text-xs mb-3 px-3 py-2"
                   style={{
-                    background: "#1a1814",
-                    color: "#fff",
-                    border: "2px solid #1a1814",
+                    background: "#fef2f2",
+                    color: "#dc2626",
+                    border: "1px solid #fecaca",
                   }}
                 >
-                  {loading ? "Setting up…" : "Accept invite"}
-                </button>
-              </form>
+                  {error}
+                </p>
+              )}
 
-              <p
-                className="text-[10px] mt-4 text-center"
-                style={{ color: "#9b9488" }}
-              >
-                Already set a password?{" "}
-                <button
-                  className="underline cursor-pointer"
-                  style={{ color: "#6b6456" }}
-                  onClick={switchToSignIn}
+              {accepting ? (
+                <p
+                  className="text-xs text-center py-3"
+                  style={{ color: "#9b9488" }}
                 >
-                  Sign in instead
-                </button>
-              </p>
-            </div>
-          )}
-
-          {invite?.status === "valid" && mode === "signin" && (
-            <div>
-              <p
-                className="text-sm font-bold mb-1"
-                style={{ color: "#1a1814" }}
-              >
-                Sign in to {invite.teamName}
-              </p>
-              <p className="text-xs mb-5" style={{ color: "#6b6456" }}>
-                Use the password you set when you accepted your invite.
-              </p>
-              <SignInForm
-                email={email}
-                password={password}
-                error={error}
-                loading={loading}
-                onEmailChange={setEmail}
-                onPasswordChange={setPassword}
-                onSubmit={(e) => void handleSignIn(e)}
-              />
-              <p
-                className="text-[10px] mt-4 text-center"
-                style={{ color: "#9b9488" }}
-              >
+                  Joining team…
+                </p>
+              ) : isAuthenticated ? (
+                error ? (
+                  <div className="flex flex-col gap-2">
+                    <button
+                      className="w-full py-3 text-xs font-bold uppercase tracking-wider cursor-pointer transition-all"
+                      style={{
+                        background: "#1a1814",
+                        color: "#e9e6db",
+                        border: "2px solid #1a1814",
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.background = "#e8651c";
+                        e.currentTarget.style.borderColor = "#e8651c";
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.background = "#1a1814";
+                        e.currentTarget.style.borderColor = "#1a1814";
+                      }}
+                      onClick={() => void handleRetry()}
+                    >
+                      Try again
+                    </button>
+                    <button
+                      className="w-full py-3 text-xs font-bold uppercase tracking-wider cursor-pointer transition-all"
+                      style={{
+                        background: "#ffffff",
+                        color: "#1a1814",
+                        border: "2px solid #1a1814",
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.background = "#f7f4ec";
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.background = "#ffffff";
+                      }}
+                      onClick={() => void signOut()}
+                    >
+                      Sign out and use a different account
+                    </button>
+                  </div>
+                ) : (
+                  // Signed in and waiting for auto-accept effect to complete
+                  <p
+                    className="text-xs text-center py-3"
+                    style={{ color: "#9b9488" }}
+                  >
+                    Accepting invite…
+                  </p>
+                )
+              ) : (
                 <button
-                  className="underline cursor-pointer"
-                  style={{ color: "#6b6456" }}
-                  onClick={() => setMode("accept")}
+                  className="w-full flex items-center justify-center gap-2.5 py-3 text-xs font-bold uppercase tracking-wider cursor-pointer transition-all"
+                  style={{
+                    background: "#1a1814",
+                    color: "#e9e6db",
+                    border: "2px solid #1a1814",
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.background = "#e8651c";
+                    e.currentTarget.style.borderColor = "#e8651c";
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.background = "#1a1814";
+                    e.currentTarget.style.borderColor = "#1a1814";
+                  }}
+                  onClick={() =>
+                    void signIn("google", {
+                      redirectTo: `/invite/${token}`,
+                    })
+                  }
                 >
-                  Back to invite
+                  <GoogleLogo />
+                  Sign in to accept
                 </button>
-              </p>
+              )}
             </div>
           )}
         </div>
@@ -301,71 +267,5 @@ function InviteMessage({ title, body }: { title: string; body: string }) {
         {body}
       </p>
     </div>
-  );
-}
-
-function SignInForm({
-  email,
-  password,
-  error,
-  loading,
-  onEmailChange,
-  onPasswordChange,
-  onSubmit,
-}: {
-  email: string;
-  password: string;
-  error: string | null;
-  loading: boolean;
-  onEmailChange: (v: string) => void;
-  onPasswordChange: (v: string) => void;
-  onSubmit: (e: React.FormEvent) => void;
-}) {
-  return (
-    <form onSubmit={onSubmit} className="flex flex-col gap-3">
-      <label htmlFor="signin-email" className="sr-only">
-        Email
-      </label>
-      <input
-        id="signin-email"
-        type="email"
-        placeholder="Email"
-        value={email}
-        onChange={(e) => onEmailChange(e.target.value)}
-        required
-        className="w-full px-3 py-2 text-xs outline-none"
-        style={{ border: "1px solid #e0ddd6", color: "#1a1814" }}
-      />
-      <label htmlFor="signin-password" className="sr-only">
-        Password
-      </label>
-      <input
-        id="signin-password"
-        type="password"
-        placeholder="Password"
-        value={password}
-        onChange={(e) => onPasswordChange(e.target.value)}
-        required
-        className="w-full px-3 py-2 text-xs outline-none"
-        style={{ border: "1px solid #e0ddd6", color: "#1a1814" }}
-      />
-      {error && (
-        <p role="alert" className="text-[10px]" style={{ color: "#b94040" }}>
-          {error}
-        </p>
-      )}
-      <button
-        type="submit"
-        disabled={loading}
-        className="w-full py-3 text-xs font-bold uppercase tracking-wider cursor-pointer disabled:opacity-50"
-        style={{
-          background: "#1a1814",
-          color: "#fff",
-          border: "2px solid #1a1814",
-        }}
-      >
-        {loading ? "Signing in…" : "Sign in"}
-      </button>
-    </form>
   );
 }

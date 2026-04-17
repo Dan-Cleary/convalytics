@@ -2,6 +2,7 @@ import { httpRouter } from "convex/server";
 import { httpAction } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { Id } from "./_generated/dataModel";
+import { auth } from "./auth";
 import { registerStripeRoutes } from "./billing";
 import {
   QUOTA_NOTIFY_THRESHOLDS,
@@ -10,6 +11,9 @@ import {
 import { parseUA } from "./ua";
 
 const http = httpRouter();
+
+// Convex Auth: /api/auth/* routes (including Google OAuth callback)
+auth.addHttpRoutes(http);
 const [QUOTA_NOTIFY_80_PCT, QUOTA_NOTIFY_100_PCT] = QUOTA_NOTIFY_THRESHOLDS;
 
 function isValidIpv4(ip: string): boolean {

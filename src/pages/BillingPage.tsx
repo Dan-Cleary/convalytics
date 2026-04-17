@@ -27,8 +27,8 @@ const PLANS = [
   },
 ];
 
-export function BillingPage({ sessionToken }: { sessionToken: string }) {
-  const usage = useQuery(api.usage.getMyUsage, { sessionToken });
+export function BillingPage() {
+  const usage = useQuery(api.usage.getMyUsage, {});
   const createCheckout = useAction(api.billing.createCheckoutSession);
   const createPortal = useAction(api.billing.createPortalSession);
   const [loading, setLoading] = useState<string | null>(null);
@@ -38,7 +38,6 @@ export function BillingPage({ sessionToken }: { sessionToken: string }) {
     try {
       const origin = window.location.origin;
       const { url } = await createCheckout({
-        sessionToken,
         plan,
         successUrl: `${origin}/?billing=success&plan=${plan}`,
         cancelUrl: `${origin}/`,
@@ -53,7 +52,6 @@ export function BillingPage({ sessionToken }: { sessionToken: string }) {
     setLoading("portal");
     try {
       const { url } = await createPortal({
-        sessionToken,
         returnUrl: window.location.origin,
       });
       if (url) window.location.href = url;

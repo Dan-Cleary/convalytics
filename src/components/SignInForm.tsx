@@ -1,5 +1,6 @@
-import { startOAuthFlow } from "../lib/auth";
+import { useAuthActions } from "@convex-dev/auth/react";
 import { useState } from "react";
+import { GoogleLogo } from "./GoogleLogo";
 
 const AGENT_PROMPT = `Add Convalytics analytics to this Convex project.
 
@@ -43,6 +44,7 @@ Share the claim URL from the output with me.`;
 
 export function SignInForm() {
   const [copied, setCopied] = useState(false);
+  const { signIn } = useAuthActions();
 
   function copyPrompt() {
     void navigator.clipboard.writeText(AGENT_PROMPT).then(() => {
@@ -126,7 +128,7 @@ export function SignInForm() {
           style={{ border: "2px solid #1a1814" }}
         >
           <p className="text-xs" style={{ color: "#6b6456" }}>
-            Already set up? View your dashboard.
+            View analytics and manage billing.
           </p>
           <button
             className="flex items-center gap-2 px-3 py-2 text-[10px] font-bold uppercase tracking-wider cursor-pointer transition-all"
@@ -143,14 +145,10 @@ export function SignInForm() {
               e.currentTarget.style.background = "#fff";
               e.currentTarget.style.color = "#1a1814";
             }}
-            onClick={() => void startOAuthFlow()}
+            onClick={() => void signIn("google")}
           >
-            <img
-              src="https://www.convex.dev/favicon.ico"
-              alt=""
-              className="w-3.5 h-3.5"
-            />
-            Sign in
+            <GoogleLogo />
+            Continue with Google
           </button>
         </div>
       </div>

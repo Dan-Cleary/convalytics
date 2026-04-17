@@ -70,17 +70,12 @@ export const ingest = internalMutation({
 
 export const stats = query({
   args: {
-    sessionToken: v.string(),
     writeKey: v.string(),
     environment: v.optional(v.string()),
     since: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
-    const project = await validateProjectAccess(
-      ctx,
-      args.sessionToken,
-      args.writeKey,
-    );
+    const project = await validateProjectAccess(ctx, args.writeKey);
     if (!project) return null;
 
     const startTime = args.since ?? Date.now() - 7 * 24 * 60 * 60 * 1000;
@@ -122,17 +117,12 @@ export const stats = query({
 
 export const topPages = query({
   args: {
-    sessionToken: v.string(),
     writeKey: v.string(),
     environment: v.optional(v.string()),
     since: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
-    const project = await validateProjectAccess(
-      ctx,
-      args.sessionToken,
-      args.writeKey,
-    );
+    const project = await validateProjectAccess(ctx, args.writeKey);
     if (!project) return [];
 
     const startTime = args.since ?? Date.now() - 7 * 24 * 60 * 60 * 1000;
@@ -178,17 +168,12 @@ export const topPages = query({
 
 export const topSources = query({
   args: {
-    sessionToken: v.string(),
     writeKey: v.string(),
     environment: v.optional(v.string()),
     since: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
-    const project = await validateProjectAccess(
-      ctx,
-      args.sessionToken,
-      args.writeKey,
-    );
+    const project = await validateProjectAccess(ctx, args.writeKey);
     if (!project) return { referrers: [], campaigns: [] };
 
     const startTime = args.since ?? Date.now() - 7 * 24 * 60 * 60 * 1000;
@@ -242,16 +227,11 @@ export const topSources = query({
 
 export const realtimeVisitors = query({
   args: {
-    sessionToken: v.string(),
     writeKey: v.string(),
     environment: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    const project = await validateProjectAccess(
-      ctx,
-      args.sessionToken,
-      args.writeKey,
-    );
+    const project = await validateProjectAccess(ctx, args.writeKey);
     if (!project) return 0;
 
     const since = Date.now() - 5 * 60 * 1000;
@@ -278,16 +258,11 @@ export const realtimeVisitors = query({
 
 export const listLatest = query({
   args: {
-    sessionToken: v.string(),
     writeKey: v.string(),
     environment: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    const project = await validateProjectAccess(
-      ctx,
-      args.sessionToken,
-      args.writeKey,
-    );
+    const project = await validateProjectAccess(ctx, args.writeKey);
     if (!project) return [];
 
     const rows = args.environment
@@ -325,17 +300,12 @@ export const listLatest = query({
 // the time range: <=7d → hourly, <=90d → daily, >90d → weekly.
 export const timeSeries = query({
   args: {
-    sessionToken: v.string(),
     writeKey: v.string(),
     environment: v.optional(v.string()),
     since: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
-    const project = await validateProjectAccess(
-      ctx,
-      args.sessionToken,
-      args.writeKey,
-    );
+    const project = await validateProjectAccess(ctx, args.writeKey);
     if (!project) return [];
 
     const now = Date.now();
@@ -395,17 +365,12 @@ export const timeSeries = query({
 // Breakdowns for countries, devices, browsers, and OS — single query, four dimensions.
 export const breakdowns = query({
   args: {
-    sessionToken: v.string(),
     writeKey: v.string(),
     environment: v.optional(v.string()),
     since: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
-    const project = await validateProjectAccess(
-      ctx,
-      args.sessionToken,
-      args.writeKey,
-    );
+    const project = await validateProjectAccess(ctx, args.writeKey);
     if (!project)
       return { countries: [], devices: [], browsers: [], os: [] };
 

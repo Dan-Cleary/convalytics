@@ -6,6 +6,7 @@ import { components } from "./_generated/api";
 import { httpRouter } from "convex/server";
 import { PLANS, type PlanId } from "./plans";
 import { Id } from "./_generated/dataModel";
+import { requireAuth } from "./authHelpers";
 
 export const stripe = new StripeSubscriptions(components.stripe);
 
@@ -21,19 +22,15 @@ function getPriceId(plan: "solo" | "pro"): string {
 // Create a Stripe Checkout session for a plan upgrade.
 export const createCheckoutSession = action({
   args: {
-    sessionToken: v.string(),
     plan: v.union(v.literal("solo"), v.literal("pro")),
     successUrl: v.string(),
     cancelUrl: v.string(),
   },
   handler: async (ctx, args) => {
-    const session = await ctx.runQuery(internal.oauth.getSessionByToken, {
-      sessionToken: args.sessionToken,
-    });
-    if (!session) throw new Error("Not authenticated");
+    const userId = await requireAuth(ctx);
 
     const teams = await ctx.runQuery(internal.billing.getTeamsForUser, {
-      userId: session.userId,
+      userId,
     });
     if (teams.length === 0) throw new Error("No team found");
     const team = teams[0];
@@ -73,17 +70,13 @@ export const createCheckoutSession = action({
 // Create a billing portal session for managing subscriptions.
 export const createPortalSession = action({
   args: {
-    sessionToken: v.string(),
     returnUrl: v.string(),
   },
   handler: async (ctx, args) => {
-    const session = await ctx.runQuery(internal.oauth.getSessionByToken, {
-      sessionToken: args.sessionToken,
-    });
-    if (!session) throw new Error("Not authenticated");
+    const userId = await requireAuth(ctx);
 
     const teams = await ctx.runQuery(internal.billing.getTeamsForUser, {
-      userId: session.userId,
+      userId,
     });
     if (teams.length === 0) throw new Error("No team found");
     const team = teams[0];
@@ -101,7 +94,7 @@ export const createPortalSession = action({
 // Internal helpers
 
 export const getTeamsForUser = internalQuery({
-  args: { userId: v.string() },
+  args: { userId: v.id("users") },
   handler: async (ctx, args) => {
     const memberships = await ctx.db
       .query("teamMembers")

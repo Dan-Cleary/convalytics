@@ -1,77 +1,36 @@
-import { useQuery, useAction } from "convex/react";
+import { useQuery, useAction, useConvexAuth } from "convex/react";
+import { useAuthActions } from "@convex-dev/auth/react";
 import { api } from "../../convex/_generated/api";
-import { startOAuthFlow, clearSession } from "../lib/auth";
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useCallback } from "react";
+import { useNavigate } from "react-router-dom";
+import { GoogleLogo } from "../components/GoogleLogo";
 
-export function ClaimPage({
-  claimToken,
-  sessionToken,
-  onSignIn,
-}: {
-  claimToken: string;
-  sessionToken: string | null;
-  onSignIn: () => void;
-}) {
+export function ClaimPage({ claimToken }: { claimToken: string }) {
+  const { isAuthenticated, isLoading: authLoading } = useConvexAuth();
+  const { signIn } = useAuthActions();
   const project = useQuery(api.projects.getByClaimToken, { claimToken });
   const claimAction = useAction(api.projects.claim);
+  const navigate = useNavigate();
   const [claiming, setClaiming] = useState(false);
   const [claimedWriteKey, setClaimedWriteKey] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [effectiveSessionToken, setEffectiveSessionToken] =
-    useState(sessionToken);
-  const autoClaimAttempted = useRef(false);
 
   const claimed = claimedWriteKey !== null;
 
-  // Sync effectiveSessionToken when sessionToken prop changes (e.g., after OAuth flow)
-  useEffect(() => {
-    if (sessionToken !== effectiveSessionToken) {
-      setEffectiveSessionToken(sessionToken);
-    }
-  }, [sessionToken, effectiveSessionToken]);
-
   const handleClaim = useCallback(async () => {
-    if (!effectiveSessionToken) return;
+    if (!isAuthenticated) return;
     setClaiming(true);
     setError(null);
     try {
-      const result = await claimAction({
-        sessionToken: effectiveSessionToken,
-        claimToken,
-      });
+      const result = await claimAction({ claimToken });
       setClaimedWriteKey(result.writeKey);
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Failed to claim project";
-      if (msg.includes("Not authenticated")) {
-        clearSession();
-        setEffectiveSessionToken(null);
-      } else {
-        setError(msg);
-      }
+      setError(msg);
     } finally {
       setClaiming(false);
     }
-  }, [effectiveSessionToken, claimToken, claimAction]);
-
-  useEffect(() => {
-    if (
-      effectiveSessionToken &&
-      project &&
-      !project.claimed &&
-      !claimed &&
-      !claiming &&
-      !autoClaimAttempted.current
-    ) {
-      autoClaimAttempted.current = true;
-      void handleClaim();
-    }
-  }, [effectiveSessionToken, project, claimed, claiming, handleClaim]);
-
-  // Check for OAuth callback return on this page
-  if (window.location.pathname === "/oauth/callback") {
-    onSignIn();
-    return null;
-  }
+  }, [isAuthenticated, claimToken, claimAction]);
 
   return (
     <div
@@ -101,7 +60,8 @@ export function ClaimPage({
           </h1>
         </div>
 
-        {project === undefined && (
+        {(project === undefined ||
+          (authLoading && project !== null && !project?.claimed)) && (
           <p className="text-xs" style={{ color: "#9b9488" }}>
             Loading...
           </p>
@@ -147,7 +107,7 @@ export function ClaimPage({
           </div>
         )}
 
-        {project && !project.claimed && !claimed && (
+        {project && !project.claimed && !claimed && !authLoading && (
           <div>
             <p
               className="text-[10px] font-bold uppercase tracking-widest mb-1"
@@ -186,7 +146,7 @@ export function ClaimPage({
               >
                 Claiming...
               </p>
-            ) : effectiveSessionToken ? (
+            ) : isAuthenticated ? (
               <button
                 className="w-full py-3 text-xs font-bold uppercase tracking-wider cursor-pointer transition-all"
                 style={{
@@ -222,13 +182,13 @@ export function ClaimPage({
                   e.currentTarget.style.background = "#1a1814";
                   e.currentTarget.style.borderColor = "#1a1814";
                 }}
-                onClick={() => void startOAuthFlow(`/claim/${claimToken}`)}
+                onClick={() =>
+                  void signIn("google", {
+                    redirectTo: `/claim/${claimToken}`,
+                  })
+                }
               >
-                <img
-                  src="https://www.convex.dev/favicon.ico"
-                  alt=""
-                  className="w-4 h-4"
-                />
+                <GoogleLogo />
                 Sign in to claim
               </button>
             )}
@@ -236,9 +196,13 @@ export function ClaimPage({
         )}
 
         {claimedWriteKey && (
-          <RedirectToDashboard
+          <ClaimSuccess
             projectName={project?.name}
-            writeKey={claimedWriteKey}
+            onGoToDashboard={() =>
+              void navigate(
+                `/overview?project=${encodeURIComponent(claimedWriteKey)}`,
+              )
+            }
           />
         )}
       </div>
@@ -246,29 +210,40 @@ export function ClaimPage({
   );
 }
 
-function RedirectToDashboard({
+function ClaimSuccess({
   projectName,
-  writeKey,
+  onGoToDashboard,
 }: {
   projectName?: string;
-  writeKey: string;
+  onGoToDashboard: () => void;
 }) {
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      window.location.href = `/?project=${encodeURIComponent(writeKey)}`;
-    }, 1500);
-    return () => clearTimeout(timer);
-  }, [writeKey]);
-
   return (
     <div>
       <p className="text-sm font-bold mb-2" style={{ color: "#2d7a2d" }}>
         Project claimed!
       </p>
-      <p className="text-xs leading-relaxed" style={{ color: "#6b6456" }}>
+      <p className="text-xs leading-relaxed mb-5" style={{ color: "#6b6456" }}>
         <strong>{projectName}</strong> is now connected to your account.
-        Redirecting to dashboard...
       </p>
+      <button
+        onClick={onGoToDashboard}
+        className="w-full py-3 text-xs font-bold uppercase tracking-wider cursor-pointer transition-all"
+        style={{
+          background: "#1a1814",
+          color: "#e9e6db",
+          border: "2px solid #1a1814",
+        }}
+        onMouseEnter={(e) => {
+          e.currentTarget.style.background = "#e8651c";
+          e.currentTarget.style.borderColor = "#e8651c";
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.background = "#1a1814";
+          e.currentTarget.style.borderColor = "#1a1814";
+        }}
+      >
+        Go to dashboard →
+      </button>
     </div>
   );
 }

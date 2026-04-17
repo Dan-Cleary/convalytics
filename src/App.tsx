@@ -1,4 +1,6 @@
 import { useQuery } from "convex/react";
+import { Authenticated, Unauthenticated, AuthLoading } from "convex/react";
+import { useAuthActions } from "@convex-dev/auth/react";
 import { api } from "../convex/_generated/api";
 import { SignInForm } from "./components/SignInForm";
 import { Sidebar } from "./components/Sidebar";
@@ -12,8 +14,7 @@ import { ClaimPage } from "./pages/ClaimPage";
 import { BillingPage } from "./pages/BillingPage";
 import { MembersPage } from "./pages/MembersPage";
 import { AcceptInvitePage } from "./pages/AcceptInvitePage";
-import { useState, useCallback, Component, type ReactNode } from "react";
-import { clearSession, getSessionToken } from "./lib/auth";
+import { useState, useEffect, Component, type ReactNode } from "react";
 import {
   BrowserRouter,
   Routes,
@@ -48,84 +49,86 @@ class PageErrorBoundary extends Component<
 }
 
 export default function App() {
-  const [sessionToken, setSessionToken] = useState<string | null>(getSessionToken);
-
-  const handleSignOut = useCallback(() => {
-    clearSession();
-    setSessionToken(null);
-  }, []);
-
-  const handleSignIn = useCallback((nextSessionToken?: string) => {
-    setSessionToken(nextSessionToken ?? getSessionToken());
-  }, []);
-
   return (
     <BrowserRouter>
       <Routes>
-        <Route path="/oauth/callback" element={<OAuthCallback onSuccess={handleSignIn} />} />
-        <Route path="/claim/:claimToken" element={
-          <ClaimPageWrapper sessionToken={sessionToken} onSignIn={handleSignIn} />
-        } />
-        <Route path="/invite/:inviteToken" element={
-          <InvitePageWrapper onSuccess={handleSignIn} />
-        } />
-        {/* Unauthenticated home */}
-        <Route path="/" element={
-          sessionToken
-            ? <Navigate to="/overview" replace />
-            : <SignInForm />
-        } />
+        <Route path="/oauth/callback" element={<OAuthCallback />} />
+        <Route
+          path="/claim/:claimToken"
+          element={<ClaimPageWrapper />}
+        />
+        <Route
+          path="/invite/:inviteToken"
+          element={<InvitePageWrapper />}
+        />
+        {/* Home — sign-in OR redirect to dashboard */}
+        <Route
+          path="/"
+          element={
+            <>
+              <Authenticated>
+                <AuthedHomeRedirect />
+              </Authenticated>
+              <Unauthenticated>
+                <SignInForm />
+              </Unauthenticated>
+              <AuthLoading>
+                <LoadingScreen />
+              </AuthLoading>
+            </>
+          }
+        />
         {/* Authenticated dashboard */}
-        <Route path="/*" element={
-          sessionToken
-            ? <Dashboard sessionToken={sessionToken} onSignOut={handleSignOut} />
-            : <Navigate to="/" replace />
-        } />
+        <Route
+          path="/*"
+          element={
+            <>
+              <Authenticated>
+                <Dashboard />
+              </Authenticated>
+              <Unauthenticated>
+                <Navigate to="/" replace />
+              </Unauthenticated>
+              <AuthLoading>
+                <LoadingScreen />
+              </AuthLoading>
+            </>
+          }
+        />
       </Routes>
     </BrowserRouter>
   );
 }
 
-function InvitePageWrapper({
-  onSuccess,
-}: {
-  onSuccess: (sessionToken: string) => void;
-}) {
+// Preserves query params on home → /overview redirect (e.g. ?project=writeKey
+// from claim flow, ?billing=success from Stripe return).
+function AuthedHomeRedirect() {
+  const location = useLocation();
+  return <Navigate to={`/overview${location.search}`} replace />;
+}
+
+function LoadingScreen() {
+  return (
+    <div className="min-h-screen flex items-center justify-center text-gray-400 text-sm">
+      Loading...
+    </div>
+  );
+}
+
+function InvitePageWrapper() {
   const { inviteToken } = useParams();
-  return (
-    <AcceptInvitePage
-      token={inviteToken ?? ""}
-      onSuccess={onSuccess}
-    />
-  );
+  return <AcceptInvitePage token={inviteToken ?? ""} />;
 }
 
-function ClaimPageWrapper({
-  sessionToken,
-  onSignIn,
-}: {
-  sessionToken: string | null;
-  onSignIn: () => void;
-}) {
+function ClaimPageWrapper() {
   const { claimToken } = useParams();
-  return (
-    <ClaimPage
-      claimToken={claimToken ?? ""}
-      sessionToken={sessionToken}
-      onSignIn={onSignIn}
-    />
-  );
+  return <ClaimPage claimToken={claimToken ?? ""} />;
 }
 
-function Dashboard({
-  sessionToken,
-  onSignOut,
-}: {
-  sessionToken: string;
-  onSignOut: () => void;
-}) {
-  const projects = useQuery(api.projects.list, { sessionToken });
-  const usage = useQuery(api.usage.getMyUsage, { sessionToken });
+function Dashboard() {
+  const { signOut } = useAuthActions();
+  const projects = useQuery(api.projects.list);
+  const usage = useQuery(api.usage.getMyUsage);
   const retentionDays = usage?.retentionDays ?? 90;
   const navigate = useNavigate();
   const location = useLocation();
@@ -134,6 +137,26 @@ function Dashboard({
     const params = new URLSearchParams(location.search);
     return params.get("project");
   });
+
+  // If the URL carries ?project= (e.g. fresh claim redirect) and that writeKey
+  // belongs to a project we know about, adopt it as the active project.
+  // Adjust state during render (React 19 "Storing information from previous
+  // renders" pattern) to avoid set-state-in-effect. `lastSyncedUrlProject`
+  // tracks the last URL value we already synced so clicks in the Sidebar
+  // aren't clobbered by a re-render with the same URL.
+  const [lastSyncedUrlProject, setLastSyncedUrlProject] = useState<
+    string | null
+  >(null);
+  const urlProjectParam = new URLSearchParams(location.search).get("project");
+  if (
+    urlProjectParam &&
+    urlProjectParam !== lastSyncedUrlProject &&
+    projects?.some((p) => p.writeKey === urlProjectParam) &&
+    activeWriteKey !== urlProjectParam
+  ) {
+    setLastSyncedUrlProject(urlProjectParam);
+    setActiveWriteKey(urlProjectParam);
+  }
 
   const [billingSuccess, setBillingSuccess] = useState<{
     open: boolean;
@@ -155,23 +178,27 @@ function Dashboard({
   const [addingProject, setAddingProject] = useState(false);
   const [environment, setEnvironment] = useState<Environment>("all");
 
+  const onSignOut = () => void signOut();
+
+  // Handle sign-out as a side effect rather than during render
+  useEffect(() => {
+    if (projects === null) {
+      void signOut();
+    }
+  }, [projects, signOut]);
+
   if (projects === undefined) {
-    return (
-      <div className="min-h-screen flex items-center justify-center text-gray-400 text-sm">
-        Loading...
-      </div>
-    );
+    return <LoadingScreen />;
   }
 
   if (projects === null) {
-    onSignOut();
-    return null;
+    // Shouldn't happen inside <Authenticated> but guard anyway
+    return <LoadingScreen />;
   }
 
   if (projects.length === 0 || addingProject) {
     return (
       <ProjectSetup
-        sessionToken={sessionToken}
         existingConvexProjectIds={projects.flatMap((p) =>
           p.convexProjectId ? [p.convexProjectId] : [],
         )}
@@ -189,7 +216,6 @@ function Dashboard({
     projects.find((p) => p.writeKey === currentWriteKey) ?? projects[0];
 
   const sharedProps = {
-    sessionToken,
     writeKey: currentWriteKey,
     projectName: currentProject.name,
     environment: environment === "all" ? undefined : environment,
@@ -214,8 +240,8 @@ function Dashboard({
           <Route path="/overview" element={<Overview {...sharedProps} />} />
           <Route path="/pages" element={<PagesPage {...sharedProps} />} />
           <Route path="/events" element={<EventsPage {...sharedProps} />} />
-          <Route path="/billing" element={<BillingPage sessionToken={sessionToken} />} />
-          <Route path="/members" element={<MembersPage sessionToken={sessionToken} />} />
+          <Route path="/billing" element={<BillingPage />} />
+          <Route path="/members" element={<MembersPage />} />
           <Route path="*" element={<Navigate to="/overview" replace />} />
         </Routes>
         </PageErrorBoundary>
@@ -223,7 +249,6 @@ function Dashboard({
 
       {billingSuccess.open && (
         <BillingSuccessModal
-          sessionToken={sessionToken}
           expectedPlan={billingSuccess.expectedPlan}
           onClose={() => setBillingSuccess((s) => ({ ...s, open: false }))}
         />
