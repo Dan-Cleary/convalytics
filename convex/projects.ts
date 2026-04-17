@@ -8,7 +8,7 @@ import {
   internalAction,
 } from "./_generated/server";
 import { internal } from "./_generated/api";
-import { requireAuth, getUserTeamIds } from "./authHelpers";
+import { getUserId, requireAuth, getUserTeamIds } from "./authHelpers";
 import { render } from "@react-email/render";
 import { WelcomeEmail } from "./emails/WelcomeEmail";
 import { FROM, REPLY_TO, resend } from "./emailConfig";
@@ -41,7 +41,8 @@ export const create = mutation({
 export const list = query({
   args: {},
   handler: async (ctx) => {
-    const userId = await requireAuth(ctx);
+    const userId = await getUserId(ctx);
+    if (!userId) return null;
 
     // Get all teams the user is a member of
     const teamIds = await getUserTeamIds(ctx, userId);
