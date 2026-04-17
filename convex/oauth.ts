@@ -69,8 +69,8 @@ export const exchangeCode = action({
     if (!detailsResp.ok) {
       throw new Error(`Failed to fetch token details (${detailsResp.status})`);
     }
-    const details = (await detailsResp.json()) as { teamId: number };
-    if (!details.teamId) {
+    const details = (await detailsResp.json()) as { teamId: number | null };
+    if (details.teamId === undefined || details.teamId === null) {
       throw new Error(
         `token_details missing teamId: ${JSON.stringify(details)}`,
       );
@@ -148,15 +148,40 @@ export const connectConvexTeam = internalMutation({
         await ctx.db.patch("teams", teamId, { name: args.convexTeamName.trim() });
       }
     } else {
-      teamId = await ctx.db.insert("teams", {
-        convexTeamId: args.convexTeamId,
-        name: initialName,
-        slug: `team-${args.convexTeamId}`,
-        plan: "free",
-        usageLimitEventsPerMonth: 10000,
-        createdAt: now,
-      });
-      isNewTeam = true;
+      const existingMemberships = await ctx.db
+        .query("teamMembers")
+        .withIndex("by_userId", (q) => q.eq("userId", args.userId))
+        .collect();
+
+      // Claim flow creates a team without convexTeamId; if the user has
+      // exactly one such team, attach the Convex team there to avoid duplicates.
+      const candidateTeams = await Promise.all(
+        existingMemberships.map((membership) =>
+          ctx.db.get("teams", membership.teamId),
+        ),
+      );
+      const unlinkedTeams = candidateTeams.filter(
+        (team): team is NonNullable<typeof team> =>
+          team !== null && team.convexTeamId === undefined,
+      );
+      const reusableTeam = unlinkedTeams.length === 1 ? unlinkedTeams[0] : null;
+      if (reusableTeam && reusableTeam.convexTeamId === undefined) {
+        teamId = reusableTeam._id;
+        isNewTeam = false;
+        await ctx.db.patch("teams", teamId, {
+          convexTeamId: args.convexTeamId,
+        });
+      } else {
+        teamId = await ctx.db.insert("teams", {
+          convexTeamId: args.convexTeamId,
+          name: initialName,
+          slug: `team-${args.convexTeamId}`,
+          plan: "free",
+          usageLimitEventsPerMonth: 10000,
+          createdAt: now,
+        });
+        isNewTeam = true;
+      }
     }
 
     // 2. Ensure user is a member of the team
