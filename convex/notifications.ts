@@ -117,7 +117,7 @@ export const reserveNotificationSend = internalMutation({
       };
     }
 
-    const user = await ctx.db.get(ownerMembership.userId);
+    const user = await ctx.db.get("users", ownerMembership.userId);
     const ownerEmail = user?.email ?? null;
     if (!ownerEmail) {
       return {
@@ -151,7 +151,7 @@ export const getTeamOwnerEmailQuery = internalQuery({
 
     if (!ownerMembership) return { team, ownerEmail: null };
 
-    const user = await ctx.db.get(ownerMembership.userId);
+    const user = await ctx.db.get("users", ownerMembership.userId);
     return { team, ownerEmail: user?.email ?? null };
   },
 });

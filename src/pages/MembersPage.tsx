@@ -55,6 +55,12 @@ export function MembersPage() {
       } else {
         setEditingTeamName(false);
       }
+    } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : "Failed to rename team";
+      setRenameError(errorMessage);
+      console.error("Error renaming team:", error);
+      // Do not close the editor on error
     } finally {
       setRenaming(false);
     }

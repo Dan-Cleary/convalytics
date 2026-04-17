@@ -29,6 +29,7 @@ export function AcceptInvitePage({ token }: Props) {
       const result = await acceptInvite({ token });
       if ("error" in result) {
         setError(result.error ?? "Failed to accept invite");
+        attempted.current = false; // Reset to allow retry
       } else {
         setAccepted(true);
         void navigate("/overview", { replace: true });
@@ -36,6 +37,7 @@ export function AcceptInvitePage({ token }: Props) {
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Failed to accept invite";
       setError(msg);
+      attempted.current = false; // Reset to allow retry
     } finally {
       setAccepting(false);
     }
@@ -45,6 +47,13 @@ export function AcceptInvitePage({ token }: Props) {
   useEffect(() => {
     if (!isAuthenticated) attempted.current = false;
   }, [isAuthenticated]);
+
+  // Manual retry handler
+  const handleRetry = useCallback(() => {
+    attempted.current = false;
+    setError(null);
+    void attemptAccept();
+  }, [attemptAccept]);
 
   // Auto-accept once the user is signed in and the invite is valid
   useEffect(() => {
@@ -173,7 +182,7 @@ export function AcceptInvitePage({ token }: Props) {
                         e.currentTarget.style.background = "#1a1814";
                         e.currentTarget.style.borderColor = "#1a1814";
                       }}
-                      onClick={() => void attemptAccept()}
+                      onClick={() => void handleRetry()}
                     >
                       Try again
                     </button>

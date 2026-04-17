@@ -176,14 +176,20 @@ function Dashboard() {
 
   const onSignOut = () => void signOut();
 
+  // Handle sign-out as a side effect rather than during render
+  useEffect(() => {
+    if (projects === null) {
+      onSignOut();
+    }
+  }, [projects]);
+
   if (projects === undefined) {
     return <LoadingScreen />;
   }
 
   if (projects === null) {
     // Shouldn't happen inside <Authenticated> but guard anyway
-    onSignOut();
-    return null;
+    return <LoadingScreen />;
   }
 
   if (projects.length === 0 || addingProject) {
