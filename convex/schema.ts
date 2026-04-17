@@ -1,26 +1,35 @@
 import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
+import { authTables } from "@convex-dev/auth/server";
 
 export default defineSchema({
   // -------------------------------------------------------------------------
-  // Teams & Users (multi-tenant SaaS model)
+  // Identity — managed by @convex-dev/auth
+  //
+  // authTables provides: users, authSessions, authAccounts, authRefreshTokens,
+  // authVerifiers, authVerificationCodes, authRateLimits.
+  //
+  // `users` has fields: name, email, image, emailVerificationTime, phone,
+  // phoneVerificationTime, isAnonymous. Identified by Id<"users">.
+  // -------------------------------------------------------------------------
+  ...authTables,
+
+  // -------------------------------------------------------------------------
+  // Teams (unit of ownership and billing)
   // -------------------------------------------------------------------------
 
-  // Teams are the unit of ownership and billing. Users auto-join a team based
-  // on their Convex OAuth team. Future: invite flow for non-Convex users.
+  // convexTeamId is populated when a team member connects Convex team-level
+  // OAuth (for project provisioning). A team can exist without it.
   teams: defineTable({
-    convexTeamId: v.number(), // from Convex OAuth
+    convexTeamId: v.optional(v.number()),
     name: v.string(),
-    slug: v.string(), // URL-friendly identifier
-    // Billing (future)
+    slug: v.string(),
     plan: v.union(v.literal("free"), v.literal("solo"), v.literal("pro")),
     stripeCustomerId: v.optional(v.string()),
     stripeSubscriptionId: v.optional(v.string()),
     usageLimitEventsPerMonth: v.number(),
-    // Rolling monthly usage counter (resets each billing period)
     usageEventsThisMonth: v.optional(v.number()),
-    usageMonthKey: v.optional(v.string()), // "YYYY-MM" — used to detect month rollover
-    // Notification state — avoid spamming the same threshold email
+    usageMonthKey: v.optional(v.string()),
     notifiedAt80Pct: v.optional(v.boolean()),
     notifiedAt100Pct: v.optional(v.boolean()),
     createdAt: v.number(),
@@ -28,10 +37,10 @@ export default defineSchema({
     .index("by_convexTeamId", ["convexTeamId"])
     .index("by_slug", ["slug"]),
 
-  // Links users to teams. A user can be on multiple teams (future).
+  // Links users to teams. A user can be on multiple teams.
   teamMembers: defineTable({
     teamId: v.id("teams"),
-    userId: v.string(), // ref: users.userId
+    userId: v.id("users"),
     role: v.union(v.literal("owner"), v.literal("admin"), v.literal("member")),
     joinedAt: v.number(),
   })
@@ -39,47 +48,31 @@ export default defineSchema({
     .index("by_userId", ["userId"])
     .index("by_teamId_and_userId", ["teamId", "userId"]),
 
-  // Individual users. Created on first login via Convex OAuth,
-  // or via team invite (email/password).
-  users: defineTable({
-    userId: v.string(), // "convex:{teamId}" for OAuth users, "invited:{email}" for invited users
-    email: v.optional(v.string()),
-    name: v.optional(v.string()),
-    passwordHash: v.optional(v.string()), // only set for invited (non-OAuth) users
-    createdAt: v.number(),
-  })
-    .index("by_userId", ["userId"])
-    .index("by_email", ["email"]),
-
-  // Ephemeral auth tokens. Rotated on each login, expire after 30 days.
-  // managementToken is the Convex OAuth access token — used to call
-  // api.convex.dev on behalf of the user. Expires independently (~1 hour).
-  // Optional for invited users who don't have Convex OAuth.
-  sessions: defineTable({
-    sessionToken: v.string(),
-    userId: v.string(), // ref: users.userId
-    managementToken: v.optional(v.string()),
-    expiresAt: v.optional(v.number()), // epoch ms — optional for migration
-  })
-    .index("by_sessionToken", ["sessionToken"])
-    .index("by_userId", ["userId"])
-    .index("by_expiresAt", ["expiresAt"]),
-
-  // Pending team invitations. Invited users set a password on first sign-in.
+  // Pending team invitations. Invitee signs in with Google; server matches
+  // the Google email against invitedEmail to finalize the join.
   teamInvites: defineTable({
     teamId: v.id("teams"),
     invitedEmail: v.string(),
-    tokenHash: v.optional(v.string()), // SHA-256 hash of invite token
-    token: v.optional(v.string()), // legacy plaintext token kept for backcompat lookup
+    tokenHash: v.string(),
     role: v.union(v.literal("admin"), v.literal("member")),
-    invitedBy: v.string(), // userId of the person who sent the invite
-    expiresAt: v.number(), // epoch ms — invites expire after 7 days
-    acceptedAt: v.optional(v.number()), // set when the invite is accepted
+    invitedBy: v.id("users"),
+    expiresAt: v.number(), // invites expire after 7 days
+    acceptedAt: v.optional(v.number()),
   })
     .index("by_tokenHash", ["tokenHash"])
-    .index("by_token", ["token"])
     .index("by_teamId", ["teamId"])
     .index("by_teamId_and_email", ["teamId", "invitedEmail"]),
+
+  // Convex team-OAuth grants. Separate from user identity — a team member
+  // "Connects Convex" once to let the app provision projects via the
+  // Convex Management API. Management tokens can expire (~1 hour); the
+  // grant should be refreshed when that happens.
+  teamConvexGrants: defineTable({
+    teamId: v.id("teams"),
+    grantedByUserId: v.id("users"),
+    managementToken: v.string(),
+    createdAt: v.number(),
+  }).index("by_teamId", ["teamId"]),
 
   // -------------------------------------------------------------------------
   // Projects (analytics projects owned by teams)
@@ -88,11 +81,11 @@ export default defineSchema({
   projects: defineTable({
     teamId: v.optional(v.id("teams")), // null until claimed by a human
     name: v.string(),
-    writeKey: v.string(), // secret key sent with each event
-    convexProjectId: v.optional(v.string()), // Convex Management API project id (set at claim)
-    convexDeploymentSlug: v.optional(v.string()), // e.g. "peaceful-bobcat-731" — set by CLI at provision
-    claimToken: v.optional(v.string()), // one-time token for claiming unclaimed projects
-    claimed: v.optional(v.boolean()), // false/undefined = unclaimed, true = claimed
+    writeKey: v.string(),
+    convexProjectId: v.optional(v.string()),
+    convexDeploymentSlug: v.optional(v.string()),
+    claimToken: v.optional(v.string()),
+    claimed: v.optional(v.boolean()),
   })
     .index("by_teamId", ["teamId"])
     .index("by_writeKey", ["writeKey"])
@@ -104,19 +97,19 @@ export default defineSchema({
   // Analytics data (collected from end-user websites)
   //
   // NOTE: visitorId and sessionId are anonymous identifiers generated in the
-  // browser. They are NOT related to users/sessions tables above (which are
-  // for dashboard authentication).
+  // browser. They are NOT related to the users/authSessions tables above
+  // (which are for dashboard authentication).
   // -------------------------------------------------------------------------
 
   events: defineTable({
     writeKey: v.string(),
     name: v.string(),
-    visitorId: v.string(), // anonymous browser-generated UUID, or identified user ID
-    sessionId: v.string(), // browser session UUID
+    visitorId: v.string(),
+    sessionId: v.string(),
     timestamp: v.number(),
-    environment: v.optional(v.string()), // "development" | "production" | "preview"
-    userEmail: v.optional(v.string()), // human-readable email from identify() or server-side track()
-    userName: v.optional(v.string()), // human-readable name from identify() or server-side track()
+    environment: v.optional(v.string()),
+    userEmail: v.optional(v.string()),
+    userName: v.optional(v.string()),
     props: v.record(v.string(), v.union(v.string(), v.number(), v.boolean())),
   })
     .index("by_writeKey_and_timestamp", ["writeKey", "timestamp"])
@@ -128,10 +121,10 @@ export default defineSchema({
 
   pageviews: defineTable({
     writeKey: v.string(),
-    visitorId: v.string(), // anonymous browser-generated UUID, or identified user ID
-    sessionId: v.string(), // browser session UUID
+    visitorId: v.string(),
+    sessionId: v.string(),
     timestamp: v.number(),
-    environment: v.optional(v.string()), // "development" | "production" | "preview"
+    environment: v.optional(v.string()),
     userEmail: v.optional(v.string()),
     userName: v.optional(v.string()),
     path: v.string(),
@@ -141,11 +134,10 @@ export default defineSchema({
     utm_source: v.optional(v.string()),
     utm_medium: v.optional(v.string()),
     utm_campaign: v.optional(v.string()),
-    // Enriched server-side from request headers (optional for backcompat with existing rows)
-    country: v.optional(v.string()), // ISO 2-letter code from cf-ipcountry
-    deviceType: v.optional(v.string()), // "Desktop" | "Mobile" | "Tablet"
-    browser: v.optional(v.string()), // "Chrome" | "Firefox" | "Safari" | etc.
-    osName: v.optional(v.string()), // "Windows" | "macOS" | "iOS" | "Android" | etc.
+    country: v.optional(v.string()),
+    deviceType: v.optional(v.string()),
+    browser: v.optional(v.string()),
+    osName: v.optional(v.string()),
   })
     .index("by_writeKey_and_timestamp", ["writeKey", "timestamp"])
     .index("by_writeKey_and_environment_and_timestamp", [
@@ -155,27 +147,19 @@ export default defineSchema({
     ])
     .index("by_writeKey_and_path", ["writeKey", "path"]),
 
-  // Cache: maps Convex deployment names to their type (dev/prod/preview).
-  // Populated during project claim via the Management API.
   deploymentTypes: defineTable({
     writeKey: v.string(),
-    deploymentName: v.string(), // e.g. "happy-panda-123"
-    deploymentType: v.string(), // "dev" | "prod" | "preview" | "custom"
+    deploymentName: v.string(),
+    deploymentType: v.string(),
   })
     .index("by_deploymentName", ["deploymentName"])
     .index("by_writeKey", ["writeKey"]),
 
-  // Tracks unclaimed project provisioning per IP for anti-abuse.
-  // Separate from billing rate limits — this is purely to prevent bulk spam provisioning.
   provisionAbuse: defineTable({
     ip: v.string(),
-    window: v.number(), // hour-level fixed window (epoch ms floored to hour)
+    window: v.number(),
     count: v.number(),
   }).index("by_ip_and_window", ["ip", "window"]),
-
-  // -------------------------------------------------------------------------
-  // Rate limiting (simple fixed-window counters)
-  // -------------------------------------------------------------------------
 
   rateLimits: defineTable({
     key: v.string(),
