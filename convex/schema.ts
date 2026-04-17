@@ -12,8 +12,10 @@ export default defineSchema({
   // `users` has fields: name, email, image, emailVerificationTime, phone,
   // phoneVerificationTime, isAnonymous. Identified by Id<"users">.
   // -------------------------------------------------------------------------
+  // authTables.users already defines indexes on `email` and `phone`, so we
+  // don't need to redefine them here. Redefining the `email` index triggers
+  // "Table users has two or more definitions of index 'email'" on deploy.
   ...authTables,
-  users: authTables.users.index("email", ["email"]),
 
   // -------------------------------------------------------------------------
   // Teams (unit of ownership and billing)
