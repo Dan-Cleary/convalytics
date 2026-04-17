@@ -192,8 +192,17 @@ export const connectConvexTeam = internalMutation({
       )
       .unique();
     if (!existingMembership) {
-      // Only auto-join for new teams. For existing teams, user should be invited.
-      if (isNewTeam) {
+      // Check if the team has any members at all. An orphaned team (zero
+      // members) can be claimed by any authenticated Convex peer — they
+      // already proved they're on the Convex team via the OAuth token, so
+      // letting them re-own an empty Convalytics team is safe.
+      const anyMember = await ctx.db
+        .query("teamMembers")
+        .withIndex("by_teamId", (q) => q.eq("teamId", teamId))
+        .first();
+      const isOrphan = anyMember === null;
+
+      if (isNewTeam || isOrphan) {
         await ctx.db.insert("teamMembers", {
           teamId,
           userId: args.userId,
@@ -201,7 +210,7 @@ export const connectConvexTeam = internalMutation({
           joinedAt: now,
         });
       } else {
-        // Log membership request for existing teams - requires invite/admin approval
+        // Existing team with other members — caller must be invited first.
         console.log(
           `OAuth membership request: User ${args.userId} attempted to join existing team ${teamId} (convexTeamId: ${args.convexTeamId}). Requires invite/admin approval.`,
         );
