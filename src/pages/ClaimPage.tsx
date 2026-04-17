@@ -60,7 +60,8 @@ export function ClaimPage({ claimToken }: { claimToken: string }) {
           </h1>
         </div>
 
-        {(project === undefined || authLoading) && (
+        {(project === undefined ||
+          (authLoading && project !== null && !project?.claimed)) && (
           <p className="text-xs" style={{ color: "#9b9488" }}>
             Loading...
           </p>

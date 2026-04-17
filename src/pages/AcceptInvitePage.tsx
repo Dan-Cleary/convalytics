@@ -109,7 +109,8 @@ export function AcceptInvitePage({ token }: Props) {
             </h1>
           </div>
 
-          {(invite === undefined || authLoading) && (
+          {(invite === undefined ||
+            (authLoading && invite?.status === "valid")) && (
             <p
               className="text-xs text-center py-8"
               style={{ color: "#9b9488" }}
