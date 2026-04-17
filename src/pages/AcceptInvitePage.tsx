@@ -39,7 +39,7 @@ export function AcceptInvitePage({ token }: Props) {
       try {
         const result = await acceptInvite({ token });
         if ("error" in result) {
-          setError(result.error);
+          setError(result.error ?? "Failed to accept invite");
         } else {
           setAccepted(true);
           void navigate("/overview", { replace: true });
