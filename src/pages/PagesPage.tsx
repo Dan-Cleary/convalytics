@@ -6,7 +6,6 @@ import { sinceForRange, defaultRangeForRetention, type RangeKey } from "../lib/t
 import { CountryIcon, DeviceIcon, BrowserIcon, OSIcon } from "../lib/breakdownIcons";
 
 interface PagesPageProps {
-  sessionToken: string;
   writeKey: string;
   projectName: string;
   environment?: string;
@@ -20,13 +19,13 @@ const CARD_STYLE = {
   boxShadow: "4px 4px 0px #1a1814",
 };
 
-export function PagesPage({ sessionToken, writeKey, projectName, environment, retentionDays, onNavigateBilling }: PagesPageProps) {
+export function PagesPage({ writeKey, projectName, environment, retentionDays, onNavigateBilling }: PagesPageProps) {
   const [userRange, setUserRange] = useState<RangeKey | null>(null);
   const range = userRange ?? defaultRangeForRetention(retentionDays);
   const rangeLabel = range === "all" ? "all time" : `last ${range}`;
   const since = sinceForRange(range);
-  const topPages = useQuery(api.pageviews.topPages, { sessionToken, writeKey, environment, since });
-  const breakdowns = useQuery(api.pageviews.breakdowns, { sessionToken, writeKey, environment, since });
+  const topPages = useQuery(api.pageviews.topPages, { writeKey, environment, since });
+  const breakdowns = useQuery(api.pageviews.breakdowns, { writeKey, environment, since });
   const [filter, setFilter] = useState("");
 
   const filtered = (topPages ?? []).filter((p) =>

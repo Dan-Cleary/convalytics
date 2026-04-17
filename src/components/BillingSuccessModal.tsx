@@ -17,15 +17,13 @@ function fmtRetention(days: number): string {
 }
 
 export function BillingSuccessModal({
-  sessionToken,
   expectedPlan,
   onClose,
 }: {
-  sessionToken: string;
   expectedPlan: "free" | "solo" | "pro" | null;
   onClose: () => void;
 }) {
-  const usage = useQuery(api.usage.getMyUsage, { sessionToken });
+  const usage = useQuery(api.usage.getMyUsage, {});
   const fired = useRef(false);
   const panelRef = useRef<HTMLDivElement>(null);
   const previousFocusRef = useRef<HTMLElement | null>(null);

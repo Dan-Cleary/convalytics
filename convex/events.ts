@@ -45,17 +45,12 @@ export const ingest = internalMutation({
 
 export const listLatest = query({
   args: {
-    sessionToken: v.string(),
     writeKey: v.string(),
     limit: v.optional(v.number()),
     environment: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    const project = await validateProjectAccess(
-      ctx,
-      args.sessionToken,
-      args.writeKey,
-    );
+    const project = await validateProjectAccess(ctx, args.writeKey);
     if (!project) return [];
 
     const limit = args.limit ?? 50;
@@ -81,17 +76,12 @@ export const listLatest = query({
 
 export const topEventNames = query({
   args: {
-    sessionToken: v.string(),
     writeKey: v.string(),
     environment: v.optional(v.string()),
     since: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
-    const project = await validateProjectAccess(
-      ctx,
-      args.sessionToken,
-      args.writeKey,
-    );
+    const project = await validateProjectAccess(ctx, args.writeKey);
     if (!project) return [];
 
     const startTime = args.since ?? Date.now() - 7 * 24 * 60 * 60 * 1000;
@@ -128,17 +118,12 @@ export const topEventNames = query({
 
 export const stats = query({
   args: {
-    sessionToken: v.string(),
     writeKey: v.string(),
     environment: v.optional(v.string()),
     since: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
-    const project = await validateProjectAccess(
-      ctx,
-      args.sessionToken,
-      args.writeKey,
-    );
+    const project = await validateProjectAccess(ctx, args.writeKey);
     if (!project) return { totalEvents: 0, activeUsers: 0 };
 
     const startTime = args.since ?? Date.now() - 7 * 24 * 60 * 60 * 1000;
@@ -170,17 +155,12 @@ export const stats = query({
 // the time range: <=7d → hourly, <=90d → daily, >90d → weekly.
 export const timeSeries = query({
   args: {
-    sessionToken: v.string(),
     writeKey: v.string(),
     environment: v.optional(v.string()),
     since: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
-    const project = await validateProjectAccess(
-      ctx,
-      args.sessionToken,
-      args.writeKey,
-    );
+    const project = await validateProjectAccess(ctx, args.writeKey);
     if (!project) return [];
 
     const now = Date.now();

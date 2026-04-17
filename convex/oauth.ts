@@ -1,42 +1,42 @@
+/**
+ * Convex team OAuth — "Connect Convex" flow.
+ *
+ * Identity is handled separately by Convex Auth (Google). This file
+ * handles team-level access: a user who is already signed in authorizes
+ * the app to manage their Convex team (create projects, list deployments,
+ * etc.) and we store the resulting management token in `teamConvexGrants`.
+ */
+
 import { v } from "convex/values";
-import {
-  action,
-  internalMutation,
-  internalQuery,
-  type MutationCtx,
-} from "./_generated/server";
+import { action, internalMutation } from "./_generated/server";
 import { internal } from "./_generated/api";
+import { requireAuth } from "./authHelpers";
+import type { Id } from "./_generated/dataModel";
 
 const CLIENT_ID = "a89dda460f9b4d42";
 const TOKEN_EXCHANGE_URL = "https://api.convex.dev/oauth/token";
 const TOKEN_DETAILS_URL = "https://api.convex.dev/v1/token_details";
 
-const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
-
-async function resolveSafeEmail(
-  ctx: Pick<MutationCtx, "db">,
-  userId: string,
-  email: string | undefined,
-): Promise<string | undefined> {
-  if (!email) return undefined;
-  const existingUsers = await ctx.db
-    .query("users")
-    .withIndex("by_email", (q) => q.eq("email", email))
-    .collect();
-  const hasConflict = existingUsers.some((user) => user.userId !== userId);
-  return hasConflict ? undefined : email;
-}
-
+/**
+ * Exchange a Convex OAuth authorization code for a team access token and
+ * wire the resulting team into our database.
+ *
+ * Caller must already be signed in with Convex Auth (Google).
+ */
 export const exchangeCode = action({
   args: {
     code: v.string(),
     codeVerifier: v.string(),
     redirectUri: v.string(),
   },
-  handler: async (ctx, args) => {
+  returns: v.object({ teamId: v.id("teams") }),
+  handler: async (ctx, args): Promise<{ teamId: Id<"teams"> }> => {
+    const userId = await requireAuth(ctx);
+
     const clientSecret = process.env.CONVEX_OAUTH_CLIENT_SECRET;
-    if (!clientSecret)
+    if (!clientSecret) {
       throw new Error("CONVEX_OAUTH_CLIENT_SECRET not configured");
+    }
 
     // Exchange authorization code for access token
     const tokenResp = await fetch(TOKEN_EXCHANGE_URL, {
@@ -51,68 +51,51 @@ export const exchangeCode = action({
         code_verifier: args.codeVerifier,
       }).toString(),
     });
-
     if (!tokenResp.ok) {
       const text = await tokenResp.text();
       throw new Error(
         `Token exchange failed (HTTP ${tokenResp.status}): ${text || "(empty body)"}`,
       );
     }
-
     const tokenData = (await tokenResp.json()) as { access_token: string };
     const accessToken = tokenData.access_token;
 
-    // Resolve user identity from the access token
+    // Resolve the team identity of the access token
     const detailsResp = await fetch(TOKEN_DETAILS_URL, {
       headers: { Authorization: `Bearer ${accessToken}` },
     });
     if (!detailsResp.ok) {
       throw new Error(`Failed to fetch token details (${detailsResp.status})`);
     }
-
-    const details = (await detailsResp.json()) as {
-      teamId: number;
-      email?: string;
-      name?: string;
-    };
-    const teamId = details.teamId;
-    if (!teamId)
+    const details = (await detailsResp.json()) as { teamId: number };
+    if (!details.teamId) {
       throw new Error(
         `token_details missing teamId: ${JSON.stringify(details)}`,
       );
+    }
 
-    const userId = `convex:${teamId}`;
-    const sessionToken = crypto.randomUUID();
-    const expiresAt = Date.now() + SESSION_TTL_MS;
-
-    await ctx.runMutation(internal.oauth.createSession, {
-      sessionToken,
+    const teamId = await ctx.runMutation(internal.oauth.connectConvexTeam, {
       userId,
-      convexTeamId: teamId,
+      convexTeamId: details.teamId,
       managementToken: accessToken,
-      expiresAt,
-      email: details.email,
-      name: details.name,
     });
-
-    return sessionToken;
+    return { teamId };
   },
 });
 
-export const createSession = internalMutation({
+/**
+ * Find-or-create the team, ensure membership, and upsert the Convex
+ * management token grant. Called from `exchangeCode` after token exchange.
+ */
+export const connectConvexTeam = internalMutation({
   args: {
-    sessionToken: v.string(),
-    userId: v.string(),
+    userId: v.id("users"),
     convexTeamId: v.number(),
     managementToken: v.string(),
-    expiresAt: v.number(),
-    email: v.optional(v.string()),
-    name: v.optional(v.string()),
   },
-  handler: async (ctx, args) => {
+  returns: v.id("teams"),
+  handler: async (ctx, args): Promise<Id<"teams">> => {
     const now = Date.now();
-    const normalizedEmail = args.email?.toLowerCase().trim() || undefined;
-    const email = await resolveSafeEmail(ctx, args.userId, normalizedEmail);
 
     // 1. Find or create the team (by Convex team ID)
     const existingTeam = await ctx.db
@@ -122,110 +105,60 @@ export const createSession = internalMutation({
       )
       .unique();
 
-    let teamId: import("./_generated/dataModel").Id<"teams">;
+    let teamId: Id<"teams">;
     let isNewTeam: boolean;
-
     if (existingTeam) {
       teamId = existingTeam._id;
       isNewTeam = false;
     } else {
       teamId = await ctx.db.insert("teams", {
         convexTeamId: args.convexTeamId,
-        name: `Team ${args.convexTeamId}`, // Default name, user can change later
+        name: `Team ${args.convexTeamId}`,
         slug: `team-${args.convexTeamId}`,
         plan: "free",
-        usageLimitEventsPerMonth: 10000, // Free tier default
+        usageLimitEventsPerMonth: 10000,
         createdAt: now,
       });
       isNewTeam = true;
     }
 
-    // 2. Upsert user — permanent record, created on first login
-    const existingUser = await ctx.db
-      .query("users")
-      .withIndex("by_userId", (q) => q.eq("userId", args.userId))
-      .unique();
-
-    if (!existingUser) {
-      await ctx.db.insert("users", {
-        userId: args.userId,
-        email,
-        name: args.name,
-        createdAt: now,
-      });
-    } else if (
-      (email && !existingUser.email) ||
-      (args.name && !existingUser.name)
-    ) {
-      // Backfill email/name if we now have it but didn't before
-      await ctx.db.patch("users", existingUser._id, {
-        ...(email && !existingUser.email ? { email } : {}),
-        ...(args.name && !existingUser.name ? { name: args.name } : {}),
-      });
-    }
-
-    // 3. Ensure user is a member of the team
+    // 2. Ensure user is a member of the team
     const existingMembership = await ctx.db
       .query("teamMembers")
       .withIndex("by_teamId_and_userId", (q) =>
         q.eq("teamId", teamId).eq("userId", args.userId),
       )
       .unique();
-
     if (!existingMembership) {
       await ctx.db.insert("teamMembers", {
         teamId,
         userId: args.userId,
-        role: isNewTeam ? "owner" : "member", // First user is owner, rest are members
+        role: isNewTeam ? "owner" : "member",
         joinedAt: now,
       });
     }
 
-    // 4. Upsert session — rotate token and refresh expiry on each login
-    const existingSession = await ctx.db
-      .query("sessions")
-      .withIndex("by_userId", (q) => q.eq("userId", args.userId))
-      .unique();
-
-    if (existingSession) {
-      await ctx.db.patch("sessions", existingSession._id, {
-        sessionToken: args.sessionToken,
+    // 3. Upsert the management-token grant for this team. Keep exactly one
+    // grant per team — re-authorizing replaces the previous token.
+    const existingGrant = await ctx.db
+      .query("teamConvexGrants")
+      .withIndex("by_teamId", (q) => q.eq("teamId", teamId))
+      .first();
+    if (existingGrant) {
+      await ctx.db.patch(existingGrant._id, {
+        grantedByUserId: args.userId,
         managementToken: args.managementToken,
-        expiresAt: args.expiresAt,
+        createdAt: now,
       });
     } else {
-      await ctx.db.insert("sessions", {
-        sessionToken: args.sessionToken,
-        userId: args.userId,
+      await ctx.db.insert("teamConvexGrants", {
+        teamId,
+        grantedByUserId: args.userId,
         managementToken: args.managementToken,
-        expiresAt: args.expiresAt,
+        createdAt: now,
       });
     }
-  },
-});
 
-// Used by actions that need session data (can't use authHelpers directly).
-// Logic must match authHelpers.validateSession exactly.
-export const getSessionByToken = internalQuery({
-  args: { sessionToken: v.string() },
-  handler: async (ctx, args) => {
-    if (!args.sessionToken) return null;
-
-    const session = await ctx.db
-      .query("sessions")
-      .withIndex("by_sessionToken", (q) =>
-        q.eq("sessionToken", args.sessionToken),
-      )
-      .unique();
-
-    if (!session) return null;
-
-    // Sessions without expiresAt are legacy and should re-authenticate.
-    // Sessions past expiry are invalid.
-    if (!session.expiresAt || session.expiresAt < Date.now()) {
-      return null;
-    }
-
-    return session;
+    return teamId;
   },
 });

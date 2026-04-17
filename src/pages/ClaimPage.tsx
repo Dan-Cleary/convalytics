@@ -1,61 +1,38 @@
-import { useQuery, useAction } from "convex/react";
+import { useQuery, useAction, useConvexAuth } from "convex/react";
+import { useAuthActions } from "@convex-dev/auth/react";
 import { api } from "../../convex/_generated/api";
-import { startOAuthFlow, clearSession } from "../lib/auth";
 import { useState, useEffect, useRef, useCallback } from "react";
 
-export function ClaimPage({
-  claimToken,
-  sessionToken,
-  onSignIn,
-}: {
-  claimToken: string;
-  sessionToken: string | null;
-  onSignIn: () => void;
-}) {
+export function ClaimPage({ claimToken }: { claimToken: string }) {
+  const { isAuthenticated, isLoading: authLoading } = useConvexAuth();
+  const { signIn } = useAuthActions();
   const project = useQuery(api.projects.getByClaimToken, { claimToken });
   const claimAction = useAction(api.projects.claim);
   const [claiming, setClaiming] = useState(false);
   const [claimedWriteKey, setClaimedWriteKey] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [effectiveSessionToken, setEffectiveSessionToken] =
-    useState(sessionToken);
   const autoClaimAttempted = useRef(false);
 
   const claimed = claimedWriteKey !== null;
 
-  // Sync effectiveSessionToken when sessionToken prop changes (e.g., after OAuth flow)
-  useEffect(() => {
-    if (sessionToken !== effectiveSessionToken) {
-      setEffectiveSessionToken(sessionToken);
-    }
-  }, [sessionToken, effectiveSessionToken]);
-
   const handleClaim = useCallback(async () => {
-    if (!effectiveSessionToken) return;
+    if (!isAuthenticated) return;
     setClaiming(true);
     setError(null);
     try {
-      const result = await claimAction({
-        sessionToken: effectiveSessionToken,
-        claimToken,
-      });
+      const result = await claimAction({ claimToken });
       setClaimedWriteKey(result.writeKey);
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Failed to claim project";
-      if (msg.includes("Not authenticated")) {
-        clearSession();
-        setEffectiveSessionToken(null);
-      } else {
-        setError(msg);
-      }
+      setError(msg);
     } finally {
       setClaiming(false);
     }
-  }, [effectiveSessionToken, claimToken, claimAction]);
+  }, [isAuthenticated, claimToken, claimAction]);
 
   useEffect(() => {
     if (
-      effectiveSessionToken &&
+      isAuthenticated &&
       project &&
       !project.claimed &&
       !claimed &&
@@ -65,13 +42,7 @@ export function ClaimPage({
       autoClaimAttempted.current = true;
       void handleClaim();
     }
-  }, [effectiveSessionToken, project, claimed, claiming, handleClaim]);
-
-  // Check for OAuth callback return on this page
-  if (window.location.pathname === "/oauth/callback") {
-    onSignIn();
-    return null;
-  }
+  }, [isAuthenticated, project, claimed, claiming, handleClaim]);
 
   return (
     <div
@@ -101,7 +72,7 @@ export function ClaimPage({
           </h1>
         </div>
 
-        {project === undefined && (
+        {(project === undefined || authLoading) && (
           <p className="text-xs" style={{ color: "#9b9488" }}>
             Loading...
           </p>
@@ -147,7 +118,7 @@ export function ClaimPage({
           </div>
         )}
 
-        {project && !project.claimed && !claimed && (
+        {project && !project.claimed && !claimed && !authLoading && (
           <div>
             <p
               className="text-[10px] font-bold uppercase tracking-widest mb-1"
@@ -186,7 +157,7 @@ export function ClaimPage({
               >
                 Claiming...
               </p>
-            ) : effectiveSessionToken ? (
+            ) : isAuthenticated ? (
               <button
                 className="w-full py-3 text-xs font-bold uppercase tracking-wider cursor-pointer transition-all"
                 style={{
@@ -222,13 +193,13 @@ export function ClaimPage({
                   e.currentTarget.style.background = "#1a1814";
                   e.currentTarget.style.borderColor = "#1a1814";
                 }}
-                onClick={() => void startOAuthFlow(`/claim/${claimToken}`)}
+                onClick={() =>
+                  void signIn("google", {
+                    redirectTo: `/claim/${claimToken}`,
+                  })
+                }
               >
-                <img
-                  src="https://www.convex.dev/favicon.ico"
-                  alt=""
-                  className="w-4 h-4"
-                />
+                <GoogleLogo />
                 Sign in to claim
               </button>
             )}
@@ -243,6 +214,17 @@ export function ClaimPage({
         )}
       </div>
     </div>
+  );
+}
+
+function GoogleLogo() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 48 48" aria-hidden="true">
+      <path fill="#FFC107" d="M43.611 20.083H42V20H24v8h11.303c-1.649 4.657-6.08 8-11.303 8-6.627 0-12-5.373-12-12s5.373-12 12-12c3.059 0 5.842 1.154 7.961 3.039l5.657-5.657C34.046 6.053 29.268 4 24 4 12.955 4 4 12.955 4 24s8.955 20 20 20 20-8.955 20-20c0-1.341-.138-2.65-.389-3.917z" />
+      <path fill="#FF3D00" d="M6.306 14.691l6.571 4.819C14.655 15.108 18.961 12 24 12c3.059 0 5.842 1.154 7.961 3.039l5.657-5.657C34.046 6.053 29.268 4 24 4 16.318 4 9.656 8.337 6.306 14.691z" />
+      <path fill="#4CAF50" d="M24 44c5.166 0 9.86-1.977 13.409-5.192l-6.19-5.238A11.91 11.91 0 0 1 24 36c-5.202 0-9.619-3.317-11.283-7.946l-6.522 5.025C9.505 39.556 16.227 44 24 44z" />
+      <path fill="#1976D2" d="M43.611 20.083H42V20H24v8h11.303a12.04 12.04 0 0 1-4.087 5.571l.003-.002 6.19 5.238C36.971 39.205 44 34 44 24c0-1.341-.138-2.65-.389-3.917z" />
+    </svg>
   );
 }
 

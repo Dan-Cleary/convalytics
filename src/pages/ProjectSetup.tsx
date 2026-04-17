@@ -3,6 +3,7 @@ import { api } from "../../convex/_generated/api";
 import { Id } from "../../convex/_generated/dataModel";
 import { useEffect, useState } from "react";
 import { getConvexSiteUrl } from "../lib/convex";
+import { startConnectConvexFlow } from "../lib/auth";
 
 function buildAgentPrompt(projects: CreatedProject[]): string {
   const sections: string[] = [];
@@ -36,7 +37,6 @@ function buildAgentPrompt(projects: CreatedProject[]): string {
 }
 
 interface ProjectSetupProps {
-  sessionToken: string;
   existingConvexProjectIds?: string[];
   onDone?: () => void;
   onSignOut?: () => void;
@@ -52,12 +52,11 @@ const CARD_STYLE = {
 };
 
 export function ProjectSetup({
-  sessionToken,
   existingConvexProjectIds = [],
   onDone,
   onSignOut,
 }: ProjectSetupProps) {
-  const teams = useQuery(api.projects.listTeams, { sessionToken });
+  const teams = useQuery(api.projects.listTeams, {});
   const listConvexProjects = useAction(api.projects.listConvexProjects);
   const createFromConvex = useMutation(api.projects.createFromConvex);
 
@@ -67,16 +66,20 @@ export function ProjectSetup({
   const [submitting, setSubmitting] = useState(false);
   const [created, setCreated] = useState<CreatedProject[] | null>(null);
 
-  const teamId: Id<"teams"> | undefined = teams?.[0]?._id;
+  // Pick the first team that has a Convex grant (convexTeamId set)
+  const connectedTeam = teams?.find((t) => t.convexTeamId !== undefined);
+  const teamId: Id<"teams"> | undefined = connectedTeam?._id;
+  const needsConnect = teams !== undefined && !connectedTeam;
 
   useEffect(() => {
-    listConvexProjects({ sessionToken })
+    if (!teamId) return;
+    listConvexProjects({ teamId })
       .then((projects) => setConvexProjects(projects))
       .catch((err: Error) => {
         setLoadError(err.message);
         setConvexProjects([]);
       });
-  }, [sessionToken, listConvexProjects]);
+  }, [teamId, listConvexProjects]);
 
   const available = (convexProjects ?? []).filter(
     (p) => !existingConvexProjectIds.includes(p.id),
@@ -99,7 +102,6 @@ export function ProjectSetup({
       const results: CreatedProject[] = [];
       for (const p of toCreate) {
         const key = await createFromConvex({
-          sessionToken,
           teamId,
           name: p.name,
           convexProjectId: p.id,
@@ -124,6 +126,63 @@ export function ProjectSetup({
   // Success screen
   if (created) {
     return <SuccessScreen created={created} onDone={onDone} />;
+  }
+
+  // Connect-Convex-team gate: signed in with Google but no Convex team linked yet
+  if (needsConnect) {
+    return (
+      <div style={pageStyle}>
+        <div style={CARD_STYLE} className="w-full max-w-sm mx-4 p-8">
+          <div className="flex items-center gap-2.5 mb-6">
+            <div
+              className="w-7 h-7 flex items-center justify-center flex-shrink-0"
+              style={{ background: "#e8651c" }}
+            >
+              <span className="text-white text-xs font-bold">C</span>
+            </div>
+            <h1 className="text-sm font-bold uppercase tracking-tight" style={{ color: "#1a1814" }}>
+              Convalytics
+            </h1>
+          </div>
+
+          <p className="text-sm font-bold mb-2" style={{ color: "#1a1814" }}>
+            Connect your Convex team
+          </p>
+          <p className="text-xs mb-5 leading-relaxed" style={{ color: "#6b6456" }}>
+            Authorize Convalytics to access your Convex team so you can pick
+            which Convex projects to track.
+          </p>
+
+          <button
+            className="w-full py-3 text-xs font-bold uppercase tracking-wider cursor-pointer transition-all"
+            style={{ background: "#1a1814", color: "#e9e6db", border: "2px solid #1a1814" }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.background = "#e8651c";
+              e.currentTarget.style.borderColor = "#e8651c";
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = "#1a1814";
+              e.currentTarget.style.borderColor = "#1a1814";
+            }}
+            onClick={() => void startConnectConvexFlow("/")}
+          >
+            Connect Convex team
+          </button>
+
+          {onSignOut && (
+            <button
+              className="mt-6 text-xs cursor-pointer"
+              style={{ color: "#9b9488" }}
+              onMouseEnter={(e) => (e.currentTarget.style.color = "#1a1814")}
+              onMouseLeave={(e) => (e.currentTarget.style.color = "#9b9488")}
+              onClick={onSignOut}
+            >
+              Sign out
+            </button>
+          )}
+        </div>
+      </div>
+    );
   }
 
   // Selection screen

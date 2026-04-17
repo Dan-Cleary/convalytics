@@ -1,31 +1,27 @@
 /**
- * Team invite flow for non-Convex-OAuth users.
+ * Team invite flow.
  *
- * Owners/admins send email invites. Invitees click the link, set a password,
- * and get a session. Subsequent sign-ins use email + password.
+ * Owners/admins send email invites. Invitees sign in with Google (Convex
+ * Auth) using the invited email address; `acceptInvite` matches the
+ * authenticated email to `invitedEmail` and adds the user to the team.
  *
- * Password hashing is done in actions (full crypto APIs). Database writes are
- * in internal mutations so they're testable independently.
+ * All identity lives in `authTables.users`. No passwords.
  */
 
 import { v } from "convex/values";
 import {
-  action,
   internalAction,
-  internalMutation,
-  internalQuery,
-  type MutationCtx,
   mutation,
   query,
-  type QueryCtx,
 } from "./_generated/server";
 import { internal } from "./_generated/api";
-import { validateSession, getTeamMembership } from "./authHelpers";
+import { requireAuth, getTeamMembership } from "./authHelpers";
 import { render } from "@react-email/render";
 import { InviteEmail } from "./emails/InviteEmail";
 import { FROM, REPLY_TO, resend } from "./emailConfig";
+import type { QueryCtx, MutationCtx } from "./_generated/server";
+
 const INVITE_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
-const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
 
 async function hashInviteToken(token: string): Promise<string> {
   const bytes = new TextEncoder().encode(token);
@@ -35,31 +31,14 @@ async function hashInviteToken(token: string): Promise<string> {
     .join("");
 }
 
-async function findUsersByEmail(
-  ctx: Pick<QueryCtx | MutationCtx, "db">,
-  email: string,
-) {
-  return await ctx.db
-    .query("users")
-    .withIndex("by_email", (q) => q.eq("email", email))
-    .collect();
-}
-
-async function findInviteByToken(
+async function findInviteByTokenHash(
   ctx: Pick<QueryCtx | MutationCtx, "db">,
   token: string,
 ) {
   const tokenHash = await hashInviteToken(token);
-  const inviteByHash = await ctx.db
-    .query("teamInvites")
-    .withIndex("by_tokenHash", (q) => q.eq("tokenHash", tokenHash))
-    .unique();
-  if (inviteByHash) return inviteByHash;
-
-  // Legacy fallback for pre-hash invites still stored with plaintext tokens.
   return await ctx.db
     .query("teamInvites")
-    .withIndex("by_token", (q) => q.eq("token", token))
+    .withIndex("by_tokenHash", (q) => q.eq("tokenHash", tokenHash))
     .unique();
 }
 
@@ -69,14 +48,13 @@ async function findInviteByToken(
 
 /** List all team members with user details. */
 export const listMembers = query({
-  args: { sessionToken: v.string() },
-  handler: async (ctx, args) => {
-    const session = await validateSession(ctx, args.sessionToken);
-    if (!session) return null;
+  args: {},
+  handler: async (ctx) => {
+    const userId = await requireAuth(ctx);
 
     const memberships = await ctx.db
       .query("teamMembers")
-      .withIndex("by_userId", (q) => q.eq("userId", session.userId))
+      .withIndex("by_userId", (q) => q.eq("userId", userId))
       .collect();
 
     if (memberships.length === 0) return null;
@@ -90,17 +68,13 @@ export const listMembers = query({
 
     const members = await Promise.all(
       allMemberships.map(async (m) => {
-        const user = await ctx.db
-          .query("users")
-          .withIndex("by_userId", (q) => q.eq("userId", m.userId))
-          .unique();
+        const user = await ctx.db.get(m.userId);
         return {
           userId: m.userId,
           role: m.role,
           joinedAt: m.joinedAt,
           email: user?.email ?? null,
           name: user?.name ?? null,
-          isOAuth: m.userId.startsWith("convex:"),
         };
       }),
     );
@@ -110,21 +84,20 @@ export const listMembers = query({
       teamId,
       members,
       myRole: myMembership?.role ?? "member",
-      myUserId: session.userId,
+      myUserId: userId,
     };
   },
 });
 
 /** List pending (not yet accepted, not expired) invites for the caller's team. */
 export const listPendingInvites = query({
-  args: { sessionToken: v.string() },
-  handler: async (ctx, args) => {
-    const session = await validateSession(ctx, args.sessionToken);
-    if (!session) return null;
+  args: {},
+  handler: async (ctx) => {
+    const userId = await requireAuth(ctx);
 
     const membership = await ctx.db
       .query("teamMembers")
-      .withIndex("by_userId", (q) => q.eq("userId", session.userId))
+      .withIndex("by_userId", (q) => q.eq("userId", userId))
       .first();
     if (!membership) return null;
 
@@ -149,13 +122,13 @@ export const listPendingInvites = query({
 export const getInviteByToken = query({
   args: { token: v.string() },
   handler: async (ctx, args) => {
-    const invite = await findInviteByToken(ctx, args.token);
+    const invite = await findInviteByTokenHash(ctx, args.token);
 
     if (!invite) return { status: "not_found" as const };
     if (invite.acceptedAt) return { status: "already_accepted" as const };
     if (invite.expiresAt < Date.now()) return { status: "expired" as const };
 
-    const team = await ctx.db.get("teams", invite.teamId);
+    const team = await ctx.db.get(invite.teamId);
     return {
       status: "valid" as const,
       invitedEmail: invite.invitedEmail,
@@ -172,17 +145,15 @@ export const getInviteByToken = query({
 /** Send a team invite. Only owners and admins can invite. */
 export const createInvite = mutation({
   args: {
-    sessionToken: v.string(),
     email: v.string(),
     role: v.union(v.literal("admin"), v.literal("member")),
   },
   handler: async (ctx, args) => {
-    const session = await validateSession(ctx, args.sessionToken);
-    if (!session) return { error: "Unauthorized" };
+    const userId = await requireAuth(ctx);
 
     const membership = await ctx.db
       .query("teamMembers")
-      .withIndex("by_userId", (q) => q.eq("userId", session.userId))
+      .withIndex("by_userId", (q) => q.eq("userId", userId))
       .first();
     if (!membership) return { error: "Not a team member" };
     if (membership.role === "member")
@@ -192,13 +163,17 @@ export const createInvite = mutation({
     const email = args.email.toLowerCase().trim();
     const now = Date.now();
 
-    // Check if user is already a member
-    const existingUsers = await findUsersByEmail(ctx, email);
+    // Check if the invited email is already a team member (authTables.users
+    // exposes email as an optional field).
+    const existingUsers = await ctx.db
+      .query("users")
+      .withIndex("email", (q) => q.eq("email", email))
+      .collect();
     for (const existingUser of existingUsers) {
       const existingMembership = await getTeamMembership(
         ctx,
         teamId,
-        existingUser.userId,
+        existingUser._id,
       );
       if (existingMembership)
         return { error: "This person is already a team member" };
@@ -230,11 +205,11 @@ export const createInvite = mutation({
       invitedEmail: email,
       tokenHash,
       role: args.role,
-      invitedBy: session.userId,
+      invitedBy: userId,
       expiresAt: now + INVITE_TTL_MS,
     });
 
-    const team = await ctx.db.get("teams", teamId);
+    const team = await ctx.db.get(teamId);
 
     await ctx.scheduler.runAfter(0, internal.invites.sendInviteEmail, {
       toEmail: email,
@@ -249,50 +224,42 @@ export const createInvite = mutation({
 
 /** Revoke a pending invite. Only owners and admins can revoke. */
 export const revokeInvite = mutation({
-  args: {
-    sessionToken: v.string(),
-    inviteId: v.id("teamInvites"),
-  },
+  args: { inviteId: v.id("teamInvites") },
   handler: async (ctx, args) => {
-    const session = await validateSession(ctx, args.sessionToken);
-    if (!session) return { error: "Unauthorized" };
+    const userId = await requireAuth(ctx);
 
     const membership = await ctx.db
       .query("teamMembers")
-      .withIndex("by_userId", (q) => q.eq("userId", session.userId))
+      .withIndex("by_userId", (q) => q.eq("userId", userId))
       .first();
     if (!membership) return { error: "Not a team member" };
     if (membership.role === "member")
       return { error: "Only owners and admins can revoke invites" };
 
-    const invite = await ctx.db.get("teamInvites", args.inviteId);
+    const invite = await ctx.db.get(args.inviteId);
     if (!invite) return { error: "Invite not found" };
     if (invite.teamId !== membership.teamId)
       return { error: "Invite belongs to a different team" };
 
-    await ctx.db.delete("teamInvites", args.inviteId);
+    await ctx.db.delete(args.inviteId);
     return { ok: true };
   },
 });
 
 /** Remove a team member. Only owners can remove others; anyone can remove themselves. */
 export const removeMember = mutation({
-  args: {
-    sessionToken: v.string(),
-    targetUserId: v.string(),
-  },
+  args: { targetUserId: v.id("users") },
   handler: async (ctx, args) => {
-    const session = await validateSession(ctx, args.sessionToken);
-    if (!session) return { error: "Unauthorized" };
+    const userId = await requireAuth(ctx);
 
     const myMembership = await ctx.db
       .query("teamMembers")
-      .withIndex("by_userId", (q) => q.eq("userId", session.userId))
+      .withIndex("by_userId", (q) => q.eq("userId", userId))
       .first();
     if (!myMembership) return { error: "Not a team member" };
 
     // Only owners can remove others (anyone can remove themselves)
-    if (args.targetUserId !== session.userId && myMembership.role !== "owner") {
+    if (args.targetUserId !== userId && myMembership.role !== "owner") {
       return { error: "Only owners can remove other members" };
     }
 
@@ -313,57 +280,46 @@ export const removeMember = mutation({
       if (owners.length <= 1) return { error: "Cannot remove the last owner" };
     }
 
-    await ctx.db.delete("teamMembers", targetMembership._id);
+    await ctx.db.delete(targetMembership._id);
     return { ok: true };
   },
 });
 
-// ---------------------------------------------------------------------------
-// Internal — called by actions, testable directly
-// ---------------------------------------------------------------------------
-
-/** Store accepted invite: create/update user with password hash, add to team, create session. */
-export const finalizeInviteAccept = internalMutation({
-  args: {
-    token: v.string(),
-    passwordHash: v.string(),
-    name: v.optional(v.string()),
-    sessionToken: v.string(),
-    expiresAt: v.number(),
-  },
+/**
+ * Accept an invite using the caller's current authenticated Google identity.
+ *
+ * Caller must already be signed in (Convex Auth / Google). The invite's
+ * `invitedEmail` must match the authenticated user's email.
+ */
+export const acceptInvite = mutation({
+  args: { token: v.string() },
+  returns: v.union(
+    v.object({ ok: v.literal(true), teamId: v.id("teams") }),
+    v.object({ error: v.string() }),
+  ),
   handler: async (ctx, args) => {
-    const invite = await findInviteByToken(ctx, args.token);
+    const userId = await requireAuth(ctx);
 
+    const user = await ctx.db.get(userId);
+    if (!user) return { error: "User not found" };
+    if (!user.email) {
+      return {
+        error:
+          "Your Google account did not share an email; cannot match invite",
+      };
+    }
+
+    const invite = await findInviteByTokenHash(ctx, args.token);
     if (!invite) return { error: "Invite not found" };
     if (invite.acceptedAt) return { error: "Invite already accepted" };
     if (invite.expiresAt < Date.now()) return { error: "Invite has expired" };
 
-    const email = invite.invitedEmail;
-    const userId = `invited:${email}`;
-    const now = Date.now();
-
-    // Create or update user
-    const existingUser = await ctx.db
-      .query("users")
-      .withIndex("by_userId", (q) => q.eq("userId", userId))
-      .unique();
-
-    if (existingUser) {
-      await ctx.db.patch("users", existingUser._id, {
-        passwordHash: args.passwordHash,
-        ...(args.name ? { name: args.name } : {}),
-      });
-    } else {
-      await ctx.db.insert("users", {
-        userId,
-        email,
-        name: args.name,
-        passwordHash: args.passwordHash,
-        createdAt: now,
-      });
+    if (user.email.toLowerCase().trim() !== invite.invitedEmail) {
+      return {
+        error: `This invite was sent to ${invite.invitedEmail}. Sign in with that Google account to accept.`,
+      };
     }
 
-    // Add to team
     const existingMembership = await getTeamMembership(
       ctx,
       invite.teamId,
@@ -374,258 +330,18 @@ export const finalizeInviteAccept = internalMutation({
         teamId: invite.teamId,
         userId,
         role: invite.role,
-        joinedAt: now,
+        joinedAt: Date.now(),
       });
     }
 
-    // Mark invite accepted
-    await ctx.db.patch("teamInvites", invite._id, { acceptedAt: now });
+    await ctx.db.patch(invite._id, { acceptedAt: Date.now() });
 
-    // Create session
-    const existingSession = await ctx.db
-      .query("sessions")
-      .withIndex("by_userId", (q) => q.eq("userId", userId))
-      .unique();
-
-    if (existingSession) {
-      await ctx.db.patch("sessions", existingSession._id, {
-        sessionToken: args.sessionToken,
-        expiresAt: args.expiresAt,
-      });
-    } else {
-      await ctx.db.insert("sessions", {
-        sessionToken: args.sessionToken,
-        userId,
-        expiresAt: args.expiresAt,
-      });
-    }
-
-    return { ok: true, sessionToken: args.sessionToken };
-  },
-});
-
-export const getInviteStatusForAccept = internalQuery({
-  args: { token: v.string() },
-  handler: async (ctx, args) => {
-    const invite = await findInviteByToken(ctx, args.token);
-
-    if (!invite) return { status: "not_found" as const };
-    if (invite.acceptedAt) return { status: "already_accepted" as const };
-    if (invite.expiresAt < Date.now()) return { status: "expired" as const };
-    return { status: "valid" as const };
-  },
-});
-
-/** Look up user by email and return their stored password hash. */
-export const getUserForSignIn = internalQuery({
-  args: { email: v.string() },
-  handler: async (ctx, args) => {
-    const users = await findUsersByEmail(ctx, args.email.toLowerCase().trim());
-    const usersWithPassword = users.filter(
-      (user): user is typeof user & { passwordHash: string } =>
-        typeof user.passwordHash === "string",
-    );
-    if (usersWithPassword.length !== 1) return null;
-    return {
-      userId: usersWithPassword[0].userId,
-      passwordHash: usersWithPassword[0].passwordHash,
-    };
-  },
-});
-
-/** Create or rotate a session for an invited user after password verification. */
-export const createInvitedSession = internalMutation({
-  args: {
-    userId: v.string(),
-    sessionToken: v.string(),
-    expiresAt: v.number(),
-  },
-  handler: async (ctx, args) => {
-    const existing = await ctx.db
-      .query("sessions")
-      .withIndex("by_userId", (q) => q.eq("userId", args.userId))
-      .unique();
-
-    if (existing) {
-      await ctx.db.patch("sessions", existing._id, {
-        sessionToken: args.sessionToken,
-        expiresAt: args.expiresAt,
-      });
-    } else {
-      await ctx.db.insert("sessions", {
-        sessionToken: args.sessionToken,
-        userId: args.userId,
-        expiresAt: args.expiresAt,
-      });
-    }
-
-    return { sessionToken: args.sessionToken };
+    return { ok: true as const, teamId: invite.teamId };
   },
 });
 
 // ---------------------------------------------------------------------------
-// Actions — password hashing lives here (full crypto APIs)
-// ---------------------------------------------------------------------------
-
-/** Hash a password with PBKDF2-SHA256 and a random salt. */
-async function hashPassword(password: string): Promise<string> {
-  const salt = crypto.randomUUID().replace(/-/g, "");
-  const enc = new TextEncoder();
-  const keyMaterial = await crypto.subtle.importKey(
-    "raw",
-    enc.encode(password),
-    "PBKDF2",
-    false,
-    ["deriveBits"],
-  );
-  const bits = await crypto.subtle.deriveBits(
-    {
-      name: "PBKDF2",
-      salt: enc.encode(salt),
-      iterations: 100_000,
-      hash: "SHA-256",
-    },
-    keyMaterial,
-    256,
-  );
-  const hash = Array.from(new Uint8Array(bits))
-    .map((b) => b.toString(16).padStart(2, "0"))
-    .join("");
-  return `${salt}:${hash}`;
-}
-
-/** Constant-time byte comparison to prevent timing attacks. */
-function constantTimeEqual(a: Uint8Array, b: Uint8Array): boolean {
-  const length = Math.max(a.length, b.length);
-  let diff = a.length ^ b.length;
-  for (let i = 0; i < length; i++) diff |= (a[i] ?? 0) ^ (b[i] ?? 0);
-  return diff === 0;
-}
-
-/** Verify a password against a stored hash. */
-async function verifyPassword(
-  password: string,
-  stored: string,
-): Promise<boolean> {
-  const [salt, expectedHash] = stored.split(":");
-  if (!salt || !expectedHash) return false;
-  const enc = new TextEncoder();
-  const keyMaterial = await crypto.subtle.importKey(
-    "raw",
-    enc.encode(password),
-    "PBKDF2",
-    false,
-    ["deriveBits"],
-  );
-  const bits = await crypto.subtle.deriveBits(
-    {
-      name: "PBKDF2",
-      salt: enc.encode(salt),
-      iterations: 100_000,
-      hash: "SHA-256",
-    },
-    keyMaterial,
-    256,
-  );
-  const derived = new Uint8Array(bits);
-  const expected = new Uint8Array(
-    expectedHash.match(/.{2}/g)!.map((h) => parseInt(h, 16)),
-  );
-  return constantTimeEqual(derived, expected);
-}
-
-/** Accept an invite by setting a password. Returns a session token. */
-export const acceptInviteWithPassword = action({
-  args: {
-    token: v.string(),
-    password: v.string(),
-    name: v.optional(v.string()),
-  },
-  returns: v.union(
-    v.object({ ok: v.literal(true), sessionToken: v.string() }),
-    v.object({ error: v.string() }),
-  ),
-  handler: async (
-    ctx,
-    args,
-  ): Promise<{ ok: true; sessionToken: string } | { error: string }> => {
-    if (args.password.length < 8) {
-      return { error: "Password must be at least 8 characters" };
-    }
-
-    const inviteStatus = await ctx.runQuery(
-      internal.invites.getInviteStatusForAccept,
-      {
-        token: args.token,
-      },
-    );
-    if (inviteStatus.status === "not_found")
-      return { error: "Invite not found" };
-    if (inviteStatus.status === "already_accepted")
-      return { error: "Invite already accepted" };
-    if (inviteStatus.status === "expired")
-      return { error: "Invite has expired" };
-
-    const passwordHash = await hashPassword(args.password);
-    const sessionToken = crypto.randomUUID();
-    const expiresAt = Date.now() + SESSION_TTL_MS;
-
-    const result = await ctx.runMutation(
-      internal.invites.finalizeInviteAccept,
-      {
-        token: args.token,
-        passwordHash,
-        name: args.name,
-        sessionToken,
-        expiresAt,
-      },
-    );
-
-    if ("error" in result) return { error: result.error ?? "Unknown error" };
-    return { ok: true, sessionToken: result.sessionToken };
-  },
-});
-
-/** Sign in with email + password (for invited users). Returns a session token. */
-export const signInWithPassword = action({
-  args: {
-    email: v.string(),
-    password: v.string(),
-  },
-  handler: async (ctx, args) => {
-    // Rate limit: 10 attempts per minute per email address
-    const rl = await ctx.runMutation(internal.rateLimit.check, {
-      key: `signin:${args.email.toLowerCase()}`,
-      limit: 10,
-    });
-    if (!rl.allowed) {
-      return { error: "Too many sign-in attempts. Please try again later." };
-    }
-
-    const user = await ctx.runQuery(internal.invites.getUserForSignIn, {
-      email: args.email,
-    });
-
-    if (!user) return { error: "Invalid email or password" };
-
-    const valid = await verifyPassword(args.password, user.passwordHash);
-    if (!valid) return { error: "Invalid email or password" };
-
-    const sessionToken = crypto.randomUUID();
-    const expiresAt = Date.now() + SESSION_TTL_MS;
-
-    await ctx.runMutation(internal.invites.createInvitedSession, {
-      userId: user.userId,
-      sessionToken,
-      expiresAt,
-    });
-
-    return { ok: true, sessionToken };
-  },
-});
-
-// ---------------------------------------------------------------------------
-// Internal action — email sending
+// Internal — invite email sending
 // ---------------------------------------------------------------------------
 
 export const sendInviteEmail = internalAction({
@@ -650,3 +366,4 @@ export const sendInviteEmail = internalAction({
     );
   },
 });
+

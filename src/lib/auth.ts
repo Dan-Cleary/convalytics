@@ -1,20 +1,14 @@
-const SESSION_KEY = "convalytics_session";
+/**
+ * Helpers for the Convex team-OAuth ("Connect Convex") flow.
+ *
+ * Identity is handled by @convex-dev/auth (see `ConvexAuthProvider` in
+ * main.tsx). This file only handles the PKCE dance for granting the app
+ * team-level access to the Convex Management API.
+ */
+
 const PKCE_VERIFIER_KEY = "convalytics_pkce_verifier";
 const OAUTH_STATE_KEY = "convalytics_oauth_state";
 const RETURN_TO_KEY = "convalytics_return_to";
-
-// Session token storage
-export function getSessionToken(): string | null {
-  return localStorage.getItem(SESSION_KEY);
-}
-
-export function setSessionToken(token: string) {
-  localStorage.setItem(SESSION_KEY, token);
-}
-
-export function clearSession() {
-  localStorage.removeItem(SESSION_KEY);
-}
 
 // PKCE helpers
 async function generateCodeVerifier(): Promise<string> {
@@ -38,7 +32,7 @@ async function generateCodeChallenge(verifier: string): Promise<string> {
 const CLIENT_ID = "a89dda460f9b4d42";
 const AUTHORIZE_URL = "https://dashboard.convex.dev/oauth/authorize/team";
 
-export async function startOAuthFlow(returnTo?: string) {
+export async function startConnectConvexFlow(returnTo?: string) {
   const verifier = await generateCodeVerifier();
   const challenge = await generateCodeChallenge(verifier);
   const state = crypto.randomUUID();

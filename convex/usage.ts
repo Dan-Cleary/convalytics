@@ -3,7 +3,7 @@ import { internalMutation, query } from "./_generated/server";
 import { Id } from "./_generated/dataModel";
 import { MutationCtx, QueryCtx } from "./_generated/server";
 import { PLANS, type PlanId } from "./plans";
-import { validateSession, getUserTeamIds } from "./authHelpers";
+import { getUserId, getUserTeamIds } from "./authHelpers";
 
 function monthKey(): string {
   const now = new Date();
@@ -183,12 +183,12 @@ export const cleanupProvisionAbuse = internalMutation({
 // Public query — returns billing/usage info for the current user's team.
 // Used by the in-app billing page.
 export const getMyUsage = query({
-  args: { sessionToken: v.string() },
-  handler: async (ctx, args) => {
-    const session = await validateSession(ctx, args.sessionToken);
-    if (!session) return null;
+  args: {},
+  handler: async (ctx) => {
+    const userId = await getUserId(ctx);
+    if (!userId) return null;
 
-    const teamIds = await getUserTeamIds(ctx, session.userId);
+    const teamIds = await getUserTeamIds(ctx, userId);
     if (teamIds.length === 0) return null;
 
     const team = await ctx.db.get("teams", teamIds[0]);

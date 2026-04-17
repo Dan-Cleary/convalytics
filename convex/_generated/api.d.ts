@@ -29,7 +29,6 @@ import type * as plans from "../plans.js";
 import type * as projects from "../projects.js";
 import type * as rateLimit from "../rateLimit.js";
 import type * as retention from "../retention.js";
-import type * as stats from "../stats.js";
 import type * as ua from "../ua.js";
 import type * as usage from "../usage.js";
 
@@ -61,7 +60,6 @@ declare const fullApi: ApiFromModules<{
   projects: typeof projects;
   rateLimit: typeof rateLimit;
   retention: typeof retention;
-  stats: typeof stats;
   ua: typeof ua;
   usage: typeof usage;
 }>;

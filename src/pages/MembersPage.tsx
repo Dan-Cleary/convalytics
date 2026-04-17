@@ -3,9 +3,9 @@ import { api } from "../../convex/_generated/api";
 import { useState } from "react";
 import { Id } from "../../convex/_generated/dataModel";
 
-export function MembersPage({ sessionToken }: { sessionToken: string }) {
-  const data = useQuery(api.invites.listMembers, { sessionToken });
-  const pendingInvites = useQuery(api.invites.listPendingInvites, { sessionToken });
+export function MembersPage() {
+  const data = useQuery(api.invites.listMembers, {});
+  const pendingInvites = useQuery(api.invites.listPendingInvites, {});
   const createInvite = useMutation(api.invites.createInvite);
   const revokeInvite = useMutation(api.invites.revokeInvite);
   const removeMember = useMutation(api.invites.removeMember);
@@ -27,7 +27,7 @@ export function MembersPage({ sessionToken }: { sessionToken: string }) {
     setInviteError(null);
     setInviteSuccess(false);
     try {
-      const result = await createInvite({ sessionToken, email: email.trim(), role });
+      const result = await createInvite({ email: email.trim(), role });
       if ("error" in result) {
         setInviteError(result.error ?? "Something went wrong");
       } else {
@@ -43,17 +43,17 @@ export function MembersPage({ sessionToken }: { sessionToken: string }) {
   async function handleRevoke(inviteId: Id<"teamInvites">) {
     setRevokingId(inviteId);
     try {
-      await revokeInvite({ sessionToken, inviteId });
+      await revokeInvite({ inviteId });
     } finally {
       setRevokingId(null);
     }
   }
 
-  async function handleRemove(userId: string) {
+  async function handleRemove(userId: Id<"users">) {
     if (!confirm("Remove this member from the team?")) return;
     setRemovingId(userId);
     try {
-      await removeMember({ sessionToken, targetUserId: userId });
+      await removeMember({ targetUserId: userId });
     } finally {
       setRemovingId(null);
     }

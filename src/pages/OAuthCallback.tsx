@@ -2,13 +2,9 @@ import { useEffect, useRef, useState } from "react";
 import { useAction } from "convex/react";
 import { useNavigate } from "react-router-dom";
 import { api } from "../../convex/_generated/api";
-import { clearPkce, getStoredPkce, getReturnTo, setSessionToken } from "../lib/auth";
+import { clearPkce, getStoredPkce, getReturnTo } from "../lib/auth";
 
-interface OAuthCallbackProps {
-  onSuccess: () => void;
-}
-
-export function OAuthCallback({ onSuccess }: OAuthCallbackProps) {
+export function OAuthCallback() {
   const exchangeCode = useAction(api.oauth.exchangeCode);
   const [error, setError] = useState<string | null>(null);
   const ran = useRef(false);
@@ -37,25 +33,23 @@ export function OAuthCallback({ onSuccess }: OAuthCallbackProps) {
       }
 
       if (returnedState !== pkce.state) {
-        setError("State mismatch — possible CSRF. Please try signing in again.");
+        setError("State mismatch — possible CSRF. Please try again.");
         return;
       }
 
       const redirectUri = `${window.location.origin}/oauth/callback`;
 
       try {
-        const sessionToken = await exchangeCode({ code, codeVerifier: pkce.verifier, redirectUri });
+        await exchangeCode({ code, codeVerifier: pkce.verifier, redirectUri });
         clearPkce();
-        setSessionToken(sessionToken);
         const returnTo = getReturnTo();
-        onSuccess();
         void navigate(returnTo ?? "/", { replace: true });
       } catch (err) {
         clearPkce();
-        setError((err as Error).message ?? "Sign-in failed. Please try again.");
+        setError((err as Error).message ?? "Connect failed. Please try again.");
       }
     })();
-  }, [exchangeCode, onSuccess, navigate]);
+  }, [exchangeCode, navigate]);
 
   const bg = { background: "#e9e6db" };
 
@@ -67,7 +61,7 @@ export function OAuthCallback({ onSuccess }: OAuthCallbackProps) {
           style={{ border: "2px solid #1a1814", boxShadow: "6px 6px 0 #1a1814" }}
         >
           <p className="text-sm font-bold uppercase tracking-wide mb-2" style={{ color: "#1a1814" }}>
-            Sign-in failed
+            Connect failed
           </p>
           <p className="text-xs mb-6 break-all" style={{ color: "#e8651c" }}>{error}</p>
           <a
@@ -75,7 +69,7 @@ export function OAuthCallback({ onSuccess }: OAuthCallbackProps) {
             className="text-xs uppercase tracking-wider transition-colors"
             style={{ color: "#9b9488" }}
           >
-            Back to sign in →
+            Back to dashboard →
           </a>
         </div>
       </div>
@@ -92,7 +86,7 @@ export function OAuthCallback({ onSuccess }: OAuthCallbackProps) {
           <span className="text-white text-sm font-bold">C</span>
         </div>
         <p className="text-xs uppercase tracking-widest" style={{ color: "#9b9488" }}>
-          Signing in...
+          Connecting Convex team...
         </p>
       </div>
     </div>

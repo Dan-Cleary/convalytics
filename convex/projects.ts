@@ -8,22 +8,22 @@ import {
   internalAction,
 } from "./_generated/server";
 import { internal } from "./_generated/api";
-import { validateSession, getUserTeamIds } from "./authHelpers";
+import { requireAuth, getUserTeamIds } from "./authHelpers";
 import { render } from "@react-email/render";
 import { WelcomeEmail } from "./emails/WelcomeEmail";
 import { FROM, REPLY_TO, resend } from "./emailConfig";
+import type { Id } from "./_generated/dataModel";
 
 export const create = mutation({
-  args: { sessionToken: v.string(), name: v.string(), teamId: v.id("teams") },
+  args: { name: v.string(), teamId: v.id("teams") },
   handler: async (ctx, args) => {
-    const session = await validateSession(ctx, args.sessionToken);
-    if (!session) throw new Error("Not authenticated");
+    const userId = await requireAuth(ctx);
 
     // Verify user is a member of the team
     const membership = await ctx.db
       .query("teamMembers")
       .withIndex("by_teamId_and_userId", (q) =>
-        q.eq("teamId", args.teamId).eq("userId", session.userId),
+        q.eq("teamId", args.teamId).eq("userId", userId),
       )
       .unique();
     if (!membership) throw new Error("Not a member of this team");
@@ -39,13 +39,12 @@ export const create = mutation({
 });
 
 export const list = query({
-  args: { sessionToken: v.string() },
-  handler: async (ctx, args) => {
-    const session = await validateSession(ctx, args.sessionToken);
-    if (!session) return null;
+  args: {},
+  handler: async (ctx) => {
+    const userId = await requireAuth(ctx);
 
     // Get all teams the user is a member of
-    const teamIds = await getUserTeamIds(ctx, session.userId);
+    const teamIds = await getUserTeamIds(ctx, userId);
     if (teamIds.length === 0) return [];
 
     // Get projects for all teams
@@ -61,22 +60,28 @@ export const list = query({
   },
 });
 
+/**
+ * List Convex projects for a team the caller has "Connected Convex" on.
+ *
+ * Uses the team's stored management token from `teamConvexGrants`. The
+ * caller must be a member of the team.
+ */
 export const listConvexProjects = action({
-  args: { sessionToken: v.string() },
+  args: { teamId: v.id("teams") },
   handler: async (ctx, args) => {
-    const session = await ctx.runQuery(internal.oauth.getSessionByToken, {
-      sessionToken: args.sessionToken,
+    const grant: {
+      managementToken: string;
+      convexTeamId: number;
+    } | null = await ctx.runQuery(internal.projects.getTeamGrantInternal, {
+      teamId: args.teamId,
     });
-    if (!session) throw new Error("Not authenticated");
-
-    const convexTeamId = session.userId.split(":")[1];
-    if (!convexTeamId || convexTeamId === "undefined") {
-      throw new Error("Session is invalid — please sign out and sign back in.");
+    if (!grant) {
+      throw new Error("Convex team not connected for this team");
     }
 
-    const url = `https://api.convex.dev/v1/teams/${convexTeamId}/list_projects`;
+    const url = `https://api.convex.dev/v1/teams/${grant.convexTeamId}/list_projects`;
     const resp = await fetch(url, {
-      headers: { Authorization: `Bearer ${session.managementToken}` },
+      headers: { Authorization: `Bearer ${grant.managementToken}` },
     });
 
     if (!resp.ok) {
@@ -107,20 +112,18 @@ export const listConvexProjects = action({
 
 export const createFromConvex = mutation({
   args: {
-    sessionToken: v.string(),
     teamId: v.id("teams"),
     name: v.string(),
     convexProjectId: v.string(),
   },
   handler: async (ctx, args) => {
-    const session = await validateSession(ctx, args.sessionToken);
-    if (!session) throw new Error("Not authenticated");
+    const userId = await requireAuth(ctx);
 
     // Verify user is a member of the team
     const membership = await ctx.db
       .query("teamMembers")
       .withIndex("by_teamId_and_userId", (q) =>
-        q.eq("teamId", args.teamId).eq("userId", session.userId),
+        q.eq("teamId", args.teamId).eq("userId", userId),
       )
       .unique();
     if (!membership) throw new Error("Not a member of this team");
@@ -184,7 +187,7 @@ export const provision = internalMutation({
           let claimToken = canonical.claimToken;
           if (!claimToken) {
             claimToken = crypto.randomUUID();
-            await ctx.db.patch("projects", canonical._id, { claimToken });
+            await ctx.db.patch(canonical._id, { claimToken });
           }
           return {
             writeKey: canonical.writeKey,
@@ -196,7 +199,7 @@ export const provision = internalMutation({
         let claimToken = existing.claimToken;
         if (!claimToken) {
           claimToken = crypto.randomUUID();
-          await ctx.db.patch("projects", existing._id, { claimToken });
+          await ctx.db.patch(existing._id, { claimToken });
         }
         return {
           writeKey: existing.writeKey,
@@ -218,17 +221,20 @@ export const provision = internalMutation({
   },
 });
 
-// Claim an unclaimed project: resolve deployment slug via Management API, then finalize.
+/**
+ * Claim an unclaimed project.
+ *
+ * Identity comes from Convex Auth (Google). If the user's first team has a
+ * connected Convex team grant, we use that management token to resolve the
+ * Convex deployment slug → project ID and cache deployment types.
+ */
 export const claim = action({
-  args: { sessionToken: v.string(), claimToken: v.string() },
+  args: { claimToken: v.string() },
   handler: async (
     ctx,
     args,
   ): Promise<{ projectId: string; name: string; writeKey: string }> => {
-    const session = await ctx.runQuery(internal.oauth.getSessionByToken, {
-      sessionToken: args.sessionToken,
-    });
-    if (!session) throw new Error("Not authenticated");
+    const userId = await requireAuth(ctx);
 
     const project: {
       convexDeploymentSlug?: string;
@@ -241,28 +247,24 @@ export const claim = action({
     if (project.claimed)
       throw new Error("This project has already been claimed");
 
-    // If we have a deployment slug, resolve it to a Management API project ID
-    // and cache all deployment types for environment tagging.
-    //
-    // The deployment slug (e.g. "uncommon-sandpiper-123") identifies a *deployment*,
-    // not a *project*, so we can't compare it against the project list directly.
-    // Instead, walk each project's deployments and find the one whose `name`
-    // matches our stored slug.
+    // Resolve the user's team + optional Convex management grant
+    const grant: {
+      teamId: Id<"teams">;
+      managementToken: string;
+      convexTeamId: number;
+    } | null = await ctx.runQuery(internal.projects.getUserPrimaryGrant, {
+      userId,
+    });
+
+    // If we have a deployment slug AND a connected Convex grant, resolve the
+    // deployment slug to a Management API project ID and cache deployment types
+    // for environment tagging.
     let convexProjectId: string | undefined;
-    const isConvexOauthUser = session.userId.startsWith("convex:");
-    const convexTeamId = isConvexOauthUser
-      ? session.userId.split(":")[1]
-      : undefined;
-    if (
-      project.convexDeploymentSlug &&
-      session.managementToken &&
-      convexTeamId &&
-      convexTeamId !== "undefined"
-    ) {
+    if (project.convexDeploymentSlug && grant) {
       try {
-        const listProjectsUrl = `https://api.convex.dev/v1/teams/${convexTeamId}/list_projects`;
+        const listProjectsUrl = `https://api.convex.dev/v1/teams/${grant.convexTeamId}/list_projects`;
         const projectsResp = await fetch(listProjectsUrl, {
-          headers: { Authorization: `Bearer ${session.managementToken}` },
+          headers: { Authorization: `Bearer ${grant.managementToken}` },
         });
         if (projectsResp.ok) {
           const apiProjects = (await projectsResp.json()) as Array<{
@@ -279,7 +281,7 @@ export const claim = action({
                 const depUrl = `https://api.convex.dev/v1/projects/${p.id}/list_deployments`;
                 const depResp = await fetch(depUrl, {
                   headers: {
-                    Authorization: `Bearer ${session.managementToken}`,
+                    Authorization: `Bearer ${grant.managementToken}`,
                   },
                 });
                 if (!depResp.ok) return null;
@@ -301,7 +303,6 @@ export const claim = action({
           if (matched) {
             convexProjectId = String(matched.project.id);
             if (project.writeKey) {
-              // Reuse the deployments we already fetched rather than round-tripping again.
               for (const d of matched.deployments) {
                 if (d.name && d.deploymentType) {
                   await ctx.runMutation(internal.deploymentTypes.cache, {
@@ -321,14 +322,14 @@ export const claim = action({
 
     const result = await ctx.runMutation(internal.projects.finalizeClaim, {
       claimToken: args.claimToken,
-      sessionToken: args.sessionToken,
+      userId,
       convexProjectId,
     });
 
     // Fire welcome email non-blocking — failure should not break the claim flow
     try {
       await ctx.scheduler.runAfter(0, internal.projects.sendWelcomeEmail, {
-        sessionToken: args.sessionToken,
+        userId,
         projectName: result.name,
       });
     } catch {
@@ -343,13 +344,10 @@ export const claim = action({
 export const finalizeClaim = internalMutation({
   args: {
     claimToken: v.string(),
-    sessionToken: v.string(),
+    userId: v.id("users"),
     convexProjectId: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    const session = await validateSession(ctx, args.sessionToken);
-    if (!session) throw new Error("Not authenticated");
-
     const project = await ctx.db
       .query("projects")
       .withIndex("by_claimToken", (q) => q.eq("claimToken", args.claimToken))
@@ -359,11 +357,11 @@ export const finalizeClaim = internalMutation({
     if (project.claimed)
       throw new Error("This project has already been claimed");
 
-    const teamIds = await getUserTeamIds(ctx, session.userId);
+    const teamIds = await getUserTeamIds(ctx, args.userId);
     if (teamIds.length === 0) throw new Error("No team found — sign in first");
 
     const teamId = teamIds[0];
-    await ctx.db.patch("projects", project._id, {
+    await ctx.db.patch(project._id, {
       teamId,
       claimed: true,
       ...(args.convexProjectId
@@ -402,21 +400,69 @@ export const getByClaimTokenInternal = internalQuery({
   },
 });
 
+/**
+ * Returns the Convex management grant + convexTeamId for a team, or null
+ * if no grant or the team has no `convexTeamId` recorded.
+ */
+export const getTeamGrantInternal = internalQuery({
+  args: { teamId: v.id("teams") },
+  handler: async (ctx, args) => {
+    const team = await ctx.db.get(args.teamId);
+    if (!team || team.convexTeamId === undefined) return null;
+
+    const grant = await ctx.db
+      .query("teamConvexGrants")
+      .withIndex("by_teamId", (q) => q.eq("teamId", args.teamId))
+      .first();
+    if (!grant) return null;
+    return {
+      managementToken: grant.managementToken,
+      convexTeamId: team.convexTeamId,
+    };
+  },
+});
+
+/**
+ * Finds the first team the user is a member of that has a Convex team grant.
+ * Returns null if the user has no team or no team has a grant.
+ */
+export const getUserPrimaryGrant = internalQuery({
+  args: { userId: v.id("users") },
+  handler: async (ctx, args) => {
+    const teamIds = await getUserTeamIds(ctx, args.userId);
+    for (const teamId of teamIds) {
+      const team = await ctx.db.get(teamId);
+      if (!team || team.convexTeamId === undefined) continue;
+      const grant = await ctx.db
+        .query("teamConvexGrants")
+        .withIndex("by_teamId", (q) => q.eq("teamId", teamId))
+        .first();
+      if (grant) {
+        return {
+          teamId,
+          managementToken: grant.managementToken,
+          convexTeamId: team.convexTeamId,
+        };
+      }
+    }
+    return null;
+  },
+});
+
 // Get all teams the user is a member of
 export const listTeams = query({
-  args: { sessionToken: v.string() },
-  handler: async (ctx, args) => {
-    const session = await validateSession(ctx, args.sessionToken);
-    if (!session) return [];
+  args: {},
+  handler: async (ctx) => {
+    const userId = await requireAuth(ctx);
 
     const memberships = await ctx.db
       .query("teamMembers")
-      .withIndex("by_userId", (q) => q.eq("userId", session.userId))
+      .withIndex("by_userId", (q) => q.eq("userId", userId))
       .collect();
 
     const teams = [];
     for (const membership of memberships) {
-      const team = await ctx.db.get("teams", membership.teamId);
+      const team = await ctx.db.get(membership.teamId);
       if (team) {
         teams.push({
           ...team,
@@ -429,14 +475,12 @@ export const listTeams = query({
 });
 
 export const sendWelcomeEmail = internalAction({
-  args: { sessionToken: v.string(), projectName: v.string() },
+  args: { userId: v.id("users"), projectName: v.string() },
   handler: async (ctx, args) => {
     try {
-      const ownerEmail = await ctx.runQuery(
-        internal.projects.getOwnerEmailBySession,
-        {
-          sessionToken: args.sessionToken,
-        },
+      const ownerEmail: string | null = await ctx.runQuery(
+        internal.projects.getOwnerEmailByUser,
+        { userId: args.userId },
       );
       if (!ownerEmail) return;
 
@@ -458,21 +502,10 @@ export const sendWelcomeEmail = internalAction({
   },
 });
 
-export const getOwnerEmailBySession = internalQuery({
-  args: { sessionToken: v.string() },
+export const getOwnerEmailByUser = internalQuery({
+  args: { userId: v.id("users") },
   handler: async (ctx, args) => {
-    const session = await ctx.db
-      .query("sessions")
-      .withIndex("by_sessionToken", (q) =>
-        q.eq("sessionToken", args.sessionToken),
-      )
-      .unique();
-    if (!session) return null;
-
-    const user = await ctx.db
-      .query("users")
-      .withIndex("by_userId", (q) => q.eq("userId", session.userId))
-      .unique();
+    const user = await ctx.db.get(args.userId);
     return user?.email ?? null;
   },
 });
