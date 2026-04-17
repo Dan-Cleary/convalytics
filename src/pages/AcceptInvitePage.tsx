@@ -1,7 +1,7 @@
 import { useQuery, useMutation, useConvexAuth } from "convex/react";
 import { useAuthActions } from "@convex-dev/auth/react";
 import { api } from "../../convex/_generated/api";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { GoogleLogo } from "../components/GoogleLogo";
 
@@ -11,7 +11,7 @@ interface Props {
 
 export function AcceptInvitePage({ token }: Props) {
   const { isAuthenticated, isLoading: authLoading } = useConvexAuth();
-  const { signIn } = useAuthActions();
+  const { signIn, signOut } = useAuthActions();
   const invite = useQuery(api.invites.getInviteByToken, { token });
   const acceptInvite = useMutation(api.invites.acceptInvite);
   const navigate = useNavigate();
@@ -20,6 +20,31 @@ export function AcceptInvitePage({ token }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [accepted, setAccepted] = useState(false);
   const attempted = useRef(false);
+
+  const attemptAccept = useCallback(async () => {
+    if (accepting || accepted) return;
+    setAccepting(true);
+    setError(null);
+    try {
+      const result = await acceptInvite({ token });
+      if ("error" in result) {
+        setError(result.error ?? "Failed to accept invite");
+      } else {
+        setAccepted(true);
+        void navigate("/overview", { replace: true });
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Failed to accept invite";
+      setError(msg);
+    } finally {
+      setAccepting(false);
+    }
+  }, [accepting, accepted, acceptInvite, token, navigate]);
+
+  // Reset one-shot guard when signed out so a fresh sign-in can auto-retry.
+  useEffect(() => {
+    if (!isAuthenticated) attempted.current = false;
+  }, [isAuthenticated]);
 
   // Auto-accept once the user is signed in and the invite is valid
   useEffect(() => {
@@ -34,26 +59,8 @@ export function AcceptInvitePage({ token }: Props) {
       return;
     }
     attempted.current = true;
-    setAccepting(true);
-    setError(null);
-    (async () => {
-      try {
-        const result = await acceptInvite({ token });
-        if ("error" in result) {
-          setError(result.error ?? "Failed to accept invite");
-        } else {
-          setAccepted(true);
-          void navigate("/overview", { replace: true });
-        }
-      } catch (err) {
-        const msg =
-          err instanceof Error ? err.message : "Failed to accept invite";
-        setError(msg);
-      } finally {
-        setAccepting(false);
-      }
-    })().catch(() => {});
-  }, [isAuthenticated, authLoading, invite, accepted, accepting, acceptInvite, token, navigate]);
+    void attemptAccept();
+  }, [isAuthenticated, authLoading, invite, accepted, accepting, attemptAccept]);
 
   return (
     <div
@@ -149,13 +156,54 @@ export function AcceptInvitePage({ token }: Props) {
                   Joining team…
                 </p>
               ) : isAuthenticated ? (
-                // Signed in but waiting for auto-accept effect, or effect failed
-                <p
-                  className="text-xs text-center py-3"
-                  style={{ color: "#9b9488" }}
-                >
-                  {error ? "" : "Accepting invite…"}
-                </p>
+                error ? (
+                  <div className="flex flex-col gap-2">
+                    <button
+                      className="w-full py-3 text-xs font-bold uppercase tracking-wider cursor-pointer transition-all"
+                      style={{
+                        background: "#1a1814",
+                        color: "#e9e6db",
+                        border: "2px solid #1a1814",
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.background = "#e8651c";
+                        e.currentTarget.style.borderColor = "#e8651c";
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.background = "#1a1814";
+                        e.currentTarget.style.borderColor = "#1a1814";
+                      }}
+                      onClick={() => void attemptAccept()}
+                    >
+                      Try again
+                    </button>
+                    <button
+                      className="w-full py-3 text-xs font-bold uppercase tracking-wider cursor-pointer transition-all"
+                      style={{
+                        background: "#ffffff",
+                        color: "#1a1814",
+                        border: "2px solid #1a1814",
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.background = "#f7f4ec";
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.background = "#ffffff";
+                      }}
+                      onClick={() => void signOut()}
+                    >
+                      Sign out and use a different account
+                    </button>
+                  </div>
+                ) : (
+                  // Signed in and waiting for auto-accept effect to complete
+                  <p
+                    className="text-xs text-center py-3"
+                    style={{ color: "#9b9488" }}
+                  >
+                    Accepting invite…
+                  </p>
+                )
               ) : (
                 <button
                   className="w-full flex items-center justify-center gap-2.5 py-3 text-xs font-bold uppercase tracking-wider cursor-pointer transition-all"

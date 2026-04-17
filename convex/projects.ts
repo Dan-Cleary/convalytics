@@ -371,10 +371,28 @@ export const finalizeClaim = internalMutation({
       throw new Error("This project has already been claimed");
 
     const teamIds = await getUserTeamIds(ctx, args.userId);
-    if (teamIds.length === 0) throw new Error("No team found — sign in first");
+    let teamId = teamIds[0];
+    if (!teamId) {
+      const now = Date.now();
+      const user = await ctx.db.get("users", args.userId);
+      const baseName = user?.name?.trim() || user?.email?.split("@")[0]?.trim();
+      const teamName = baseName ? `${baseName}'s Team` : "My Team";
+      teamId = await ctx.db.insert("teams", {
+        name: teamName,
+        slug: `team-${crypto.randomUUID()}`,
+        plan: "free",
+        usageLimitEventsPerMonth: 10000,
+        createdAt: now,
+      });
+      await ctx.db.insert("teamMembers", {
+        teamId,
+        userId: args.userId,
+        role: "owner",
+        joinedAt: now,
+      });
+    }
 
-    const teamId = teamIds[0];
-    await ctx.db.patch(project._id, {
+    await ctx.db.patch("projects", project._id, {
       teamId,
       claimed: true,
       ...(args.convexProjectId
