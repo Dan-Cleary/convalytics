@@ -145,7 +145,7 @@ export const connectConvexTeam = internalMutation({
         args.convexTeamName &&
         args.convexTeamName.trim()
       ) {
-        await ctx.db.patch(teamId, { name: args.convexTeamName.trim() });
+        await ctx.db.patch("teams", teamId, { name: args.convexTeamName.trim() });
       }
     } else {
       teamId = await ctx.db.insert("teams", {
@@ -180,7 +180,12 @@ export const connectConvexTeam = internalMutation({
         console.log(
           `OAuth membership request: User ${args.userId} attempted to join existing team ${teamId} (convexTeamId: ${args.convexTeamId}). Requires invite/admin approval.`,
         );
-        // Note: User will not be auto-added to existing teams without an invite
+        // Refuse to touch the team's grant when the caller isn't a member.
+        // Otherwise a Convex-team peer who isn't a Convalytics member could
+        // overwrite the stored management token.
+        throw new Error(
+          "You are not a member of this Convalytics team. Ask a team owner to invite you before connecting Convex.",
+        );
       }
     }
 
@@ -191,7 +196,7 @@ export const connectConvexTeam = internalMutation({
       .withIndex("by_teamId", (q) => q.eq("teamId", teamId))
       .first();
     if (existingGrant) {
-      await ctx.db.patch(existingGrant._id, {
+      await ctx.db.patch("teamConvexGrants", existingGrant._id, {
         grantedByUserId: args.userId,
         managementToken: args.managementToken,
         createdAt: now,

@@ -22,7 +22,7 @@ export const getMyTeam = query({
       .first();
     if (!membership) return null;
 
-    const team = await ctx.db.get(membership.teamId);
+    const team = await ctx.db.get("teams", membership.teamId);
     if (!team) return null;
 
     return {
@@ -61,7 +61,7 @@ export const renameTeam = mutation({
       return { error: "Only owners and admins can rename the team" };
     }
 
-    await ctx.db.patch(membership.teamId, { name });
+    await ctx.db.patch("teams", membership.teamId, { name });
     return { ok: true as const };
   },
 });

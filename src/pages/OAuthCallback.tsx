@@ -17,9 +17,8 @@ export function OAuthCallback() {
     // action uses requireAuth and would otherwise throw "Not authenticated".
     if (authLoading) return;
     if (!isAuthenticated) {
-      setError(
-        "You need to be signed in to connect a Convex team. Sign in first and try again.",
-      );
+      // Error message is rendered below via `displayError` — no setState
+      // needed here (would trigger react-hooks/set-state-in-effect).
       ran.current = true;
       return;
     }
@@ -71,7 +70,13 @@ export function OAuthCallback() {
 
   const bg = { background: "#e9e6db" };
 
-  if (error) {
+  const displayError =
+    error ??
+    (!authLoading && !isAuthenticated
+      ? "You need to be signed in to connect a Convex team. Sign in first and try again."
+      : null);
+
+  if (displayError) {
     return (
       <div className="min-h-screen flex items-center justify-center" style={bg}>
         <div
@@ -88,7 +93,7 @@ export function OAuthCallback() {
             Connect failed
           </p>
           <p className="text-xs mb-6 break-all" style={{ color: "#e8651c" }}>
-            {error}
+            {displayError}
           </p>
           <a
             href="/"

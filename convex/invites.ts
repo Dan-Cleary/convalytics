@@ -68,7 +68,7 @@ export const listMembers = query({
 
     const members = await Promise.all(
       allMemberships.map(async (m) => {
-        const user = await ctx.db.get(m.userId);
+        const user = await ctx.db.get("users", m.userId);
         return {
           userId: m.userId,
           role: m.role,
@@ -128,7 +128,7 @@ export const getInviteByToken = query({
     if (invite.acceptedAt) return { status: "already_accepted" as const };
     if (invite.expiresAt < Date.now()) return { status: "expired" as const };
 
-    const team = await ctx.db.get(invite.teamId);
+    const team = await ctx.db.get("teams", invite.teamId);
     return {
       status: "valid" as const,
       invitedEmail: invite.invitedEmail,
@@ -209,7 +209,7 @@ export const createInvite = mutation({
       expiresAt: now + INVITE_TTL_MS,
     });
 
-    const team = await ctx.db.get(teamId);
+    const team = await ctx.db.get("teams", teamId);
 
     await ctx.scheduler.runAfter(0, internal.invites.sendInviteEmail, {
       toEmail: email,
@@ -236,12 +236,12 @@ export const revokeInvite = mutation({
     if (membership.role === "member")
       return { error: "Only owners and admins can revoke invites" };
 
-    const invite = await ctx.db.get(args.inviteId);
+    const invite = await ctx.db.get("teamInvites", args.inviteId);
     if (!invite) return { error: "Invite not found" };
     if (invite.teamId !== membership.teamId)
       return { error: "Invite belongs to a different team" };
 
-    await ctx.db.delete(args.inviteId);
+    await ctx.db.delete("teamInvites", args.inviteId);
     return { ok: true };
   },
 });
@@ -280,7 +280,7 @@ export const removeMember = mutation({
       if (owners.length <= 1) return { error: "Cannot remove the last owner" };
     }
 
-    await ctx.db.delete(targetMembership._id);
+    await ctx.db.delete("teamMembers", targetMembership._id);
     return { ok: true };
   },
 });
@@ -300,7 +300,7 @@ export const acceptInvite = mutation({
   handler: async (ctx, args) => {
     const userId = await requireAuth(ctx);
 
-    const user = await ctx.db.get(userId);
+    const user = await ctx.db.get("users", userId);
     if (!user) return { error: "User not found" };
     if (!user.email) {
       return {
@@ -334,7 +334,7 @@ export const acceptInvite = mutation({
       });
     }
 
-    await ctx.db.patch(invite._id, { acceptedAt: Date.now() });
+    await ctx.db.patch("teamInvites", invite._id, { acceptedAt: Date.now() });
 
     return { ok: true as const, teamId: invite.teamId };
   },

@@ -201,7 +201,7 @@ export const provision = internalMutation({
           let claimToken = canonical.claimToken;
           if (!claimToken) {
             claimToken = crypto.randomUUID();
-            await ctx.db.patch(canonical._id, { claimToken });
+            await ctx.db.patch("projects", canonical._id, { claimToken });
           }
           return {
             writeKey: canonical.writeKey,
@@ -213,7 +213,7 @@ export const provision = internalMutation({
         let claimToken = existing.claimToken;
         if (!claimToken) {
           claimToken = crypto.randomUUID();
-          await ctx.db.patch(existing._id, { claimToken });
+          await ctx.db.patch("projects", existing._id, { claimToken });
         }
         return {
           writeKey: existing.writeKey,
@@ -439,7 +439,7 @@ export const getByClaimTokenInternal = internalQuery({
 export const getTeamGrantInternal = internalQuery({
   args: { teamId: v.id("teams") },
   handler: async (ctx, args) => {
-    const team = await ctx.db.get(args.teamId);
+    const team = await ctx.db.get("teams", args.teamId);
     if (!team || team.convexTeamId === undefined) return null;
 
     const grant = await ctx.db
@@ -477,7 +477,7 @@ export const getUserPrimaryGrant = internalQuery({
   handler: async (ctx, args) => {
     const teamIds = await getUserTeamIds(ctx, args.userId);
     for (const teamId of teamIds) {
-      const team = await ctx.db.get(teamId);
+      const team = await ctx.db.get("teams", teamId);
       if (!team || team.convexTeamId === undefined) continue;
       const grant = await ctx.db
         .query("teamConvexGrants")
@@ -508,7 +508,7 @@ export const listTeams = query({
 
     const teams = [];
     for (const membership of memberships) {
-      const team = await ctx.db.get(membership.teamId);
+      const team = await ctx.db.get("teams", membership.teamId);
       if (team) {
         teams.push({
           ...team,
@@ -551,7 +551,7 @@ export const sendWelcomeEmail = internalAction({
 export const getOwnerEmailByUser = internalQuery({
   args: { userId: v.id("users") },
   handler: async (ctx, args) => {
-    const user = await ctx.db.get(args.userId);
+    const user = await ctx.db.get("users", args.userId);
     return user?.email ?? null;
   },
 });

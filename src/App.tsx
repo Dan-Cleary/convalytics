@@ -139,20 +139,24 @@ function Dashboard() {
   });
 
   // If the URL carries ?project= (e.g. fresh claim redirect) and that writeKey
-  // belongs to a project we know about, adopt it as the active project. Runs
-  // whenever the URL changes or the projects list updates (handles the race
-  // where the list hadn't loaded yet on first mount).
-  useEffect(() => {
-    const params = new URLSearchParams(location.search);
-    const urlProject = params.get("project");
-    if (
-      urlProject &&
-      projects?.some((p) => p.writeKey === urlProject) &&
-      activeWriteKey !== urlProject
-    ) {
-      setActiveWriteKey(urlProject);
-    }
-  }, [location.search, projects, activeWriteKey]);
+  // belongs to a project we know about, adopt it as the active project.
+  // Adjust state during render (React 19 "Storing information from previous
+  // renders" pattern) to avoid set-state-in-effect. `lastSyncedUrlProject`
+  // tracks the last URL value we already synced so clicks in the Sidebar
+  // aren't clobbered by a re-render with the same URL.
+  const [lastSyncedUrlProject, setLastSyncedUrlProject] = useState<
+    string | null
+  >(null);
+  const urlProjectParam = new URLSearchParams(location.search).get("project");
+  if (
+    urlProjectParam &&
+    urlProjectParam !== lastSyncedUrlProject &&
+    projects?.some((p) => p.writeKey === urlProjectParam) &&
+    activeWriteKey !== urlProjectParam
+  ) {
+    setLastSyncedUrlProject(urlProjectParam);
+    setActiveWriteKey(urlProjectParam);
+  }
 
   const [billingSuccess, setBillingSuccess] = useState<{
     open: boolean;
@@ -179,9 +183,9 @@ function Dashboard() {
   // Handle sign-out as a side effect rather than during render
   useEffect(() => {
     if (projects === null) {
-      onSignOut();
+      void signOut();
     }
-  }, [projects]);
+  }, [projects, signOut]);
 
   if (projects === undefined) {
     return <LoadingScreen />;
