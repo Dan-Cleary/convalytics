@@ -278,11 +278,16 @@ async function init() {
     print("╚══════════════════════════════════════════════════╝\n");
   }
 
-  print("⚠️  IMPORTANT: Commit and deploy to start tracking in production.\n");
-  print("  The script tag and config changes are local — web analytics");
-  print("  won't collect data in production until you deploy.\n");
-  print("  git add -A && git commit -m 'Add Convalytics analytics'");
-  print("  # then deploy as usual (e.g. git push, vercel deploy, etc.)\n");
+  print("⚠️  IMPORTANT: Two separate deploys are needed for prod tracking.\n");
+  print("  1. Commit your changes:");
+  print("     git add -A && git commit -m 'Add Convalytics analytics'\n");
+  print("  2. Deploy the Convex backend to prod:");
+  print("     npx convex deploy");
+  print("     (This is separate from your frontend deploy — git push /");
+  print("     vercel deploy only updates the frontend. Your Convex backend");
+  print("     needs its own deploy or events will silently drop in prod.)\n");
+  print("  In CI? Set CONVEX_DEPLOY_KEY in your deploy env and run:");
+  print("     npx convex deploy --cmd 'npm run build'\n");
 
   print("Next: add tracking to your mutations and actions:\n");
   print(`  import { analytics } from "./analytics";`);
