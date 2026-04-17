@@ -11,6 +11,7 @@ import { createInterface } from "readline";
 
 const SITE_URL = "https://basic-goshawk-557.convex.site";
 const INGEST_URL = `${SITE_URL}/ingest`;
+const VERIFY_URL = `${SITE_URL}/verify`;
 const PROVISION_URL = `${SITE_URL}/api/provision`;
 const SCRIPT_URL = `${SITE_URL}/script.js`;
 const DASHBOARD_URL = process.env.CONVALYTICS_DASHBOARD_URL || "https://convalytics.dev";
@@ -332,6 +333,7 @@ async function verify() {
 
   step(`Sending test event "convalytics_verify" to ${INGEST_URL}...`);
 
+  const verifySentAt = Date.now();
   try {
     const resp = await fetch(INGEST_URL, {
       method: "POST",
@@ -339,15 +341,7 @@ async function verify() {
       body: JSON.stringify(testEvent),
     });
 
-    if (resp.ok) {
-      ok(`Event delivered (HTTP ${resp.status})`);
-      print("\n  Check your Convalytics dashboard → Custom Events");
-      print(`  Look for: convalytics_verify\n`);
-      print(`  Dashboard: ${DASHBOARD_URL}\n`);
-      if (dotfile && dotfile.claimUrl && dotfile.writeKey === writeKey) {
-        print(`  Claim URL: ${dotfile.claimUrl}\n`);
-      }
-    } else {
+    if (!resp.ok) {
       const body = await resp.text().catch(() => "");
       const msg = body || `HTTP ${resp.status}`;
       if (resp.status === 401) {
@@ -357,10 +351,65 @@ async function verify() {
       }
       process.exit(1);
     }
+
+    ok(`Event delivered (HTTP ${resp.status})`);
   } catch (e) {
     error(`Network error: ${e.message}`);
     process.exit(1);
   }
+
+  // Poll /verify to confirm the test event actually landed in storage and
+  // surface real traffic stats. Writes are fast, but give Convex a moment.
+  step("Confirming event landed in storage...");
+  const pollStart = Date.now();
+  const pollDeadline = pollStart + 10_000;
+  let stats = null;
+  let testEventSeen = false;
+
+  while (Date.now() < pollDeadline) {
+    try {
+      const verifyResp = await fetch(`${VERIFY_URL}?writeKey=${encodeURIComponent(writeKey)}`);
+      if (verifyResp.ok) {
+        stats = await verifyResp.json();
+        testEventSeen = !!stats?.events?.lastTimestamp && stats.events.lastTimestamp >= verifySentAt;
+        if (testEventSeen) break;
+      } else if (verifyResp.status === 401) {
+        error(`Invalid write key.`);
+        process.exit(1);
+      }
+    } catch {
+      // Network blip — keep polling until deadline.
+    }
+    await new Promise((r) => setTimeout(r, 500));
+  }
+
+  if (testEventSeen) {
+    ok(`Test event confirmed in storage (took ${Date.now() - pollStart}ms)`);
+  } else {
+    warn("Test event accepted but not yet visible via /verify. Check your dashboard.");
+  }
+
+  if (stats) {
+    print("\n  Recent activity (last 24h):");
+    print(`    Custom events: ${stats.events.last24h}  ·  last 1h: ${stats.events.last1h}  ·  last 5m: ${stats.events.last5m}`);
+    print(`    Page views:    ${stats.pageviews.last24h}  ·  last 1h: ${stats.pageviews.last1h}  ·  last 5m: ${stats.pageviews.last5m}`);
+    if (stats.environments?.length) {
+      print(`    Environments:  ${stats.environments.join(", ")}`);
+    } else {
+      print(`    Environments:  (none tagged yet — add the component + analytics.track() to see dev/prod breakdowns)`);
+    }
+    if (stats.events.last24h === 1 && testEventSeen) {
+      print("\n  Only the CLI test event is visible. If you expected real traffic:");
+      print("    • Browser: confirm the <script> tag is in your deployed index.html");
+      print("    • Server:  confirm analytics.track() is being called + `npx convex deploy` ran");
+    }
+  }
+
+  print(`\n  Dashboard: ${DASHBOARD_URL}`);
+  if (dotfile && dotfile.claimUrl && dotfile.writeKey === writeKey) {
+    print(`  Claim URL: ${dotfile.claimUrl}`);
+  }
+  print("");
 }
 
 function help() {

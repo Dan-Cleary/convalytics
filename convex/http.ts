@@ -1323,6 +1323,80 @@ http.route({
   }),
 });
 
+// Public verify endpoint — authenticates via writeKey (the same public
+// identifier used for ingest) and returns a snapshot of recent activity so
+// `npx convalytics verify` can confirm events are actually landing.
+http.route({
+  path: "/verify",
+  method: "GET",
+  handler: httpAction(async (ctx, req) => {
+    const cors = corsHeaders(req);
+    const url = new URL(req.url);
+    const writeKey = url.searchParams.get("writeKey") ?? "";
+
+    if (!writeKey) {
+      return new Response(
+        JSON.stringify({ error: "missing_writeKey" }),
+        {
+          status: 400,
+          headers: { ...cors, "Content-Type": "application/json" },
+        },
+      );
+    }
+
+    const project = await ctx.runQuery(internal.projects.validateWriteKey, {
+      writeKey,
+    });
+    if (!project) {
+      return new Response(
+        JSON.stringify({ error: "invalid_writeKey" }),
+        {
+          status: 401,
+          headers: { ...cors, "Content-Type": "application/json" },
+        },
+      );
+    }
+
+    const stats = await ctx.runQuery(internal.events.verifyStats, {
+      writeKey,
+    });
+
+    return new Response(
+      JSON.stringify({
+        ok: true,
+        project: {
+          name: project.name,
+          claimed: project.claimed ?? false,
+        },
+        ...stats,
+      }),
+      {
+        status: 200,
+        headers: {
+          ...cors,
+          "Content-Type": "application/json",
+          "Cache-Control": "no-store",
+        },
+      },
+    );
+  }),
+});
+
+http.route({
+  path: "/verify",
+  method: "OPTIONS",
+  handler: httpAction(async (_, req) => {
+    return new Response(null, {
+      status: 204,
+      headers: {
+        ...corsHeaders(req),
+        "Access-Control-Allow-Methods": "GET, OPTIONS",
+        "Access-Control-Allow-Headers": "Content-Type",
+      },
+    });
+  }),
+});
+
 registerStripeRoutes(http);
 
 export default http;

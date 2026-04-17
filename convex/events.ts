@@ -1,5 +1,5 @@
 import { v } from "convex/values";
-import { internalMutation, query } from "./_generated/server";
+import { internalMutation, internalQuery, query } from "./_generated/server";
 import { validateProjectAccess } from "./authHelpers";
 
 // Called from http.ts ingest endpoint — write key already validated there.
@@ -203,5 +203,79 @@ export const timeSeries = query({
     }
 
     return result;
+  },
+});
+
+// Snapshot of recent activity for a writeKey. Used by the /verify HTTP endpoint
+// so `npx convalytics verify` can confirm events are actually landing, not just
+// that the test event got accepted.
+//
+// Returns counts over 5m/1h/24h windows plus the last 5 events and pageviews,
+// broken down by environment so callers can see which envs are reporting.
+// Internal — assumes caller already validated the writeKey.
+export const verifyStats = internalQuery({
+  args: { writeKey: v.string() },
+  handler: async (ctx, args) => {
+    const now = Date.now();
+    const MIN = 60 * 1000;
+    const HOUR = 60 * MIN;
+    const DAY = 24 * HOUR;
+
+    // Cap lookups at 24h / 500 rows so this stays cheap under load.
+    const events = await ctx.db
+      .query("events")
+      .withIndex("by_writeKey_and_timestamp", (q) =>
+        q.eq("writeKey", args.writeKey).gte("timestamp", now - DAY),
+      )
+      .order("desc")
+      .take(500);
+
+    const pageviews = await ctx.db
+      .query("pageviews")
+      .withIndex("by_writeKey_and_timestamp", (q) =>
+        q.eq("writeKey", args.writeKey).gte("timestamp", now - DAY),
+      )
+      .order("desc")
+      .take(500);
+
+    const countWithin = <T extends { timestamp: number }>(
+      rows: T[],
+      windowMs: number,
+    ) => rows.filter((r) => r.timestamp >= now - windowMs).length;
+
+    const environments = Array.from(
+      new Set(
+        [...events, ...pageviews]
+          .map((r) => r.environment)
+          .filter((e): e is string => typeof e === "string" && !!e),
+      ),
+    ).sort();
+
+    return {
+      now,
+      events: {
+        last5m: countWithin(events, 5 * MIN),
+        last1h: countWithin(events, HOUR),
+        last24h: events.length,
+        recent: events.slice(0, 5).map((e) => ({
+          name: e.name,
+          timestamp: e.timestamp,
+          environment: e.environment ?? null,
+        })),
+        lastTimestamp: events[0]?.timestamp ?? null,
+      },
+      pageviews: {
+        last5m: countWithin(pageviews, 5 * MIN),
+        last1h: countWithin(pageviews, HOUR),
+        last24h: pageviews.length,
+        recent: pageviews.slice(0, 5).map((p) => ({
+          path: p.path,
+          timestamp: p.timestamp,
+          environment: p.environment ?? null,
+        })),
+        lastTimestamp: pageviews[0]?.timestamp ?? null,
+      },
+      environments,
+    };
   },
 });
