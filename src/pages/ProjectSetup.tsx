@@ -304,7 +304,7 @@ function SuccessScreen({
   onDone?: () => void;
 }) {
   const [copied, setCopied] = useState(false);
-  const siteUrl = getConvexSiteUrl();
+  const [linkCopied, setLinkCopied] = useState(false);
 
   function handleCopyPrompt() {
     const prompt = buildAgentPrompt(created);
@@ -313,6 +313,16 @@ function SuccessScreen({
       setTimeout(() => setCopied(false), 2000);
     }).catch(() => {
       // Clipboard API unavailable (e.g. non-secure context) — silent no-op
+    });
+  }
+
+  function handleCopyLink() {
+    const url = `${window.location.origin}/skill.md`;
+    void navigator.clipboard.writeText(url).then(() => {
+      setLinkCopied(true);
+      setTimeout(() => setLinkCopied(false), 2000);
+    }).catch(() => {
+      // Clipboard API unavailable — silent no-op
     });
   }
 
@@ -372,55 +382,43 @@ function SuccessScreen({
           </button>
         </div>
 
-        <p className="text-[11px] mb-6" style={{ color: "#9b9488" }}>
-          Or point your agent at the full reference:{" "}
+        <div className="flex items-center gap-2 mb-6 flex-wrap">
+          <span className="text-[11px]" style={{ color: "#9b9488" }}>
+            Or point your agent at the full reference:
+          </span>
           <a
             href="/skill.md"
             target="_blank"
             rel="noreferrer"
-            className="underline"
+            className="text-[11px] underline"
             style={{ color: "#6b6456" }}
           >
             convalytics.dev/skill.md
           </a>
-        </p>
-
-        {/* Manual instructions */}
-        <div className="flex flex-col gap-6 mb-6">
-          {created.map(({ name, writeKey }) => (
-            <div key={writeKey}>
-              {created.length > 1 && (
-                <p className="text-xs font-semibold uppercase tracking-wider mb-2" style={{ color: "#1a1814" }}>
-                  {name}
-                </p>
-              )}
-              <p className="text-xs mb-1.5" style={{ color: "#6b6456" }}>
-                Set{" "}
-                <code className="px-1 py-0.5 text-[11px]" style={{ background: "#e9e6db" }}>
-                  CONVALYTICS_WRITE_KEY
-                </code>{" "}
-                in your Convex environment:
-              </p>
-              <div
-                className="px-4 py-3 font-mono text-sm break-all mb-3"
-                style={{ background: "#1a1814", color: "#e8651c" }}
-              >
-                {writeKey}
-              </div>
-              <p className="text-xs mb-1.5" style={{ color: "#6b6456" }}>
-                Add to your{" "}
-                <code className="px-1 py-0.5 text-[11px]" style={{ background: "#e9e6db" }}>
-                  &lt;head&gt;
-                </code>:
-              </p>
-              <pre
-                className="text-xs overflow-auto px-3 py-2.5 whitespace-pre-wrap break-all"
-                style={{ background: "#1a1814", color: "#e8651c" }}
-              >
-                {`<script defer src="${siteUrl}/script.js?key=${writeKey}"></script>`}
-              </pre>
-            </div>
-          ))}
+          <button
+            onClick={handleCopyLink}
+            aria-label="Copy skill.md URL"
+            className="text-[11px] inline-flex items-center gap-1 cursor-pointer transition-colors"
+            style={{ color: linkCopied ? "#2d7a2d" : "#9b9488" }}
+            onMouseEnter={(e) => {
+              if (!linkCopied) e.currentTarget.style.color = "#1a1814";
+            }}
+            onMouseLeave={(e) => {
+              if (!linkCopied) e.currentTarget.style.color = "#9b9488";
+            }}
+          >
+            {linkCopied ? (
+              <>✓ Copied</>
+            ) : (
+              <>
+                <svg width="11" height="11" viewBox="0 0 12 12" fill="none">
+                  <rect x="4" y="4" width="7" height="7" rx="1" stroke="currentColor" strokeWidth="1.5"/>
+                  <path d="M3 8H2a1 1 0 01-1-1V2a1 1 0 011-1h5a1 1 0 011 1v1" stroke="currentColor" strokeWidth="1.5"/>
+                </svg>
+                Copy link
+              </>
+            )}
+          </button>
         </div>
 
         <button
