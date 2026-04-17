@@ -2,15 +2,14 @@ import { useQuery, useAction, useConvexAuth } from "convex/react";
 import { useAuthActions } from "@convex-dev/auth/react";
 import { api } from "../../convex/_generated/api";
 import { useState, useCallback } from "react";
-import { useNavigate } from "react-router-dom";
 import { GoogleLogo } from "../components/GoogleLogo";
+import { startConnectConvexFlow } from "../lib/auth";
 
 export function ClaimPage({ claimToken }: { claimToken: string }) {
   const { isAuthenticated, isLoading: authLoading } = useConvexAuth();
   const { signIn } = useAuthActions();
   const project = useQuery(api.projects.getByClaimToken, { claimToken });
   const claimAction = useAction(api.projects.claim);
-  const navigate = useNavigate();
   const [claiming, setClaiming] = useState(false);
   const [claimedWriteKey, setClaimedWriteKey] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -198,8 +197,8 @@ export function ClaimPage({ claimToken }: { claimToken: string }) {
         {claimedWriteKey && (
           <ClaimSuccess
             projectName={project?.name}
-            onGoToDashboard={() =>
-              void navigate(
+            onConnectConvex={() =>
+              void startConnectConvexFlow(
                 `/overview?project=${encodeURIComponent(claimedWriteKey)}`,
               )
             }
@@ -212,21 +211,38 @@ export function ClaimPage({ claimToken }: { claimToken: string }) {
 
 function ClaimSuccess({
   projectName,
-  onGoToDashboard,
+  onConnectConvex,
 }: {
   projectName?: string;
-  onGoToDashboard: () => void;
+  onConnectConvex: () => void;
 }) {
   return (
     <div>
       <p className="text-sm font-bold mb-2" style={{ color: "#2d7a2d" }}>
         Project claimed!
       </p>
-      <p className="text-xs leading-relaxed mb-5" style={{ color: "#6b6456" }}>
+      <p className="text-xs leading-relaxed mb-4" style={{ color: "#6b6456" }}>
         <strong>{projectName}</strong> is now connected to your account.
       </p>
+      <p
+        className="text-[10px] font-bold uppercase tracking-widest mb-1"
+        style={{ color: "#9b9488" }}
+      >
+        One more step
+      </p>
+      <p
+        className="text-sm font-bold mb-2"
+        style={{ color: "#1a1814" }}
+      >
+        Connect your Convex team
+      </p>
+      <p className="text-xs leading-relaxed mb-5" style={{ color: "#6b6456" }}>
+        This lets Convalytics auto-tag events as <strong>development</strong>{" "}
+        or <strong>production</strong> and lets you spin up new projects from
+        the dashboard. Takes about 10 seconds.
+      </p>
       <button
-        onClick={onGoToDashboard}
+        onClick={onConnectConvex}
         className="w-full py-3 text-xs font-bold uppercase tracking-wider cursor-pointer transition-all"
         style={{
           background: "#1a1814",
@@ -242,7 +258,7 @@ function ClaimSuccess({
           e.currentTarget.style.borderColor = "#1a1814";
         }}
       >
-        Go to dashboard →
+        Connect Convex team →
       </button>
     </div>
   );
