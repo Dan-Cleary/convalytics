@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from "react";
-import { useAction } from "convex/react";
+import { useAction, useConvexAuth } from "convex/react";
 import { useNavigate } from "react-router-dom";
 import { api } from "../../convex/_generated/api";
 import { clearPkce, getStoredPkce, getReturnTo } from "../lib/auth";
 
 export function OAuthCallback() {
+  const { isAuthenticated, isLoading: authLoading } = useConvexAuth();
   const exchangeCode = useAction(api.oauth.exchangeCode);
   const [error, setError] = useState<string | null>(null);
   const ran = useRef(false);
@@ -12,6 +13,16 @@ export function OAuthCallback() {
 
   useEffect(() => {
     if (ran.current) return;
+    // Wait for Convex Auth to hydrate before calling exchangeCode — the
+    // action uses requireAuth and would otherwise throw "Not authenticated".
+    if (authLoading) return;
+    if (!isAuthenticated) {
+      setError(
+        "You need to be signed in to connect a Convex team. Sign in and try again.",
+      );
+      ran.current = true;
+      return;
+    }
     ran.current = true;
 
     void (async () => {
@@ -49,7 +60,7 @@ export function OAuthCallback() {
         setError((err as Error).message ?? "Connect failed. Please try again.");
       }
     })();
-  }, [exchangeCode, navigate]);
+  }, [exchangeCode, navigate, isAuthenticated, authLoading]);
 
   const bg = { background: "#e9e6db" };
 
