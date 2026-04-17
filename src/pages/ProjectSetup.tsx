@@ -203,8 +203,8 @@ export function ProjectSetup({
 
         <p className="text-xs mb-5" style={{ color: "#6b6456" }}>
           {isFirstTime
-            ? "Choose which Convex projects to track."
-            : "Connect another Convex project."}
+            ? "Choose which Convex projects to track. Connect as many as you want — every plan includes unlimited projects."
+            : "Connect another Convex project. Every plan includes unlimited projects."}
         </p>
 
         {loadError && (

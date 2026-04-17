@@ -5,10 +5,12 @@ import { Id } from "../../convex/_generated/dataModel";
 
 export function MembersPage() {
   const data = useQuery(api.invites.listMembers, {});
+  const team = useQuery(api.teams.getMyTeam, {});
   const pendingInvites = useQuery(api.invites.listPendingInvites, {});
   const createInvite = useMutation(api.invites.createInvite);
   const revokeInvite = useMutation(api.invites.revokeInvite);
   const removeMember = useMutation(api.invites.removeMember);
+  const renameTeam = useMutation(api.teams.renameTeam);
 
   const [email, setEmail] = useState("");
   const [role, setRole] = useState<"member" | "admin">("member");
@@ -18,7 +20,45 @@ export function MembersPage() {
   const [removingId, setRemovingId] = useState<string | null>(null);
   const [revokingId, setRevokingId] = useState<string | null>(null);
 
+  const [teamNameDraft, setTeamNameDraft] = useState("");
+  const [editingTeamName, setEditingTeamName] = useState(false);
+  const [renameError, setRenameError] = useState<string | null>(null);
+  const [renaming, setRenaming] = useState(false);
+
   const canManage = data?.myRole === "owner" || data?.myRole === "admin";
+
+  function startRename() {
+    if (!team) return;
+    setTeamNameDraft(team.name);
+    setRenameError(null);
+    setEditingTeamName(true);
+  }
+
+  function cancelRename() {
+    setEditingTeamName(false);
+    setRenameError(null);
+  }
+
+  async function submitRename(e: React.FormEvent) {
+    e.preventDefault();
+    const name = teamNameDraft.trim();
+    if (!name || name === team?.name) {
+      setEditingTeamName(false);
+      return;
+    }
+    setRenaming(true);
+    setRenameError(null);
+    try {
+      const result = await renameTeam({ name });
+      if ("error" in result) {
+        setRenameError(result.error ?? "Failed to rename team");
+      } else {
+        setEditingTeamName(false);
+      }
+    } finally {
+      setRenaming(false);
+    }
+  }
 
   async function handleInvite(e: React.FormEvent) {
     e.preventDefault();
@@ -77,12 +117,96 @@ export function MembersPage() {
 
   return (
     <div className="p-8 max-w-2xl">
-      <h1
+      {/* Team name header */}
+      {team && (
+        <div className="mb-8">
+          <p
+            className="text-[10px] font-bold uppercase tracking-widest mb-2"
+            style={{ color: "#9b9488" }}
+          >
+            Team
+          </p>
+          {editingTeamName ? (
+            <form
+              onSubmit={(e) => void submitRename(e)}
+              className="flex flex-col gap-2"
+            >
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={teamNameDraft}
+                  onChange={(e) => setTeamNameDraft(e.target.value)}
+                  maxLength={60}
+                  autoFocus
+                  className="flex-1 px-3 py-2 text-sm outline-none"
+                  style={{
+                    border: "1px solid #1a1814",
+                    color: "#1a1814",
+                    background: "#fff",
+                  }}
+                />
+                <button
+                  type="submit"
+                  disabled={renaming || !teamNameDraft.trim()}
+                  className="px-4 py-2 text-[10px] font-bold uppercase tracking-wider cursor-pointer disabled:opacity-50"
+                  style={{
+                    background: "#1a1814",
+                    color: "#fff",
+                    border: "2px solid #1a1814",
+                  }}
+                >
+                  {renaming ? "Saving…" : "Save"}
+                </button>
+                <button
+                  type="button"
+                  onClick={cancelRename}
+                  disabled={renaming}
+                  className="px-4 py-2 text-[10px] font-bold uppercase tracking-wider cursor-pointer disabled:opacity-50"
+                  style={{
+                    background: "#fff",
+                    color: "#1a1814",
+                    border: "2px solid #1a1814",
+                  }}
+                >
+                  Cancel
+                </button>
+              </div>
+              {renameError && (
+                <p className="text-[10px]" style={{ color: "#b94040" }}>
+                  {renameError}
+                </p>
+              )}
+            </form>
+          ) : (
+            <div className="flex items-center gap-3">
+              <h1
+                className="text-xl font-bold"
+                style={{ color: "#1a1814" }}
+              >
+                {team.name}
+              </h1>
+              {canManage && (
+                <button
+                  onClick={startRename}
+                  className="text-[10px] uppercase tracking-wider transition-colors cursor-pointer"
+                  style={{ color: "#9b9488" }}
+                  onMouseEnter={(e) => (e.currentTarget.style.color = "#1a1814")}
+                  onMouseLeave={(e) => (e.currentTarget.style.color = "#9b9488")}
+                >
+                  Rename
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      <h2
         className="text-sm font-bold uppercase tracking-widest mb-6"
         style={{ color: "#1a1814" }}
       >
-        Team Members
-      </h1>
+        Members
+      </h2>
 
       {/* Members list */}
       <div
@@ -233,7 +357,7 @@ export function MembersPage() {
           </form>
 
           <p className="text-[10px] mt-3" style={{ color: "#9b9488" }}>
-            Invitees will receive an email with a link to set their password and join the team.
+            Invitees will receive an email with a link. They sign in with Google using the invited email address to join.
           </p>
         </div>
       )}

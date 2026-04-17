@@ -16,6 +16,8 @@ import type { Id } from "./_generated/dataModel";
 const CLIENT_ID = "a89dda460f9b4d42";
 const TOKEN_EXCHANGE_URL = "https://api.convex.dev/oauth/token";
 const TOKEN_DETAILS_URL = "https://api.convex.dev/v1/token_details";
+const TEAM_INFO_URL = (teamId: number) =>
+  `https://api.convex.dev/v1/teams/${teamId}`;
 
 /**
  * Exchange a Convex OAuth authorization code for a team access token and
@@ -74,9 +76,27 @@ export const exchangeCode = action({
       );
     }
 
+    // Fetch the Convex team's display name for a friendlier default than
+    // "Team <id>". Non-fatal — the mutation falls back if this is empty.
+    let convexTeamName: string | undefined;
+    try {
+      const teamResp = await fetch(TEAM_INFO_URL(details.teamId), {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
+      if (teamResp.ok) {
+        const team = (await teamResp.json()) as { name?: string };
+        if (team.name && team.name.trim()) {
+          convexTeamName = team.name.trim();
+        }
+      }
+    } catch {
+      // Non-fatal; proceed with the numeric fallback
+    }
+
     const teamId = await ctx.runMutation(internal.oauth.connectConvexTeam, {
       userId,
       convexTeamId: details.teamId,
+      convexTeamName,
       managementToken: accessToken,
     });
     return { teamId };
@@ -91,6 +111,7 @@ export const connectConvexTeam = internalMutation({
   args: {
     userId: v.id("users"),
     convexTeamId: v.number(),
+    convexTeamName: v.optional(v.string()),
     managementToken: v.string(),
   },
   returns: v.id("teams"),
@@ -105,15 +126,31 @@ export const connectConvexTeam = internalMutation({
       )
       .unique();
 
+    const fallbackName = `Team ${args.convexTeamId}`;
+    const initialName =
+      args.convexTeamName && args.convexTeamName.trim()
+        ? args.convexTeamName.trim()
+        : fallbackName;
+
     let teamId: Id<"teams">;
     let isNewTeam: boolean;
     if (existingTeam) {
       teamId = existingTeam._id;
       isNewTeam = false;
+      // If the team is still using the numeric fallback and we now know the
+      // real Convex name, upgrade it. If the user has already renamed it to
+      // anything else, leave it alone.
+      if (
+        existingTeam.name === fallbackName &&
+        args.convexTeamName &&
+        args.convexTeamName.trim()
+      ) {
+        await ctx.db.patch(teamId, { name: args.convexTeamName.trim() });
+      }
     } else {
       teamId = await ctx.db.insert("teams", {
         convexTeamId: args.convexTeamId,
-        name: `Team ${args.convexTeamId}`,
+        name: initialName,
         slug: `team-${args.convexTeamId}`,
         plan: "free",
         usageLimitEventsPerMonth: 10000,

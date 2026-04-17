@@ -178,7 +178,7 @@ export function AcceptInvitePage({ token }: Props) {
                   }
                 >
                   <GoogleLogo />
-                  Sign in with Google
+                  Sign in to accept
                 </button>
               )}
             </div>

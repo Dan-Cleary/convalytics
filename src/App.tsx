@@ -14,7 +14,7 @@ import { ClaimPage } from "./pages/ClaimPage";
 import { BillingPage } from "./pages/BillingPage";
 import { MembersPage } from "./pages/MembersPage";
 import { AcceptInvitePage } from "./pages/AcceptInvitePage";
-import { useState, Component, type ReactNode } from "react";
+import { useState, useEffect, Component, type ReactNode } from "react";
 import {
   BrowserRouter,
   Routes,
@@ -67,7 +67,7 @@ export default function App() {
           element={
             <>
               <Authenticated>
-                <Navigate to="/overview" replace />
+                <AuthedHomeRedirect />
               </Authenticated>
               <Unauthenticated>
                 <SignInForm />
@@ -100,6 +100,13 @@ export default function App() {
   );
 }
 
+// Preserves query params on home → /overview redirect (e.g. ?project=writeKey
+// from claim flow, ?billing=success from Stripe return).
+function AuthedHomeRedirect() {
+  const location = useLocation();
+  return <Navigate to={`/overview${location.search}`} replace />;
+}
+
 function LoadingScreen() {
   return (
     <div className="min-h-screen flex items-center justify-center text-gray-400 text-sm">
@@ -130,6 +137,22 @@ function Dashboard() {
     const params = new URLSearchParams(location.search);
     return params.get("project");
   });
+
+  // If the URL carries ?project= (e.g. fresh claim redirect) and that writeKey
+  // belongs to a project we know about, adopt it as the active project. Runs
+  // whenever the URL changes or the projects list updates (handles the race
+  // where the list hadn't loaded yet on first mount).
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const urlProject = params.get("project");
+    if (
+      urlProject &&
+      projects?.some((p) => p.writeKey === urlProject) &&
+      activeWriteKey !== urlProject
+    ) {
+      setActiveWriteKey(urlProject);
+    }
+  }, [location.search, projects, activeWriteKey]);
 
   const [billingSuccess, setBillingSuccess] = useState<{
     open: boolean;

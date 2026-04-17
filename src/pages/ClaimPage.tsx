@@ -1,17 +1,18 @@
 import { useQuery, useAction, useConvexAuth } from "convex/react";
 import { useAuthActions } from "@convex-dev/auth/react";
 import { api } from "../../convex/_generated/api";
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useCallback } from "react";
+import { useNavigate } from "react-router-dom";
 
 export function ClaimPage({ claimToken }: { claimToken: string }) {
   const { isAuthenticated, isLoading: authLoading } = useConvexAuth();
   const { signIn } = useAuthActions();
   const project = useQuery(api.projects.getByClaimToken, { claimToken });
   const claimAction = useAction(api.projects.claim);
+  const navigate = useNavigate();
   const [claiming, setClaiming] = useState(false);
   const [claimedWriteKey, setClaimedWriteKey] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const autoClaimAttempted = useRef(false);
 
   const claimed = claimedWriteKey !== null;
 
@@ -29,20 +30,6 @@ export function ClaimPage({ claimToken }: { claimToken: string }) {
       setClaiming(false);
     }
   }, [isAuthenticated, claimToken, claimAction]);
-
-  useEffect(() => {
-    if (
-      isAuthenticated &&
-      project &&
-      !project.claimed &&
-      !claimed &&
-      !claiming &&
-      !autoClaimAttempted.current
-    ) {
-      autoClaimAttempted.current = true;
-      void handleClaim();
-    }
-  }, [isAuthenticated, project, claimed, claiming, handleClaim]);
 
   return (
     <div
@@ -207,9 +194,14 @@ export function ClaimPage({ claimToken }: { claimToken: string }) {
         )}
 
         {claimedWriteKey && (
-          <RedirectToDashboard
+          <ClaimSuccess
             projectName={project?.name}
             writeKey={claimedWriteKey}
+            onGoToDashboard={() =>
+              void navigate(
+                `/overview?project=${encodeURIComponent(claimedWriteKey)}`,
+              )
+            }
           />
         )}
       </div>
@@ -228,29 +220,41 @@ function GoogleLogo() {
   );
 }
 
-function RedirectToDashboard({
+function ClaimSuccess({
   projectName,
-  writeKey,
+  onGoToDashboard,
 }: {
   projectName?: string;
   writeKey: string;
+  onGoToDashboard: () => void;
 }) {
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      window.location.href = `/?project=${encodeURIComponent(writeKey)}`;
-    }, 1500);
-    return () => clearTimeout(timer);
-  }, [writeKey]);
-
   return (
     <div>
       <p className="text-sm font-bold mb-2" style={{ color: "#2d7a2d" }}>
         Project claimed!
       </p>
-      <p className="text-xs leading-relaxed" style={{ color: "#6b6456" }}>
+      <p className="text-xs leading-relaxed mb-5" style={{ color: "#6b6456" }}>
         <strong>{projectName}</strong> is now connected to your account.
-        Redirecting to dashboard...
       </p>
+      <button
+        onClick={onGoToDashboard}
+        className="w-full py-3 text-xs font-bold uppercase tracking-wider cursor-pointer transition-all"
+        style={{
+          background: "#1a1814",
+          color: "#e9e6db",
+          border: "2px solid #1a1814",
+        }}
+        onMouseEnter={(e) => {
+          e.currentTarget.style.background = "#e8651c";
+          e.currentTarget.style.borderColor = "#e8651c";
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.background = "#1a1814";
+          e.currentTarget.style.borderColor = "#1a1814";
+        }}
+      >
+        Go to dashboard →
+      </button>
     </div>
   );
 }
