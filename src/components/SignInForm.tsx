@@ -86,7 +86,7 @@ export function SignInForm() {
             className="text-sm font-bold mb-1"
             style={{ color: "#1a1814" }}
           >
-            Analytics for Convex apps
+            Web and product analytics for Convex apps
           </p>
           <p
             className="text-xs leading-relaxed mb-5"
@@ -119,7 +119,7 @@ export function SignInForm() {
 
         {/* Pricing hint */}
         <p className="text-center text-[10px]" style={{ color: "#9b9488" }}>
-          Web analytics free forever · 50K events/mo free · Solo $29 · Pro $99
+          Every plan: unlimited projects + free web analytics · Solo $29/mo · Pro $99/mo for more events
         </p>
 
         {/* Secondary — sign in for existing users */}
