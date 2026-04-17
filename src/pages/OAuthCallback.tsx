@@ -1,26 +1,34 @@
 import { useEffect, useRef, useState } from "react";
 import { useAction, useConvexAuth } from "convex/react";
+import { useAuthActions } from "@convex-dev/auth/react";
 import { useNavigate } from "react-router-dom";
 import { api } from "../../convex/_generated/api";
 import { clearPkce, getStoredPkce, getReturnTo } from "../lib/auth";
 
 export function OAuthCallback() {
   const { isAuthenticated, isLoading: authLoading } = useConvexAuth();
+  const { signIn } = useAuthActions();
   const exchangeCode = useAction(api.oauth.exchangeCode);
   const [error, setError] = useState<string | null>(null);
+  const [needsSignIn, setNeedsSignIn] = useState(false);
   const ran = useRef(false);
   const navigate = useNavigate();
 
   useEffect(() => {
+    console.log("[OAuthCallback] auth state:", {
+      isAuthenticated,
+      authLoading,
+      ranAlready: ran.current,
+    });
     if (ran.current) return;
     // Wait for Convex Auth to hydrate before calling exchangeCode — the
     // action uses requireAuth and would otherwise throw "Not authenticated".
     if (authLoading) return;
     if (!isAuthenticated) {
-      setError(
-        "You need to be signed in to connect a Convex team. Sign in and try again.",
-      );
-      ran.current = true;
+      // Convex Auth session isn't active. Show a Sign-in button; after
+      // signing in, Google will return the user to this same URL (with
+      // the `?code=…&state=…` still in it) and the exchange completes.
+      setNeedsSignIn(true);
       return;
     }
     ran.current = true;
@@ -82,6 +90,48 @@ export function OAuthCallback() {
           >
             Back to dashboard →
           </a>
+        </div>
+      </div>
+    );
+  }
+
+  if (needsSignIn) {
+    // Preserve the entire current URL (pathname + code/state query) as the
+    // post-signin redirect target. After Google, we'll land right back here
+    // with the OAuth params intact and finish the exchange.
+    const redirectTo = `${window.location.pathname}${window.location.search}`;
+    return (
+      <div className="min-h-screen flex items-center justify-center" style={bg}>
+        <div
+          className="bg-white w-full max-w-sm mx-4 px-8 py-10 text-center"
+          style={{ border: "2px solid #1a1814", boxShadow: "6px 6px 0 #1a1814" }}
+        >
+          <p className="text-sm font-bold uppercase tracking-wide mb-2" style={{ color: "#1a1814" }}>
+            Sign in to finish connecting
+          </p>
+          <p className="text-xs mb-6" style={{ color: "#6b6456" }}>
+            Your Convex team is authorized. Sign in with Google to link it to
+            your Convalytics account.
+          </p>
+          <button
+            className="w-full flex items-center justify-center gap-2.5 py-3 text-xs font-bold uppercase tracking-wider cursor-pointer transition-all"
+            style={{
+              background: "#1a1814",
+              color: "#e9e6db",
+              border: "2px solid #1a1814",
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.background = "#e8651c";
+              e.currentTarget.style.borderColor = "#e8651c";
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = "#1a1814";
+              e.currentTarget.style.borderColor = "#1a1814";
+            }}
+            onClick={() => void signIn("google", { redirectTo })}
+          >
+            Sign in with Google
+          </button>
         </div>
       </div>
     );
