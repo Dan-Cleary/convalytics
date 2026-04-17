@@ -69,6 +69,19 @@ export const list = query({
 export const listConvexProjects = action({
   args: { teamId: v.id("teams") },
   handler: async (ctx, args) => {
+    const userId = await requireAuth(ctx);
+
+    const isMember: boolean = await ctx.runQuery(
+      internal.projects.isTeamMemberInternal,
+      {
+        teamId: args.teamId,
+        userId,
+      },
+    );
+    if (!isMember) {
+      throw new Error("Not a member of this team");
+    }
+
     const grant: {
       managementToken: string;
       convexTeamId: number;
@@ -419,6 +432,20 @@ export const getTeamGrantInternal = internalQuery({
       managementToken: grant.managementToken,
       convexTeamId: team.convexTeamId,
     };
+  },
+});
+
+export const isTeamMemberInternal = internalQuery({
+  args: { teamId: v.id("teams"), userId: v.id("users") },
+  returns: v.boolean(),
+  handler: async (ctx, args) => {
+    const membership = await ctx.db
+      .query("teamMembers")
+      .withIndex("by_teamId_and_userId", (q) =>
+        q.eq("teamId", args.teamId).eq("userId", args.userId),
+      )
+      .unique();
+    return membership !== null;
   },
 });
 
