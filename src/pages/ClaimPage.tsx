@@ -197,7 +197,6 @@ export function ClaimPage({ claimToken }: { claimToken: string }) {
         {claimedWriteKey && (
           <ClaimSuccess
             projectName={project?.name}
-            writeKey={claimedWriteKey}
             onGoToDashboard={() =>
               void navigate(
                 `/overview?project=${encodeURIComponent(claimedWriteKey)}`,
@@ -215,7 +214,6 @@ function ClaimSuccess({
   onGoToDashboard,
 }: {
   projectName?: string;
-  writeKey: string;
   onGoToDashboard: () => void;
 }) {
   return (

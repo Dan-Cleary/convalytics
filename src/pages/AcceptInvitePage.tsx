@@ -35,7 +35,8 @@ export function AcceptInvitePage({ token }: Props) {
         void navigate("/overview", { replace: true });
       }
     } catch (err) {
-      const msg = err instanceof Error ? err.message : "Failed to accept invite";
+      const msg =
+        err instanceof Error ? err.message : "Failed to accept invite";
       setError(msg);
       attempted.current = false; // Reset to allow retry
     } finally {
@@ -45,7 +46,10 @@ export function AcceptInvitePage({ token }: Props) {
 
   // Reset one-shot guard when signed out so a fresh sign-in can auto-retry.
   useEffect(() => {
-    if (!isAuthenticated) attempted.current = false;
+    if (!isAuthenticated) {
+      attempted.current = false;
+      setError(null);
+    }
   }, [isAuthenticated]);
 
   // Manual retry handler
@@ -69,7 +73,14 @@ export function AcceptInvitePage({ token }: Props) {
     }
     attempted.current = true;
     void attemptAccept();
-  }, [isAuthenticated, authLoading, invite, accepted, accepting, attemptAccept]);
+  }, [
+    isAuthenticated,
+    authLoading,
+    invite,
+    accepted,
+    accepting,
+    attemptAccept,
+  ]);
 
   return (
     <div
