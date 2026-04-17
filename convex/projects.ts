@@ -555,3 +555,143 @@ export const getOwnerEmailByUser = internalQuery({
     return user?.email ?? null;
   },
 });
+
+/**
+ * List projects for a team that have a Convex deployment slug recorded.
+ * Used by `resolveTeamDeployments` to figure out which projects need
+ * Management API resolution.
+ */
+export const listTeamProjectsForResolution = internalQuery({
+  args: { teamId: v.id("teams") },
+  handler: async (ctx, args) => {
+    const projects = await ctx.db
+      .query("projects")
+      .withIndex("by_teamId", (q) => q.eq("teamId", args.teamId))
+      .collect();
+    return projects
+      .filter((p) => p.convexDeploymentSlug)
+      .map((p) => ({
+        _id: p._id,
+        writeKey: p.writeKey,
+        convexDeploymentSlug: p.convexDeploymentSlug as string,
+        convexProjectId: p.convexProjectId,
+      }));
+  },
+});
+
+export const patchProjectConvexProjectId = internalMutation({
+  args: {
+    projectId: v.id("projects"),
+    convexProjectId: v.string(),
+  },
+  handler: async (ctx, args) => {
+    await ctx.db.patch("projects", args.projectId, {
+      convexProjectId: args.convexProjectId,
+    });
+  },
+});
+
+/**
+ * Resolve every project owned by `teamId` against the Convex Management API:
+ * look up each project's `convexDeploymentSlug` in the team's Convex projects,
+ * cache its deployment types for env tagging, and save the resolved
+ * `convexProjectId` back on the project row.
+ *
+ * Called from `oauth.exchangeCode` right after a team grant is created/refreshed.
+ * Safe to run repeatedly — `deploymentTypes.cache` upserts and the project
+ * patch is idempotent.
+ */
+export const resolveTeamDeployments = internalAction({
+  args: { teamId: v.id("teams") },
+  handler: async (ctx, args): Promise<void> => {
+    const grant: {
+      managementToken: string;
+      convexTeamId: number;
+    } | null = await ctx.runQuery(internal.projects.getTeamGrantInternal, {
+      teamId: args.teamId,
+    });
+    if (!grant) return;
+
+    const projects: Array<{
+      _id: Id<"projects">;
+      writeKey: string;
+      convexDeploymentSlug: string;
+      convexProjectId?: string;
+    }> = await ctx.runQuery(
+      internal.projects.listTeamProjectsForResolution,
+      { teamId: args.teamId },
+    );
+    if (projects.length === 0) return;
+
+    const listProjectsUrl = `https://api.convex.dev/v1/teams/${grant.convexTeamId}/list_projects`;
+    const projectsResp = await fetch(listProjectsUrl, {
+      headers: { Authorization: `Bearer ${grant.managementToken}` },
+    });
+    if (!projectsResp.ok) return;
+
+    const apiProjects = (await projectsResp.json()) as Array<{
+      id: number;
+      name: string;
+      slug: string;
+    }>;
+
+    // Fetch deployments for every Convex project once, in parallel.
+    const deploymentsByConvexProjectId = new Map<
+      number,
+      Array<{ name: string; deploymentType: string }>
+    >();
+    await Promise.all(
+      apiProjects.map(async (p) => {
+        try {
+          const depUrl = `https://api.convex.dev/v1/projects/${p.id}/list_deployments`;
+          const depResp = await fetch(depUrl, {
+            headers: { Authorization: `Bearer ${grant.managementToken}` },
+          });
+          if (!depResp.ok) return;
+          const deployments = (await depResp.json()) as Array<{
+            name: string;
+            deploymentType: string;
+          }>;
+          deploymentsByConvexProjectId.set(p.id, deployments);
+        } catch {
+          // Skip this project — non-fatal
+        }
+      }),
+    );
+
+    // For each of our projects, find the matching Convex project by slug
+    // and cache deployment types + patch the convexProjectId.
+    for (const project of projects) {
+      let matchedConvexProjectId: number | undefined;
+      let matchedDeployments:
+        | Array<{ name: string; deploymentType: string }>
+        | undefined;
+      for (const [convexProjectId, deployments] of deploymentsByConvexProjectId) {
+        if (deployments.some((d) => d.name === project.convexDeploymentSlug)) {
+          matchedConvexProjectId = convexProjectId;
+          matchedDeployments = deployments;
+          break;
+        }
+      }
+      if (!matchedConvexProjectId || !matchedDeployments) continue;
+
+      for (const d of matchedDeployments) {
+        if (d.name && d.deploymentType) {
+          await ctx.runMutation(internal.deploymentTypes.cache, {
+            writeKey: project.writeKey,
+            deploymentName: d.name,
+            deploymentType: d.deploymentType,
+          });
+        }
+      }
+
+      const resolvedId = String(matchedConvexProjectId);
+      if (project.convexProjectId !== resolvedId) {
+        await ctx.runMutation(internal.projects.patchProjectConvexProjectId, {
+          projectId: project._id,
+          convexProjectId: resolvedId,
+        });
+      }
+    }
+  },
+});

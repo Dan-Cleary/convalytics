@@ -99,6 +99,20 @@ export const exchangeCode = action({
       convexTeamName,
       managementToken: accessToken,
     });
+
+    // Now that the team has a grant, resolve deployment slugs for every
+    // project on the team and cache their deployment types. This is what
+    // enables environment tagging ("development" vs "production" vs
+    // "preview") on incoming events. Non-fatal — if the Management API
+    // call fails, the OAuth flow still succeeds.
+    try {
+      await ctx.runAction(internal.projects.resolveTeamDeployments, {
+        teamId,
+      });
+    } catch {
+      // Swallow — env tagging can be retried next time the grant is refreshed.
+    }
+
     return { teamId };
   },
 });
