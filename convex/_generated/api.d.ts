@@ -14,6 +14,7 @@ import type * as billing from "../billing.js";
 import type * as crons from "../crons.js";
 import type * as deploymentTypes from "../deploymentTypes.js";
 import type * as emailConfig from "../emailConfig.js";
+import type * as emails_AccountWelcomeEmail from "../emails/AccountWelcomeEmail.js";
 import type * as emails_Base from "../emails/Base.js";
 import type * as emails_InviteEmail from "../emails/InviteEmail.js";
 import type * as emails_QuotaEmail from "../emails/QuotaEmail.js";
@@ -30,6 +31,7 @@ import type * as projects from "../projects.js";
 import type * as rateLimit from "../rateLimit.js";
 import type * as retention from "../retention.js";
 import type * as teams from "../teams.js";
+import type * as testEmail from "../testEmail.js";
 import type * as ua from "../ua.js";
 import type * as usage from "../usage.js";
 
@@ -46,6 +48,7 @@ declare const fullApi: ApiFromModules<{
   crons: typeof crons;
   deploymentTypes: typeof deploymentTypes;
   emailConfig: typeof emailConfig;
+  "emails/AccountWelcomeEmail": typeof emails_AccountWelcomeEmail;
   "emails/Base": typeof emails_Base;
   "emails/InviteEmail": typeof emails_InviteEmail;
   "emails/QuotaEmail": typeof emails_QuotaEmail;
@@ -62,6 +65,7 @@ declare const fullApi: ApiFromModules<{
   rateLimit: typeof rateLimit;
   retention: typeof retention;
   teams: typeof teams;
+  testEmail: typeof testEmail;
   ua: typeof ua;
   usage: typeof usage;
 }>;
