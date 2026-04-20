@@ -172,6 +172,15 @@ export const validateWriteKey = internalQuery({
   },
 });
 
+export const backfillSiteUrl = internalMutation({
+  args: { projectId: v.id("projects"), siteUrl: v.string() },
+  handler: async (ctx, args) => {
+    const project = await ctx.db.get(args.projectId);
+    if (!project || project.siteUrl) return;
+    await ctx.db.patch(args.projectId, { siteUrl: args.siteUrl });
+  },
+});
+
 // Agent-first: create an unclaimed project without auth.
 // Returns writeKey + claimToken. Human claims it later.
 // Idempotent: if a project with the same convexDeploymentSlug already exists, returns it.

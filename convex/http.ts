@@ -235,6 +235,7 @@ http.route({
     // Resolve environment: deployment name lookup for server-side events,
     // origin hostname for web analytics
     let environment: string | undefined;
+    let siteOrigin: string | null = null;
     if (typeof deploymentName === "string" && deploymentName) {
       const resolved: string | null = await ctx.runQuery(
         internal.deploymentTypes.resolve,
@@ -254,6 +255,7 @@ http.route({
           hostname === "0.0.0.0"
             ? "development"
             : "production";
+        if (environment === "production") siteOrigin = origin;
       } catch {
         environment = undefined;
       }
@@ -330,6 +332,17 @@ http.route({
         userName,
         props: cleanProps,
       });
+    }
+
+    if (siteOrigin && !project.siteUrl) {
+      try {
+        await ctx.runMutation(internal.projects.backfillSiteUrl, {
+          projectId: project._id,
+          siteUrl: siteOrigin,
+        });
+      } catch {
+        // Non-fatal
+      }
     }
 
     // Fire quota notification after ingest so a scheduler failure can't
@@ -1268,6 +1281,22 @@ http.route({
       await ctx.runMutation(internal.pageviews.ingestBatch, {
         pageviews: pageviewsToInsert,
       });
+    }
+
+    if (!project.siteUrl) {
+      const productionOrigin = valid.find((e) => e.environment === "production")
+        ? originHeader
+        : null;
+      if (productionOrigin) {
+        try {
+          await ctx.runMutation(internal.projects.backfillSiteUrl, {
+            projectId: project._id,
+            siteUrl: productionOrigin,
+          });
+        } catch {
+          // Non-fatal
+        }
+      }
     }
 
     // Fire quota notification after ingest so a scheduler failure can't

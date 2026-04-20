@@ -87,6 +87,7 @@ export default defineSchema({
     writeKey: v.string(),
     convexProjectId: v.optional(v.string()),
     convexDeploymentSlug: v.optional(v.string()),
+    siteUrl: v.optional(v.string()),
     claimToken: v.optional(v.string()),
     claimed: v.optional(v.boolean()),
   })

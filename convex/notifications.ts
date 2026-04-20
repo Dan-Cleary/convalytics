@@ -8,6 +8,7 @@ import { internal } from "./_generated/api";
 import { QUOTA_NOTIFY_THRESHOLDS } from "./plans";
 import { render } from "@react-email/render";
 import { QuotaEmail } from "./emails/QuotaEmail";
+import { AccountWelcomeEmail } from "./emails/AccountWelcomeEmail";
 import { FROM, REPLY_TO, resend } from "./emailConfig";
 const [QUOTA_NOTIFY_80_PCT, QUOTA_NOTIFY_100_PCT] = QUOTA_NOTIFY_THRESHOLDS;
 
@@ -69,6 +70,26 @@ export const checkAndNotify = internalAction({
         undefined,
         REPLY_TO,
       );
+    }
+  },
+});
+
+export const sendAccountWelcomeEmail = internalAction({
+  args: { email: v.string() },
+  handler: async (ctx, args) => {
+    try {
+      const dashboardUrl = "https://convalytics.dev/overview";
+      await resend.sendEmail(
+        ctx,
+        FROM,
+        args.email,
+        "Welcome to Convalytics",
+        await render(AccountWelcomeEmail({ dashboardUrl })),
+        undefined,
+        REPLY_TO,
+      );
+    } catch {
+      // Non-fatal
     }
   },
 });
