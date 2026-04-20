@@ -12,6 +12,20 @@ import { AccountWelcomeEmail } from "./emails/AccountWelcomeEmail";
 import { FROM, REPLY_TO, resend } from "./emailConfig";
 const [QUOTA_NOTIFY_80_PCT, QUOTA_NOTIFY_100_PCT] = QUOTA_NOTIFY_THRESHOLDS;
 
+async function addToResendAudience(email: string) {
+  const apiKey = process.env.RESEND_API_KEY;
+  const audienceId = process.env.RESEND_AUDIENCE_ID;
+  if (!apiKey || !audienceId) return;
+  await fetch(`https://api.resend.com/audiences/${audienceId}/contacts`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ email, unsubscribed: false }),
+  });
+}
+
 // Called after every ingest when usage crosses 80% or 100%.
 // Idempotent — checks notification flags before sending to avoid spam.
 export const checkAndNotify = internalAction({
@@ -77,9 +91,10 @@ export const checkAndNotify = internalAction({
 export const sendAccountWelcomeEmail = internalAction({
   args: { email: v.string() },
   handler: async (ctx, args) => {
-    try {
-      const dashboardUrl = "https://convalytics.dev/overview";
-      await resend.sendEmail(
+    const dashboardUrl = "https://convalytics.dev/overview";
+
+    await Promise.allSettled([
+      resend.sendEmail(
         ctx,
         FROM,
         args.email,
@@ -87,10 +102,9 @@ export const sendAccountWelcomeEmail = internalAction({
         await render(AccountWelcomeEmail({ dashboardUrl })),
         undefined,
         REPLY_TO,
-      );
-    } catch {
-      // Non-fatal
-    }
+      ),
+      addToResendAudience(args.email),
+    ]);
   },
 });
 
