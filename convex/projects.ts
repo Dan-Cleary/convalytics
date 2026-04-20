@@ -175,9 +175,9 @@ export const validateWriteKey = internalQuery({
 export const backfillSiteUrl = internalMutation({
   args: { projectId: v.id("projects"), siteUrl: v.string() },
   handler: async (ctx, args) => {
-    const project = await ctx.db.get(args.projectId);
+    const project = await ctx.db.get("projects", args.projectId);
     if (!project || project.siteUrl) return;
-    await ctx.db.patch(args.projectId, { siteUrl: args.siteUrl });
+    await ctx.db.patch("projects", args.projectId, { siteUrl: args.siteUrl });
   },
 });
 
