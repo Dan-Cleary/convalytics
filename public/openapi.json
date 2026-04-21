@@ -1,0 +1,383 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Convalytics API",
+    "version": "1.0.0",
+    "description": "Public HTTP API for Convalytics: free web and product analytics for Convex apps. Authenticated via a write key (public identifier, safe to ship in client code).",
+    "contact": {
+      "url": "https://convalytics.dev"
+    },
+    "license": {
+      "name": "MIT",
+      "url": "https://github.com/Dan-Cleary/convalytics/blob/main/LICENSE.txt"
+    }
+  },
+  "servers": [
+    {
+      "url": "https://api.convalytics.dev",
+      "description": "Production"
+    }
+  ],
+  "tags": [
+    { "name": "Ingest", "description": "Send events and page views" },
+    { "name": "Provision", "description": "Create unclaimed projects" },
+    { "name": "Verify", "description": "Confirm pipeline is working" },
+    { "name": "Meta", "description": "Discovery and health" }
+  ],
+  "paths": {
+    "/ingest": {
+      "post": {
+        "tags": ["Ingest"],
+        "summary": "Ingest a single event or page view",
+        "description": "Writes one event to the project identified by writeKey. Use event name `page_view` to record a page view (free, not counted against quota); any other name records a custom product event (counts against the monthly quota). Rate limit: 1000 events/min per write key.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/IngestEvent" }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Accepted. Response body is empty."
+          },
+          "400": { "description": "Invalid JSON or missing required fields." },
+          "401": { "description": "Invalid write key." },
+          "402": {
+            "description": "Monthly event quota exceeded (server-side events only; browser events are silently dropped over quota).",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/QuotaError" }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded (1000 events/min per write key).",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/RateLimitError" }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": { "type": "integer" },
+                "description": "Seconds until the rate limit resets."
+              }
+            }
+          }
+        }
+      }
+    },
+    "/ingest/batch": {
+      "post": {
+        "tags": ["Ingest"],
+        "summary": "Ingest up to 100 events in one request",
+        "description": "Batch ingest for high-volume tracking. Write key is validated once for the whole batch; per-event results are returned in the same order as the input. Rate limit consumes event-count slots atomically.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["writeKey", "events"],
+                "properties": {
+                  "writeKey": { "type": "string" },
+                  "events": {
+                    "type": "array",
+                    "minItems": 0,
+                    "maxItems": 100,
+                    "items": { "$ref": "#/components/schemas/IngestEvent" }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Batch processed. `accepted` and `rejected` counts plus per-event results.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/BatchResult" }
+              }
+            }
+          },
+          "400": { "description": "Invalid JSON, missing writeKey, events not an array, or batch exceeds 100." },
+          "401": { "description": "Invalid write key." },
+          "402": { "description": "Monthly event quota exceeded. Free page views in the batch are still ingested." },
+          "429": { "description": "Rate limit exceeded for the full batch count." }
+        }
+      }
+    },
+    "/api/provision": {
+      "post": {
+        "tags": ["Provision"],
+        "summary": "Create an unclaimed project and receive a write key",
+        "description": "Agent-first provisioning, no auth required. Returns a write key (usable immediately for ingest) and a claim URL (the human visits to link the project to their account). Rate limited to 10 provisions/min globally and 5 unclaimed projects per IP per hour.",
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "description": "Project name (defaults to 'Untitled Project').",
+                    "maxLength": 100
+                  },
+                  "convexDeploymentSlug": {
+                    "type": "string",
+                    "description": "Optional Convex deployment slug for linking."
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Project created.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["writeKey", "claimUrl", "claimToken", "ingestUrl", "scriptUrl"],
+                  "properties": {
+                    "writeKey": { "type": "string", "description": "Public identifier used for ingest." },
+                    "claimUrl": { "type": "string", "format": "uri", "description": "URL the human visits to claim the project." },
+                    "claimToken": { "type": "string" },
+                    "ingestUrl": { "type": "string", "format": "uri", "description": "Full ingest endpoint URL." },
+                    "scriptUrl": { "type": "string", "format": "uri", "description": "Browser tracking script URL with the write key baked in." }
+                  }
+                }
+              }
+            }
+          },
+          "400": { "description": "Invalid JSON." },
+          "429": { "description": "Rate limit or per-IP provision cap exceeded." }
+        }
+      }
+    },
+    "/verify": {
+      "get": {
+        "tags": ["Verify"],
+        "summary": "Verify a write key and fetch recent activity stats",
+        "description": "Authenticates via the write key itself (same public identifier used for ingest). Returns a snapshot so tools like `npx convalytics verify` can confirm events are landing.",
+        "parameters": [
+          {
+            "name": "writeKey",
+            "in": "query",
+            "required": true,
+            "schema": { "type": "string" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Verification succeeded.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": { "type": "boolean" },
+                    "project": {
+                      "type": "object",
+                      "properties": {
+                        "name": { "type": "string" },
+                        "claimed": { "type": "boolean" }
+                      }
+                    }
+                  },
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "400": { "description": "Missing writeKey." },
+          "401": { "description": "Invalid write key." }
+        }
+      }
+    },
+    "/health": {
+      "get": {
+        "tags": ["Meta"],
+        "summary": "Health check",
+        "description": "Returns 200 if the Convex deployment is reachable and the database responds. Suitable for uptime monitors. Never authenticates, writes, or reveals internal state.",
+        "responses": {
+          "200": {
+            "description": "Healthy.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": { "status": { "type": "string", "const": "ok" } }
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Database unreachable.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": { "status": { "type": "string", "const": "error" } }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/llms.txt": {
+      "get": {
+        "tags": ["Meta"],
+        "summary": "Machine-readable setup instructions for AI agents",
+        "description": "Plain-text documentation aimed at coding agents (Claude Code, Cursor, etc.) with setup steps, event discovery guidance, and full API surface.",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": { "schema": { "type": "string" } }
+            }
+          }
+        }
+      }
+    },
+    "/script.js": {
+      "get": {
+        "tags": ["Meta"],
+        "summary": "Browser auto-tracking script",
+        "description": "Self-executing JavaScript that captures page views and exposes `window.convalytics.track()` / `.identify()` / `.reset()`. Embed via `<script src=\"https://api.convalytics.dev/script.js?key=WRITE_KEY\">`.",
+        "parameters": [
+          {
+            "name": "key",
+            "in": "query",
+            "required": true,
+            "schema": { "type": "string" },
+            "description": "Write key for the project."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/javascript": { "schema": { "type": "string" } }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "IngestEvent": {
+        "type": "object",
+        "required": ["writeKey", "name", "userId", "sessionId", "timestamp"],
+        "properties": {
+          "writeKey": {
+            "type": "string",
+            "description": "Public write key identifying the project."
+          },
+          "name": {
+            "type": "string",
+            "description": "Event name. Use `page_view` for page views (free, not quota-counted); any other snake_case name records a custom product event."
+          },
+          "userId": {
+            "type": "string",
+            "description": "Stable user ID (anonymous UUID or your app's real user ID after identify())."
+          },
+          "sessionId": {
+            "type": "string",
+            "description": "Session ID (regenerated per browser session)."
+          },
+          "timestamp": {
+            "type": "integer",
+            "description": "Unix milliseconds."
+          },
+          "props": {
+            "type": "object",
+            "description": "Arbitrary event properties. Values must be string, number, or boolean. Keys starting with $ or _ are dropped.",
+            "additionalProperties": {
+              "oneOf": [
+                { "type": "string" },
+                { "type": "number" },
+                { "type": "boolean" }
+              ]
+            }
+          },
+          "deploymentName": {
+            "type": "string",
+            "description": "Convex deployment slug. When present, environment is resolved via cached deployment metadata (dev → development, prod → production)."
+          },
+          "pageOrigin": {
+            "type": "string",
+            "description": "Page origin for browser events. Used to classify environment (localhost → development, else production)."
+          },
+          "userEmail": {
+            "type": "string",
+            "description": "Human-readable email shown in the dashboard (takes priority over userName and userId).",
+            "maxLength": 200
+          },
+          "userName": {
+            "type": "string",
+            "description": "Human-readable name shown in the dashboard (fallback after userEmail).",
+            "maxLength": 200
+          }
+        }
+      },
+      "BatchResult": {
+        "type": "object",
+        "required": ["accepted", "rejected", "results"],
+        "properties": {
+          "accepted": { "type": "integer" },
+          "rejected": { "type": "integer" },
+          "results": {
+            "type": "array",
+            "items": {
+              "oneOf": [
+                {
+                  "type": "object",
+                  "required": ["status"],
+                  "properties": {
+                    "status": { "type": "string", "const": "ok" }
+                  }
+                },
+                {
+                  "type": "object",
+                  "required": ["status", "error"],
+                  "properties": {
+                    "status": { "type": "string", "const": "error" },
+                    "error": { "type": "string" }
+                  }
+                }
+              ]
+            }
+          }
+        }
+      },
+      "RateLimitError": {
+        "type": "object",
+        "required": ["error", "message", "retryAfter", "resetAt"],
+        "properties": {
+          "error": { "type": "string", "const": "rate_limit_exceeded" },
+          "message": { "type": "string" },
+          "retryAfter": { "type": "integer", "description": "Seconds until reset." },
+          "resetAt": { "type": "integer", "description": "Unix milliseconds when the window resets." }
+        }
+      },
+      "QuotaError": {
+        "type": "object",
+        "required": ["error", "message"],
+        "properties": {
+          "error": { "type": "string", "const": "quota_exceeded" },
+          "message": { "type": "string" },
+          "plan": { "type": "string" },
+          "limit": { "type": "integer" }
+        }
+      }
+    }
+  }
+}

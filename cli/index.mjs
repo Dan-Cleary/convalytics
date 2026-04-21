@@ -9,7 +9,7 @@ import { createInterface } from "readline";
 
 // ─── Config ─────────────────────────────────────────────────────────────────
 
-const SITE_URL = "https://basic-goshawk-557.convex.site";
+const SITE_URL = "https://api.convalytics.dev";
 const INGEST_URL = `${SITE_URL}/ingest`;
 const VERIFY_URL = `${SITE_URL}/verify`;
 const PROVISION_URL = `${SITE_URL}/api/provision`;

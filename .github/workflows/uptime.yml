@@ -22,7 +22,7 @@ jobs:
             echo "::error::Forced failure for alert testing"
             exit 1
           fi
-          URL="https://basic-goshawk-557.convex.site/health"
+          URL="https://api.convalytics.dev/health"
           status=$(curl -sS -o /tmp/body -w "%{http_code}" --max-time 10 "$URL" || true)
           echo "HTTP $status"
           cat /tmp/body || true
