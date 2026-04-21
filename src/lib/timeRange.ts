@@ -11,6 +11,7 @@ export function formatEventLimit(n: number): string {
 }
 
 export function formatRetention(days: number): string {
+  if (days >= MAX_RETENTION_DAYS) return "Unlimited";
   if (days >= 365 && days % 365 === 0) {
     const years = days / 365;
     return `${years}-year`;

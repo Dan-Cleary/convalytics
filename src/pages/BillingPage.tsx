@@ -24,9 +24,10 @@ export function BillingPage() {
   const usage = useQuery(api.usage.getMyUsage, {});
   const createCheckout = useAction(api.billing.createCheckoutSession);
   const createPortal = useAction(api.billing.createPortalSession);
-  const [loading, setLoading] = useState<string | null>(null);
+  const [loading, setLoading] = useState<PlanId | "portal" | null>(null);
 
-  async function handleUpgrade(plan: "solo" | "pro") {
+  async function handleUpgrade(plan: PlanId) {
+    if (plan === "free") return;
     setLoading(plan);
     try {
       const origin = window.location.origin;
