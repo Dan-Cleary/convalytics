@@ -19,31 +19,28 @@ fi
 MAX_ATTEMPTS=5
 attempt=1
 backoff=30
+tmp=$(mktemp)
+trap 'rm -f "$tmp"' EXIT INT TERM
 
 while true; do
-  tmp=$(mktemp)
   set +e
   npx convex deploy --cmd 'npm run build' 2>&1 | tee "$tmp"
   code=${PIPESTATUS[0]}
   set -e
 
   if [ "$code" -eq 0 ]; then
-    rm -f "$tmp"
     exit 0
   fi
 
   if [ "$attempt" -lt "$MAX_ATTEMPTS" ] \
-     && grep -q "api.convex.dev" "$tmp" \
-     && grep -qE "(500 Internal Server Error|InternalServerError)" "$tmp"; then
+     && grep -qE "api\.convex\.dev.*(500 Internal Server Error|InternalServerError)" "$tmp"; then
     echo ""
     echo "convex deploy hit transient api.convex.dev error (attempt $attempt/$MAX_ATTEMPTS); retrying in ${backoff}s..."
-    rm -f "$tmp"
     attempt=$((attempt + 1))
     sleep "$backoff"
     backoff=$((backoff * 2))
     continue
   fi
 
-  rm -f "$tmp"
   exit "$code"
 done

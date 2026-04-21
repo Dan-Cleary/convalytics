@@ -3,18 +3,19 @@ import confetti from "canvas-confetti";
 import { useQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { formatEventLimit, formatRetention } from "../lib/timeRange";
+import type { PlanId } from "../../convex/plans";
 
-const PLAN_LABELS: Record<string, string> = {
+const PLAN_LABELS: Record<PlanId, string> = {
+  free: "Free",
   solo: "Solo",
   pro: "Pro",
-  free: "Free",
 };
 
 export function BillingSuccessModal({
   expectedPlan,
   onClose,
 }: {
-  expectedPlan: "free" | "solo" | "pro" | null;
+  expectedPlan: PlanId | null;
   onClose: () => void;
 }) {
   const usage = useQuery(api.usage.getMyUsage, {});
@@ -108,7 +109,7 @@ export function BillingSuccessModal({
     usage?.plan && (usage.plan !== "free" || expectedPlan === null)
       ? usage.plan
       : expectedPlan;
-  const planName = plan ? (PLAN_LABELS[plan] ?? plan) : "…";
+  const planName = plan ? PLAN_LABELS[plan] : "…";
   const tagline = usage
     ? `${formatEventLimit(usage.limit)} events/mo · ${formatRetention(usage.retentionDays)} retention`
     : "";

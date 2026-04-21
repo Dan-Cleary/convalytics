@@ -2,6 +2,7 @@ import { useQuery } from "convex/react";
 import { Authenticated, Unauthenticated, AuthLoading } from "convex/react";
 import { useAuthActions } from "@convex-dev/auth/react";
 import { api } from "../convex/_generated/api";
+import type { PlanId } from "../convex/plans";
 import { SignInForm } from "./components/SignInForm";
 import { Sidebar } from "./components/Sidebar";
 import { BillingSuccessModal } from "./components/BillingSuccessModal";
@@ -26,7 +27,6 @@ import {
 } from "react-router-dom";
 
 type Environment = "all" | "production" | "development";
-type PlanId = "free" | "solo" | "pro";
 
 class PageErrorBoundary extends Component<
   { children: ReactNode },
