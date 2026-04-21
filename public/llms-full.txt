@@ -1,0 +1,146 @@
+# Convalytics
+
+> Free web and product analytics for Convex apps. Agent-friendly HTTP API with a public write key, a Convex backend component for server-side ingest, and an auto-tracking browser script for page views and custom events.
+
+Convalytics is built specifically for apps that run on Convex (https://convex.dev). It gives teams one dashboard for marketing-site page views, in-app product events, user identification, retention, and funnels — without requiring a paid plan to get started.
+
+## Canonical URLs
+
+- Site: https://convalytics.dev
+- API base: https://api.convalytics.dev
+- OpenAPI spec: https://convalytics.dev/openapi.json
+- Agent setup manual: https://convalytics.dev/llms.txt
+- This full manual: https://convalytics.dev/llms-full.txt
+- Pricing: https://convalytics.dev/pricing.md
+- Sitemap: https://convalytics.dev/sitemap.xml
+- robots.txt: https://convalytics.dev/robots.txt
+- Source: https://github.com/Dan-Cleary/convalytics
+- License: MIT
+
+## What's included
+
+- Page views (free, uncounted against quota)
+- Custom product events with arbitrary properties
+- User identification (anonymous → identified, with email/name for dashboard display)
+- Session tracking
+- Dashboards: traffic, pages, referrers, UTM, retention, funnels
+- CSV export
+- Team billing via Stripe
+- Quota alerts and rate limiting
+- CLI for provisioning, verification, and event inspection
+- Convex backend component for server-side ingest without leaking the write key's origin
+- Browser auto-tracking script
+
+## Three ways to send events
+
+### 1. Convex backend component (recommended for Convex apps)
+
+Install the component in your Convex project so product events can be emitted from server functions alongside your existing business logic. See https://github.com/Dan-Cleary/convalytics-convex-component and https://convalytics.dev/skill.md for the agent setup guide.
+
+### 2. Browser auto-tracking script
+
+```html
+<script src="https://api.convalytics.dev/script.js?key=WRITE_KEY" defer></script>
+```
+
+This captures page views automatically. For custom events from the browser:
+
+```js
+window.convalytics.track("signup_completed", { plan: "pro" });
+window.convalytics.identify("user_123", { email: "a@b.com", name: "Alice" });
+window.convalytics.reset(); // on logout
+```
+
+### 3. Direct HTTP (any language)
+
+```
+POST https://api.convalytics.dev/ingest
+Content-Type: application/json
+
+{
+  "writeKey": "wk_...",
+  "name": "signup_completed",
+  "userId": "user_123",
+  "sessionId": "sess_abc",
+  "timestamp": 1714000000000,
+  "props": { "plan": "pro" }
+}
+```
+
+Use event name `page_view` for page views (free, not counted against quota). Any other name is a custom product event and counts toward the monthly quota.
+
+Batch endpoint (up to 100 events per request): `POST /ingest/batch` with `{ writeKey, events: [...] }`.
+
+## Authentication
+
+The write key is a public identifier, safe to ship in client code. It authorizes writes to one project only and cannot read data. There is no separate read API; dashboards are served to authenticated users via Convex queries.
+
+## Agent-first provisioning
+
+Agents (Claude Code, Cursor, etc.) can create an unclaimed project without any user auth:
+
+```
+POST https://api.convalytics.dev/api/provision
+Content-Type: application/json
+
+{ "name": "My App" }
+```
+
+The response contains a `writeKey` (usable immediately), a `claimUrl` (the human visits to link the project to their account), `ingestUrl`, and `scriptUrl`. Unclaimed projects have a 30-day TTL and a 5-per-IP-per-hour creation cap.
+
+## Verification
+
+```
+GET https://api.convalytics.dev/verify?writeKey=WRITE_KEY
+```
+
+Returns a snapshot of recent activity so tools like `npx convalytics verify` can confirm events are landing before the human gets involved.
+
+## CLI
+
+```
+npx convalytics init       # provision a project
+npx convalytics verify     # check recent activity for a write key
+npx convalytics tail       # stream recent events
+```
+
+## Pricing
+
+Billed by monthly event volume. Page views are always free. No project limits.
+
+| Plan  | Price      | Custom events/mo | Retention |
+|-------|------------|------------------|-----------|
+| Free  | $0         | 50,000           | 90 days   |
+| Solo  | $29 / mo   | 500,000          | 365 days  |
+| Pro   | $99 / mo   | 5,000,000        | 1825 days |
+
+See https://convalytics.dev/pricing.md for full details including overage behavior and rate limits.
+
+## Rate limiting and quotas
+
+- Rate limit: 1000 events/min per write key. Exceeding returns `429` with `Retry-After` and `resetAt`.
+- Quota: monthly custom-event count by plan. Exceeding returns `402 quota_exceeded` for server-side events. Browser events are silently dropped above quota so visitor tracking never breaks. Page views are never dropped.
+
+## Error responses
+
+- `400` — invalid JSON or missing required fields
+- `401` — invalid write key
+- `402` — monthly quota exceeded (`{ error: "quota_exceeded", message, plan, limit }`)
+- `429` — rate limited (`{ error: "rate_limit_exceeded", message, retryAfter, resetAt }`)
+- `503` — backend unreachable (health endpoint only)
+
+## Health
+
+`GET https://api.convalytics.dev/health` returns `{ "status": "ok" }` on 200 or `{ "status": "error" }` on 503. Suitable for uptime monitors.
+
+## Integrations
+
+- Convex (first-class via backend component)
+- Stripe (for billing on paid plans)
+- Resend (for account notifications)
+- Any HTTP client can POST events
+
+## Support
+
+- GitHub issues: https://github.com/Dan-Cleary/convalytics/issues
+- Email: hello@convalytics.dev

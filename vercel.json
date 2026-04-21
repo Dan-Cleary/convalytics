@@ -2,6 +2,7 @@
   "buildCommand": "if [ \"$VERCEL_ENV\" = \"production\" ]; then npx convex deploy --cmd 'npm run build'; else npm run build; fi",
   "rewrites": [
     { "source": "/skill.md", "destination": "https://raw.githubusercontent.com/Dan-Cleary/convalytics-convex-component/main/SKILL.md" },
-    { "source": "/((?!\\.well-known/).*)", "destination": "/index.html" }
+    { "source": "/llms.txt", "destination": "https://api.convalytics.dev/llms.txt" },
+    { "source": "/((?!\\.well-known/|llms\\.txt).*)", "destination": "/index.html" }
   ]
 }

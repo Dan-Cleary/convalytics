@@ -28,6 +28,7 @@
     "/ingest": {
       "post": {
         "tags": ["Ingest"],
+        "operationId": "ingestEvent",
         "summary": "Ingest a single event or page view",
         "description": "Writes one event to the project identified by writeKey. Use event name `page_view` to record a page view (free, not counted against quota); any other name records a custom product event (counts against the monthly quota). Rate limit: 1000 events/min per write key.",
         "requestBody": {
@@ -72,6 +73,7 @@
     "/ingest/batch": {
       "post": {
         "tags": ["Ingest"],
+        "operationId": "ingestBatch",
         "summary": "Ingest up to 100 events in one request",
         "description": "Batch ingest for high-volume tracking. Write key is validated once for the whole batch; per-event results are returned in the same order as the input. Rate limit consumes event-count slots atomically.",
         "requestBody": {
@@ -113,6 +115,7 @@
     "/api/provision": {
       "post": {
         "tags": ["Provision"],
+        "operationId": "provisionProject",
         "summary": "Create an unclaimed project and receive a write key",
         "description": "Agent-first provisioning, no auth required. Returns a write key (usable immediately for ingest) and a claim URL (the human visits to link the project to their account). Rate limited to 10 provisions/min globally and 5 unclaimed projects per IP per hour.",
         "requestBody": {
@@ -163,6 +166,7 @@
     "/verify": {
       "get": {
         "tags": ["Verify"],
+        "operationId": "verifyWriteKey",
         "summary": "Verify a write key and fetch recent activity stats",
         "description": "Authenticates via the write key itself (same public identifier used for ingest). Returns a snapshot so tools like `npx convalytics verify` can confirm events are landing.",
         "parameters": [
@@ -203,6 +207,7 @@
     "/health": {
       "get": {
         "tags": ["Meta"],
+        "operationId": "getHealth",
         "summary": "Health check",
         "description": "Returns 200 if the Convex deployment is reachable and the database responds. Suitable for uptime monitors. Never authenticates, writes, or reveals internal state.",
         "responses": {
@@ -234,6 +239,7 @@
     "/llms.txt": {
       "get": {
         "tags": ["Meta"],
+        "operationId": "getLlmsTxt",
         "summary": "Machine-readable setup instructions for AI agents",
         "description": "Plain-text documentation aimed at coding agents (Claude Code, Cursor, etc.) with setup steps, event discovery guidance, and full API surface.",
         "responses": {
@@ -249,6 +255,7 @@
     "/script.js": {
       "get": {
         "tags": ["Meta"],
+        "operationId": "getTrackingScript",
         "summary": "Browser auto-tracking script",
         "description": "Self-executing JavaScript that captures page views and exposes `window.convalytics.track()` / `.identify()` / `.reset()`. Embed via `<script src=\"https://api.convalytics.dev/script.js?key=WRITE_KEY\">`.",
         "parameters": [
