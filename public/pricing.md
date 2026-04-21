@@ -22,7 +22,7 @@ Billing is by monthly event volume. Page views are always free and do not count 
 ### Pro — $99 / month
 - 5,000,000 custom events per month
 - Unlimited page views
-- 1825-day (5-year) data retention
+- 5-year data retention
 - Everything in Solo
 
 ## Overage behavior

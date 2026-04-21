@@ -1,31 +1,24 @@
 import { useQuery, useAction } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { useState } from "react";
-import { formatEventLimit, MAX_RETENTION_DAYS } from "../lib/timeRange";
+import { formatEventLimit, formatRetention } from "../lib/timeRange";
+import { PLANS as PLAN_DEFS, type PlanId } from "../../convex/plans";
 
-const PLANS = [
-  {
-    id: "free" as const,
-    name: "Free",
-    price: "$0",
-    events: "50K events/mo",
-    retention: "90-day retention",
-  },
-  {
-    id: "solo" as const,
-    name: "Solo",
-    price: "$29/mo",
-    events: "500K events/mo",
-    retention: "1-year retention",
-  },
-  {
-    id: "pro" as const,
-    name: "Pro",
-    price: "$99/mo",
-    events: "5M events/mo",
-    retention: "Unlimited retention",
-  },
-];
+const PLAN_PRICES: Record<PlanId, string> = {
+  free: "$0",
+  solo: "$29/mo",
+  pro: "$99/mo",
+};
+
+const PLAN_ORDER: PlanId[] = ["free", "solo", "pro"];
+
+const PLANS = PLAN_ORDER.map((id) => ({
+  id,
+  name: PLAN_DEFS[id].displayName,
+  price: PLAN_PRICES[id],
+  events: `${formatEventLimit(PLAN_DEFS[id].eventsPerMonth)} events/mo`,
+  retention: `${formatRetention(PLAN_DEFS[id].retentionDays)} retention`,
+}));
 
 export function BillingPage() {
   const usage = useQuery(api.usage.getMyUsage, {});
@@ -112,10 +105,7 @@ export function BillingPage() {
             {pct}% used
           </span>
           <span className="text-[10px]" style={{ color: "#9b9488" }}>
-            {usage.retentionDays >= MAX_RETENTION_DAYS
-              ? "Unlimited"
-              : `${usage.retentionDays}-day`}{" "}
-            data retention
+            {formatRetention(usage.retentionDays)} data retention
           </span>
         </div>
         <p className="text-[10px] mt-3" style={{ color: "#9b9488" }}>

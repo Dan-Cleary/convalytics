@@ -10,6 +10,14 @@ export function formatEventLimit(n: number): string {
   return String(n);
 }
 
+export function formatRetention(days: number): string {
+  if (days >= 365 && days % 365 === 0) {
+    const years = days / 365;
+    return `${years}-year`;
+  }
+  return `${days}-day`;
+}
+
 // Floor to the nearest hour so Convex query args are stable within an hour
 // rather than changing on every render.
 function sinceHour(daysAgo: number): number {

@@ -505,7 +505,11 @@ http.route({
 // Machine-readable setup instructions for AI agents (Claude Code, Cursor, etc.)
 const LLMS_TXT = `# Convalytics
 
-> Full-stack analytics for Convex apps. No account needed — agent sets up everything, human claims later.
+> Full-stack analytics for Convex apps. No account needed, agent sets up everything, human claims later.
+
+Full product manual: https://convalytics.dev/llms-full.txt
+OpenAPI spec: https://convalytics.dev/openapi.json
+Pricing: https://convalytics.dev/pricing.md
 
 ## How it works
 

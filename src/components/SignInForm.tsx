@@ -83,6 +83,7 @@ export function SignInForm() {
           </div>
 
           <p
+            data-speakable
             className="text-sm font-bold mb-1"
             style={{ color: "#1a1814" }}
           >

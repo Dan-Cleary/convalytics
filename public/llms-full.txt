@@ -2,7 +2,7 @@
 
 > Free web and product analytics for Convex apps. Agent-friendly HTTP API with a public write key, a Convex backend component for server-side ingest, and an auto-tracking browser script for page views and custom events.
 
-Convalytics is built specifically for apps that run on Convex (https://convex.dev). It gives teams one dashboard for marketing-site page views, in-app product events, user identification, retention, and funnels — without requiring a paid plan to get started.
+Convalytics is built specifically for apps that run on Convex (https://convex.dev). It gives teams one dashboard for marketing-site page views, in-app product events, user identification, retention, and funnels, without requiring a paid plan to get started.
 
 ## Canonical URLs
 
@@ -110,7 +110,7 @@ Billed by monthly event volume. Page views are always free. No project limits.
 |-------|------------|------------------|-----------|
 | Free  | $0         | 50,000           | 90 days   |
 | Solo  | $29 / mo   | 500,000          | 365 days  |
-| Pro   | $99 / mo   | 5,000,000        | 1825 days |
+| Pro   | $99 / mo   | 5,000,000        | 5 years   |
 
 See https://convalytics.dev/pricing.md for full details including overage behavior and rate limits.
 
@@ -121,11 +121,11 @@ See https://convalytics.dev/pricing.md for full details including overage behavi
 
 ## Error responses
 
-- `400` — invalid JSON or missing required fields
-- `401` — invalid write key
-- `402` — monthly quota exceeded (`{ error: "quota_exceeded", message, plan, limit }`)
-- `429` — rate limited (`{ error: "rate_limit_exceeded", message, retryAfter, resetAt }`)
-- `503` — backend unreachable (health endpoint only)
+- `400`: invalid JSON or missing required fields
+- `401`: invalid write key
+- `402`: monthly quota exceeded (`{ error: "quota_exceeded", message, plan, limit }`)
+- `429`: rate limited (`{ error: "rate_limit_exceeded", message, retryAfter, resetAt }`)
+- `503`: backend unreachable (health endpoint only)
 
 ## Health
 
