@@ -13,8 +13,12 @@ if [ "$VERCEL_ENV" != "production" ]; then
   exec npm run build
 fi
 
-MAX_ATTEMPTS=3
+# Exponential backoff — 30, 60, 120, 240s between attempts. Five attempts
+# total buys ~8 minutes of outage tolerance, which covers all convex.dev
+# control-plane blips seen so far without blowing through Vercel's build time.
+MAX_ATTEMPTS=5
 attempt=1
+backoff=30
 
 while true; do
   tmp=$(mktemp)
@@ -32,10 +36,11 @@ while true; do
      && grep -q "api.convex.dev" "$tmp" \
      && grep -qE "(500 Internal Server Error|InternalServerError)" "$tmp"; then
     echo ""
-    echo "convex deploy hit transient api.convex.dev error (attempt $attempt/$MAX_ATTEMPTS); retrying in 15s..."
+    echo "convex deploy hit transient api.convex.dev error (attempt $attempt/$MAX_ATTEMPTS); retrying in ${backoff}s..."
     rm -f "$tmp"
     attempt=$((attempt + 1))
-    sleep 15
+    sleep "$backoff"
+    backoff=$((backoff * 2))
     continue
   fi
 
