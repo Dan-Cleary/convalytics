@@ -67,8 +67,6 @@ Content-Type: application/json
 }
 ```
 
-Use event name `page_view` for page views (free, not counted against quota). Any other name is a custom product event and counts toward the monthly quota.
-
 Batch endpoint (up to 100 events per request): `POST /ingest/batch` with `{ writeKey, events: [...] }`.
 
 ## Authentication
@@ -86,7 +84,7 @@ Content-Type: application/json
 { "name": "My App" }
 ```
 
-The response contains a `writeKey` (usable immediately), a `claimUrl` (the human visits to link the project to their account), `ingestUrl`, and `scriptUrl`. Unclaimed projects have a 30-day TTL and a 5-per-IP-per-hour creation cap.
+The response contains a `writeKey` (usable immediately), a `claimUrl` (the human visits to link the project to their account), `ingestUrl`, and `scriptUrl`. Provision is capped at 5 unclaimed projects per IP per hour to prevent abuse.
 
 ## Verification
 

@@ -3,6 +3,6 @@
   "rewrites": [
     { "source": "/skill.md", "destination": "https://raw.githubusercontent.com/Dan-Cleary/convalytics-convex-component/main/SKILL.md" },
     { "source": "/llms.txt", "destination": "https://api.convalytics.dev/llms.txt" },
-    { "source": "/((?!\\.well-known/|llms\\.txt).*)", "destination": "/index.html" }
+    { "source": "/((?!\\.well-known/).*)", "destination": "/index.html" }
   ]
 }
