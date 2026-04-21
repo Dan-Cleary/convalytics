@@ -32,7 +32,6 @@ export function BillingSuccessModal({
     const colors = ["#e8651c", "#1a1814", "#c9581a", "#f0a070", "#fff"];
     let frameId: number | undefined;
 
-    // Initial big burst
     void confetti({
       particleCount: 80,
       spread: 100,
@@ -40,7 +39,6 @@ export function BillingSuccessModal({
       colors,
     });
 
-    // Side streams
     const frame = () => {
       void confetti({
         particleCount: 4,
@@ -72,7 +70,6 @@ export function BillingSuccessModal({
     };
   }, []);
 
-  // Handle keyboard events (Escape to close)
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
@@ -87,17 +84,13 @@ export function BillingSuccessModal({
     };
   }, [onClose]);
 
-  // Manage focus: save previous focus, move focus into modal, restore on unmount
   useEffect(() => {
-    // Save the currently focused element
     previousFocusRef.current = document.activeElement as HTMLElement;
 
-    // Move focus into the modal (focus the panel)
     if (panelRef.current) {
       panelRef.current.focus();
     }
 
-    // Restore focus when modal closes
     return () => {
       if (previousFocusRef.current) {
         previousFocusRef.current.focus();
@@ -134,7 +127,6 @@ export function BillingSuccessModal({
         }}
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Orange badge */}
         <div
           className="w-14 h-14 flex items-center justify-center text-2xl select-none"
           style={{ background: "#e8651c", flexShrink: 0 }}

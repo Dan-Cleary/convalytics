@@ -12,7 +12,7 @@ export const stripe = new StripeSubscriptions(components.stripe);
 
 // Stripe price IDs — set these to your actual Stripe price IDs via env vars.
 // These are read at runtime so they can be set in the Convex dashboard.
-function getPriceId(plan: "solo" | "pro"): string {
+function getPriceId(plan: Exclude<PlanId, "free">): string {
   const key = plan === "solo" ? "STRIPE_PRICE_SOLO" : "STRIPE_PRICE_PRO";
   const id = process.env[key];
   if (!id) throw new Error(`Missing env var: ${key}`);
@@ -194,7 +194,9 @@ export function registerStripeRoutes(http: ReturnType<typeof httpRouter>) {
   });
 }
 
-function planFromPriceId(priceId: string | undefined): "solo" | "pro" {
+function planFromPriceId(
+  priceId: string | undefined,
+): Exclude<PlanId, "free"> {
   if (!priceId) throw new Error("Missing Stripe price ID on subscription");
   const soloPriceId = process.env.STRIPE_PRICE_SOLO;
   const proPriceId = process.env.STRIPE_PRICE_PRO;
