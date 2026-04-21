@@ -1,0 +1,8 @@
+# Convalytics security contact
+# https://convalytics.dev
+
+Contact: mailto:hello@convalytics.dev
+Contact: https://github.com/Dan-Cleary/convalytics/security/advisories/new
+Expires: 2027-04-21T00:00:00.000Z
+Preferred-Languages: en
+Canonical: https://convalytics.dev/.well-known/security.txt
