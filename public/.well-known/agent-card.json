@@ -1,0 +1,58 @@
+{
+  "name": "Convalytics",
+  "description": "Free web and product analytics for Convex apps. Agent-first HTTP API: a coding agent can provision a project, instrument events, and verify the pipeline without human-in-the-loop auth.",
+  "url": "https://api.convalytics.dev",
+  "documentationUrl": "https://convalytics.dev/llms-full.txt",
+  "provider": {
+    "organization": "Convalytics",
+    "url": "https://convalytics.dev"
+  },
+  "version": "1.0.0",
+  "capabilities": {
+    "streaming": false,
+    "pushNotifications": false,
+    "stateTransitionHistory": false
+  },
+  "defaultInputModes": ["application/json"],
+  "defaultOutputModes": ["application/json"],
+  "authentication": {
+    "schemes": ["writeKey"],
+    "description": "Public write key passed in the request body. Scoped to a single project, cannot read data, safe to ship in client code. See https://convalytics.dev/llms-full.txt for the provision flow."
+  },
+  "skills": [
+    {
+      "id": "provision_project",
+      "name": "Provision analytics project",
+      "description": "Create an unclaimed project and return a write key plus a claim URL for the human to link it to their account later. No auth required.",
+      "tags": ["analytics", "provision", "setup"],
+      "examples": [
+        "Set up Convalytics for this Convex app",
+        "Get a write key to start tracking events"
+      ],
+      "inputModes": ["application/json"],
+      "outputModes": ["application/json"]
+    },
+    {
+      "id": "ingest_event",
+      "name": "Record event or page view",
+      "description": "Log a page view (free, unquota'd) or a custom product event with props for a project identified by write key.",
+      "tags": ["analytics", "events", "tracking"],
+      "examples": [
+        "Track a signup event for user_123",
+        "Record a page view for the pricing page"
+      ]
+    },
+    {
+      "id": "ingest_batch",
+      "name": "Batch ingest up to 100 events",
+      "description": "High-volume event ingestion with per-event results in the same order as the input.",
+      "tags": ["analytics", "events", "batch"]
+    },
+    {
+      "id": "verify_write_key",
+      "name": "Verify write key",
+      "description": "Confirm a write key is valid and fetch a snapshot of recent ingestion activity, useful for agents verifying their setup end-to-end.",
+      "tags": ["analytics", "verification"]
+    }
+  ]
+}

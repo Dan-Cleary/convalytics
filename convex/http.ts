@@ -635,6 +635,30 @@ All rate limit errors return JSON with machine-readable fields:
 
 The HTTP response also includes a standard Retry-After header (seconds).
 
+## Authentication (for agents)
+
+Convalytics uses a **public write key** as its sole API credential.
+
+- Safe to ship in client code and public repos. Not a secret.
+- Authorizes writes to exactly one project. Cannot read data.
+- No OAuth, no bearer token, no scopes, no refresh flow.
+
+Agent flow, no human-in-the-loop:
+
+1. POST /api/provision (no auth) to get a fresh write key.
+2. Use the write key immediately on POST /ingest, POST /ingest/batch, GET /verify.
+3. Return the claimUrl to the human to link the project to their account later.
+
+Where the key goes:
+
+- POST /ingest, POST /ingest/batch: \`writeKey\` field in the JSON body
+- GET /verify: ?writeKey=... query parameter
+- Browser script: <script src="https://api.convalytics.dev/script.js?key=WRITE_KEY">
+
+Invalid/revoked key returns 401. Valid key over quota returns 402 for server-side events; browser events silently drop over quota.
+
+Dashboard access (for humans) uses Convex Auth with Google OAuth and is unrelated to the ingest API.
+
 ## Provision API (for programmatic setup)
 
     POST /api/provision

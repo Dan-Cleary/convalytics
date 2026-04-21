@@ -1,0 +1,33 @@
+{
+  "linkset": [
+    {
+      "anchor": "https://api.convalytics.dev",
+      "item": [
+        {
+          "href": "https://convalytics.dev/openapi.json",
+          "rel": "service-desc",
+          "type": "application/openapi+json",
+          "title": "Convalytics OpenAPI 3.1 specification"
+        },
+        {
+          "href": "https://convalytics.dev/llms.txt",
+          "rel": "describedby",
+          "type": "text/plain",
+          "title": "Agent setup manual (llms.txt)"
+        },
+        {
+          "href": "https://convalytics.dev/llms-full.txt",
+          "rel": "describedby",
+          "type": "text/plain",
+          "title": "Full product manual (llms-full.txt)"
+        },
+        {
+          "href": "https://api.convalytics.dev/health",
+          "rel": "status",
+          "type": "application/json",
+          "title": "Health check"
+        }
+      ]
+    }
+  ]
+}

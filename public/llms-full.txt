@@ -71,7 +71,39 @@ Batch endpoint (up to 100 events per request): `POST /ingest/batch` with `{ writ
 
 ## Authentication
 
-The write key is a public identifier, safe to ship in client code. It authorizes writes to one project only and cannot read data. There is no separate read API; dashboards are served to authenticated users via Convex queries.
+Convalytics uses a **public write key** as its sole API credential. It is a scoped, non-secret identifier with these properties:
+
+- Safe to ship in client code, in HTML `<script>` tags, and in public repos.
+- Authorizes writes to exactly one project. It cannot read any data.
+- Cannot rotate to a higher-privilege mode. There is no secret key, no bearer token, no OAuth for the ingestion API.
+- Can be revoked by the project owner at any time from the dashboard.
+
+### Authentication for agents
+
+Agents (Claude Code, Cursor, etc.) do not need user OAuth, API keys, or any human-in-the-loop step to start sending events:
+
+1. Call `POST /api/provision` (no auth) to create an unclaimed project and receive a fresh write key.
+2. Use the write key immediately on `POST /ingest`, `POST /ingest/batch`, and `GET /verify`.
+3. Return the `claimUrl` from the provision response to the human so they can link the project to their account at their convenience. Events keep flowing in the meantime.
+
+There are no scopes, no token exchange, no refresh flow. One write key, one project, write-only.
+
+### Authentication for dashboard access
+
+Humans signing in to view dashboards authenticate via Convex Auth with Google OAuth. This is a separate system from the ingest API and has no bearing on event submission. Agents do not need to authenticate to the dashboard to instrument events.
+
+### Where to put the write key
+
+| Transport                    | Where                                                          |
+|------------------------------|----------------------------------------------------------------|
+| `POST /ingest`               | `writeKey` field in the JSON body                              |
+| `POST /ingest/batch`         | Top-level `writeKey` field; validated once for the whole batch |
+| `GET /verify`                | `?writeKey=...` query parameter                                |
+| Browser auto-tracking script | `<script src="https://api.convalytics.dev/script.js?key=...">` |
+
+### Invalid-key behavior
+
+Sending a bad or revoked write key returns `401`. Sending a valid key over-quota returns `402` for server-side events; browser events are silently dropped over quota so visitor tracking never breaks.
 
 ## Agent-first provisioning
 

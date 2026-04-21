@@ -4,5 +4,22 @@
     { "source": "/skill.md", "destination": "https://raw.githubusercontent.com/Dan-Cleary/convalytics-convex-component/main/SKILL.md" },
     { "source": "/llms.txt", "destination": "https://api.convalytics.dev/llms.txt" },
     { "source": "/((?!\\.well-known/).*)", "destination": "/index.html" }
+  ],
+  "headers": [
+    {
+      "source": "/.well-known/api-catalog",
+      "headers": [
+        { "key": "Content-Type", "value": "application/linkset+json; charset=utf-8" }
+      ]
+    },
+    {
+      "source": "/",
+      "headers": [
+        {
+          "key": "Link",
+          "value": "<https://convalytics.dev/sitemap.xml>; rel=\"sitemap\", <https://convalytics.dev/openapi.json>; rel=\"service-desc\"; type=\"application/openapi+json\", <https://convalytics.dev/openapi.json>; rel=\"describedby\"; type=\"application/openapi+json\", <https://convalytics.dev/.well-known/api-catalog>; rel=\"api-catalog\"; type=\"application/linkset+json\", <https://convalytics.dev/llms.txt>; rel=\"alternate\"; type=\"text/plain\", <https://convalytics.dev/llms-full.txt>; rel=\"alternate\"; type=\"text/plain\", <https://convalytics.dev/index.md>; rel=\"alternate\"; type=\"text/markdown\""
+        }
+      ]
+    }
   ]
 }
