@@ -53,6 +53,17 @@
       "name": "Verify write key",
       "description": "Confirm a write key is valid and fetch a snapshot of recent ingestion activity, useful for agents verifying their setup end-to-end.",
       "tags": ["analytics", "verification"]
+    },
+    {
+      "id": "query_analytics_mcp",
+      "name": "Query analytics via MCP",
+      "description": "Convalytics also exposes a Model Context Protocol server for AI assistants (Claude Desktop, Claude Code, Cursor, Windsurf) to ask natural-language questions about a project's analytics. Nine read-only tools cover traffic, custom events, per-user activity, and a period-over-period digest. Uses a separate auth model (team-scoped API token) and is gated to paid plans. See https://convalytics.dev/.well-known/mcp/server-card.json for the MCP capability list and https://convalytics.dev/mcp for install instructions.",
+      "tags": ["analytics", "mcp", "query", "read"],
+      "examples": [
+        "What are the top 10 pages on my site this week?",
+        "How is dan@example.com using my app?",
+        "Give me a weekly digest of my project with period-over-period comparison"
+      ]
     }
   ]
 }

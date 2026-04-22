@@ -598,6 +598,23 @@ On sign-out, call reset() to revert to anonymous tracking:
 Identity persists in localStorage across page reloads until reset() is called.
 The dashboard shows email > name > anonymous ID with cascading priority.
 
+## MCP server (read-only queries for AI assistants)
+
+Once events are flowing, developers can query their analytics conversationally
+via Claude Desktop, Claude Code, Cursor, Windsurf, or any MCP-capable client.
+
+    POST https://api.convalytics.dev/mcp
+    Authorization: Bearer cnv_...   # API token from /tokens
+
+Nine read-only tools: list_projects, get_usage, top_pages, top_referrers,
+pageviews_count, events_count, recent_events, weekly_digest (project summary
+with period-over-period comparison), user_activity (per-user snapshot —
+matches by userEmail or visitorId).
+
+Gated to Solo+ plans. Tokens are team-scoped; each MCP tool takes an explicit
+project argument. Full docs at https://convalytics.dev/mcp and
+https://convalytics.dev/.well-known/mcp/server-card.json.
+
 ## Bulk Ingest API
 
 For high-volume tracking (e.g. logging every step of an agent workflow), use the batch endpoint

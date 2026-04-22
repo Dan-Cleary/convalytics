@@ -14,6 +14,7 @@ One dashboard for marketing-site page views, in-app product events, user identif
 - **Pricing**: [/pricing.md](https://convalytics.dev/pricing.md)
 - **Agent card**: [/.well-known/agent-card.json](https://convalytics.dev/.well-known/agent-card.json)
 - **API catalog**: [/.well-known/api-catalog](https://convalytics.dev/.well-known/api-catalog)
+- **MCP server** (for AI-assistant queries): [/mcp](https://convalytics.dev/mcp) · [server card](https://convalytics.dev/.well-known/mcp/server-card.json)
 
 ## Install (for humans)
 
@@ -40,6 +41,17 @@ Content-Type: application/json
 ```
 
 Use `name: "page_view"` for page views (free). Any other name is a quota-counted custom product event.
+
+## Query (for AI assistants)
+
+After events flow, AI assistants (Claude Desktop, Claude Code, Cursor, Windsurf) can query analytics conversationally via the Convalytics MCP server:
+
+```
+claude mcp add --transport http convalytics https://api.convalytics.dev/mcp \
+  --header "Authorization: Bearer $CONVALYTICS_TOKEN"
+```
+
+Generate a token at [convalytics.dev/tokens](https://convalytics.dev/tokens). Nine read-only tools including `weekly_digest` (one-call project summary) and `user_activity` (one-call per-user snapshot). Requires the Solo plan or higher.
 
 ## Pricing
 
