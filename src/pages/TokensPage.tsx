@@ -1,28 +1,11 @@
 import { useMutation, useQuery } from "convex/react";
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
 
 export function TokensPage() {
   const usage = useQuery(api.usage.getMyUsage, {});
-  const projects = useQuery(api.projects.list);
-
-  const claimedProjects = useMemo(
-    () => (projects ?? []).filter((p) => p.teamId),
-    [projects],
-  );
-
-  const [selectedProjectId, setSelectedProjectId] = useState<string | null>(
-    null,
-  );
-  const activeProjectId = (selectedProjectId ??
-    claimedProjects[0]?._id ??
-    null) as Id<"projects"> | null;
-
-  const tokens = useQuery(
-    api.apiTokens.list,
-    activeProjectId ? { projectId: activeProjectId } : "skip",
-  );
+  const tokens = useQuery(api.apiTokens.list, {});
 
   const createToken = useMutation(api.apiTokens.create);
   const revokeToken = useMutation(api.apiTokens.revoke);
@@ -34,10 +17,8 @@ export function TokensPage() {
   const [error, setError] = useState<string | null>(null);
 
   const isFreePlan = usage?.plan === "free";
-  const activeProject = claimedProjects.find((p) => p._id === activeProjectId);
 
   async function handleCreate() {
-    if (!activeProjectId) return;
     const name = newName.trim();
     if (!name) {
       setError("Name is required");
@@ -46,10 +27,7 @@ export function TokensPage() {
     setCreating(true);
     setError(null);
     try {
-      const { token } = await createToken({
-        projectId: activeProjectId,
-        name,
-      });
+      const { token } = await createToken({ name });
       setJustCreatedToken(token);
       setNewName("");
     } catch (e) {
@@ -73,30 +51,8 @@ export function TokensPage() {
     });
   }
 
-  if (usage === undefined || projects === undefined) {
+  if (usage === undefined) {
     return <div className="p-8 text-sm text-gray-400">Loading...</div>;
-  }
-
-  if (claimedProjects.length === 0) {
-    return (
-      <div className="p-8 max-w-2xl">
-        <h1
-          className="text-xs font-bold uppercase tracking-widest mb-6"
-          style={{ color: "#1a1814" }}
-        >
-          API Tokens
-        </h1>
-        <div
-          className="p-5"
-          style={{ border: "2px solid #1a1814", background: "#fff" }}
-        >
-          <p className="text-xs" style={{ color: "#6b6456" }}>
-            No claimed projects yet. Claim a project first, then come back here
-            to generate tokens.
-          </p>
-        </div>
-      </div>
-    );
   }
 
   return (
@@ -108,8 +64,9 @@ export function TokensPage() {
         API Tokens
       </h1>
       <p className="text-xs mb-6" style={{ color: "#6b6456" }}>
-        Tokens scoped to one project with read-only access. Used by the
-        Convalytics MCP server to let AI assistants query your analytics.
+        Read-only credentials scoped to this team. Used by the Convalytics MCP
+        server so AI assistants can query analytics across any project on the
+        team. Each tool call picks the project explicitly.
       </p>
 
       {isFreePlan && (
@@ -133,33 +90,6 @@ export function TokensPage() {
               Upgrade →
             </a>
           </p>
-        </div>
-      )}
-
-      {claimedProjects.length > 1 && (
-        <div className="mb-6">
-          <label
-            className="text-[10px] font-bold uppercase tracking-wider mb-1 block"
-            style={{ color: "#1a1814" }}
-          >
-            Project
-          </label>
-          <select
-            value={activeProjectId ?? ""}
-            onChange={(e) => setSelectedProjectId(e.target.value)}
-            className="w-full px-3 py-2 text-sm"
-            style={{
-              border: "2px solid #1a1814",
-              background: "#fff",
-              color: "#1a1814",
-            }}
-          >
-            {claimedProjects.map((p) => (
-              <option key={p._id} value={p._id}>
-                {p.name}
-              </option>
-            ))}
-          </select>
         </div>
       )}
 
@@ -281,17 +211,12 @@ export function TokensPage() {
         className="p-5"
         style={{ border: "2px solid #1a1814", background: "#fff" }}
       >
-        <div className="flex items-baseline justify-between mb-3">
-          <span
-            className="text-xs font-bold uppercase tracking-wider"
-            style={{ color: "#1a1814" }}
-          >
-            Existing tokens
-          </span>
-          <span className="text-[10px]" style={{ color: "#9b9488" }}>
-            {activeProject?.name ?? ""}
-          </span>
-        </div>
+        <p
+          className="text-xs font-bold uppercase tracking-wider mb-3"
+          style={{ color: "#1a1814" }}
+        >
+          Existing tokens
+        </p>
         {tokens === undefined ? (
           <p className="text-xs" style={{ color: "#9b9488" }}>
             Loading…

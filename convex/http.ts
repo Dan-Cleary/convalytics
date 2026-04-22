@@ -1484,10 +1484,15 @@ const MCP_TOOLS = [
   {
     name: "top_pages",
     description:
-      "Return the top pages ranked by page views in a time window. Default window is the last 7 days. Returns path, views, uniqueVisitors, and percentage of total views for each page.",
+      "Return the top pages for a specific project, ranked by views in a time window. Default window is the last 7 days. Use list_projects first if you don't know the project name. Returns path, views, uniqueVisitors, and percentage of total views for each page.",
     inputSchema: {
       type: "object",
       properties: {
+        project: {
+          type: "string",
+          description:
+            "Project name (case-insensitive, e.g. 'slopbench') or project id from list_projects.",
+        },
         since: {
           type: "number",
           description:
@@ -1502,16 +1507,22 @@ const MCP_TOOLS = [
           description: "Maximum number of pages to return. Default 20, max 50.",
         },
       },
+      required: ["project"],
       additionalProperties: false,
     },
   },
   {
     name: "top_referrers",
     description:
-      "Return the top referring hosts ranked by visit count in a time window. Includes '(direct)' for visits with no referrer. Default window is the last 7 days.",
+      "Return the top referring hosts for a specific project, ranked by visit count in a time window. Includes '(direct)' for visits with no referrer. Default window is the last 7 days.",
     inputSchema: {
       type: "object",
       properties: {
+        project: {
+          type: "string",
+          description:
+            "Project name (case-insensitive) or project id from list_projects.",
+        },
         since: { type: "number" },
         until: { type: "number" },
         limit: {
@@ -1519,16 +1530,22 @@ const MCP_TOOLS = [
           description: "Maximum number of referrers to return. Default 10, max 50.",
         },
       },
+      required: ["project"],
       additionalProperties: false,
     },
   },
   {
     name: "events_count",
     description:
-      "Count custom events in a time window, optionally filtered to one event name. Returns count, unique visitors, and a `truncated` flag if the scan hit the maximum scan size.",
+      "Count custom events for a specific project in a time window, optionally filtered to one event name. Returns count, unique visitors, and a `truncated` flag if the scan hit the maximum scan size.",
     inputSchema: {
       type: "object",
       properties: {
+        project: {
+          type: "string",
+          description:
+            "Project name (case-insensitive) or project id from list_projects.",
+        },
         name: {
           type: "string",
           description:
@@ -1537,16 +1554,22 @@ const MCP_TOOLS = [
         since: { type: "number" },
         until: { type: "number" },
       },
+      required: ["project"],
       additionalProperties: false,
     },
   },
   {
     name: "recent_events",
     description:
-      "Return the most recent custom events, optionally filtered to one event name. PII (userEmail, userName, props) is redacted by default; pass redact: false to include them.",
+      "Return the most recent custom events for a specific project, optionally filtered to one event name. PII (userEmail, userName, props) is redacted by default; pass redact: false to include them.",
     inputSchema: {
       type: "object",
       properties: {
+        project: {
+          type: "string",
+          description:
+            "Project name (case-insensitive) or project id from list_projects.",
+        },
         name: { type: "string" },
         limit: {
           type: "number",
@@ -1558,6 +1581,7 @@ const MCP_TOOLS = [
             "If true (default), userEmail/userName are null and props is {}. Set to false to include them.",
         },
       },
+      required: ["project"],
       additionalProperties: false,
     },
   },
@@ -1810,37 +1834,59 @@ async function dispatchTool(
       return ctx.runQuery(internal.mcp.listProjects, { teamId: token.teamId });
     case "get_usage":
       return ctx.runQuery(internal.mcp.getUsage, { teamId: token.teamId });
-    case "top_pages":
+    case "top_pages": {
+      const { writeKey } = await resolveProject(ctx, token.teamId, args);
       return ctx.runQuery(internal.mcp.topPages, {
-        writeKey: token.writeKey,
+        writeKey,
         since: numOrUndefined(args.since),
         until: numOrUndefined(args.until),
         limit: numOrUndefined(args.limit),
       });
-    case "top_referrers":
+    }
+    case "top_referrers": {
+      const { writeKey } = await resolveProject(ctx, token.teamId, args);
       return ctx.runQuery(internal.mcp.topReferrers, {
-        writeKey: token.writeKey,
+        writeKey,
         since: numOrUndefined(args.since),
         until: numOrUndefined(args.until),
         limit: numOrUndefined(args.limit),
       });
-    case "events_count":
+    }
+    case "events_count": {
+      const { writeKey } = await resolveProject(ctx, token.teamId, args);
       return ctx.runQuery(internal.mcp.eventsCount, {
-        writeKey: token.writeKey,
+        writeKey,
         name: strOrUndefined(args.name),
         since: numOrUndefined(args.since),
         until: numOrUndefined(args.until),
       });
-    case "recent_events":
+    }
+    case "recent_events": {
+      const { writeKey } = await resolveProject(ctx, token.teamId, args);
       return ctx.runQuery(internal.mcp.recentEvents, {
-        writeKey: token.writeKey,
+        writeKey,
         name: strOrUndefined(args.name),
         limit: numOrUndefined(args.limit),
         redact: typeof args.redact === "boolean" ? args.redact : undefined,
       });
+    }
     default:
       throw new Error(`Unknown tool: ${name}`);
   }
+}
+
+async function resolveProject(
+  ctx: ActionCtx,
+  teamId: ValidatedApiToken["teamId"],
+  args: Record<string, unknown>,
+): Promise<{ writeKey: string }> {
+  const project = strOrUndefined(args.project);
+  if (!project) {
+    throw new Error(
+      "Missing required parameter: project. Call list_projects to see available projects, then pass the name or id.",
+    );
+  }
+  return ctx.runQuery(internal.mcp.resolveProject, { teamId, project });
 }
 
 function numOrUndefined(v: unknown): number | undefined {

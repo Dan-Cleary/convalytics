@@ -181,7 +181,10 @@ export default defineSchema({
   // -------------------------------------------------------------------------
   apiTokens: defineTable({
     tokenHash: v.string(),
-    projectId: v.id("projects"),
+    // Kept for backward compat with tokens created during the project-scoped
+    // MCP v1. New tokens are team-scoped and omit this field. Nothing reads
+    // it anymore — safe to drop in a future migration.
+    projectId: v.optional(v.id("projects")),
     teamId: v.id("teams"),
     createdBy: v.id("users"),
     name: v.string(),
@@ -191,6 +194,6 @@ export default defineSchema({
     revokedAt: v.optional(v.number()),
   })
     .index("by_tokenHash", ["tokenHash"])
-    .index("by_projectId", ["projectId"])
+    .index("by_teamId", ["teamId"])
     .index("by_createdBy", ["createdBy"]),
 });

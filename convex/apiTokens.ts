@@ -1,5 +1,5 @@
 /**
- * API tokens — user-generated credentials scoped to one project.
+ * API tokens — user-generated credentials scoped to one team.
  *
  * First consumer is the Convalytics MCP server (gated to Solo+ plans at the
  * /mcp endpoint). The table and flow are deliberately generic so a future
@@ -8,6 +8,11 @@
  * Security model: plain token is shown ONCE at creation; only sha-256(token)
  * is stored. Lookups hash the inbound bearer and match against tokenHash —
  * same reveal-once pattern used for team invites.
+ *
+ * Scope: a token grants read access to all projects on its team. MCP tools
+ * take an explicit `project` argument so the agent chooses which project to
+ * query per call. If you need per-project isolation, split your projects
+ * onto separate teams.
  */
 
 import { v } from "convex/values";
@@ -24,15 +29,9 @@ import type { Doc, Id } from "./_generated/dataModel";
 const MAX_NAME_LEN = 100;
 const LAST_USED_DEBOUNCE_MS = 60_000;
 
-/**
- * Shape returned by `validate` — exported so /mcp and other HTTP handlers can
- * strongly type the validated context without re-declaring it locally.
- */
 export type ValidatedApiToken = {
   tokenId: Id<"apiTokens">;
-  projectId: Id<"projects">;
   teamId: Id<"teams">;
-  writeKey: string;
   scope: Doc<"apiTokens">["scope"];
   plan: Doc<"teams">["plan"];
 };
@@ -55,13 +54,11 @@ function generateToken(): string {
 
 /**
  * Validate an inbound token (hashed) and return the denormalized context the
- * HTTP handler needs to decide whether to serve the request: project scope,
- * team, and team plan for the plan gate.
+ * HTTP handler needs: team scope + plan for the Solo+ gate.
  *
- * Returns null on invalid / revoked / missing project / unclaimed project.
- * The caller is responsible for applying the plan gate after inspecting
- * `.plan`. Does NOT update lastUsedAt — call touchLastUsed after a
- * successful request.
+ * Returns null on invalid / revoked / missing team. The caller applies the
+ * plan gate after inspecting `.plan`. Does NOT update lastUsedAt — call
+ * touchLastUsed after a successful request.
  */
 export const validate = internalQuery({
   args: { tokenHash: v.string() },
@@ -73,17 +70,12 @@ export const validate = internalQuery({
     if (!token) return null;
     if (token.revokedAt) return null;
 
-    const project = await ctx.db.get("projects", token.projectId);
-    if (!project) return null;
-
     const team = await ctx.db.get("teams", token.teamId);
     if (!team) return null;
 
     return {
       tokenId: token._id,
-      projectId: token.projectId,
       teamId: token.teamId,
-      writeKey: project.writeKey,
       scope: token.scope,
       plan: team.plan,
     };
@@ -92,7 +84,7 @@ export const validate = internalQuery({
 
 /**
  * Fire-and-forget lastUsedAt update. Debounced: only writes if the existing
- * value is older than LAST_USED_DEBOUNCE_MS. At 120 req/min/token we don't
+ * value is older than LAST_USED_DEBOUNCE_MS. At 120 req/min/team we don't
  * want to patch the same row twice a second — OCC contention against the
  * dashboard `list` reactive query and wasted writes.
  */
@@ -116,25 +108,25 @@ export const touchLastUsed = internalMutation({
 // ---------------------------------------------------------------------------
 
 /**
- * Create a new API token scoped to one project. Caller must be a member of
- * the project's team. Returns the plain token ONCE; subsequent reads only
- * see the hash prefix. v1 scope is always "read" (MCP read tools).
+ * Create a new API token scoped to the caller's team. Returns the plain token
+ * ONCE; subsequent reads only see metadata. v1 scope is always "read"
+ * (MCP read tools).
  */
 export const create = mutation({
   args: {
-    projectId: v.id("projects"),
     name: v.string(),
   },
   handler: async (ctx, args) => {
     const userId = await requireAuth(ctx);
 
-    const project = await ctx.db.get("projects", args.projectId);
-    if (!project) throw new Error("Project not found");
-    if (!project.teamId)
-      throw new Error("Project is unclaimed; claim it before creating tokens");
-
-    const membership = await getTeamMembership(ctx, project.teamId, userId);
-    if (!membership) throw new Error("Not a member of this project's team");
+    const memberships = await ctx.db
+      .query("teamMembers")
+      .withIndex("by_userId", (q) => q.eq("userId", userId))
+      .collect();
+    if (memberships.length === 0) {
+      throw new Error("You are not a member of any team");
+    }
+    const teamId = memberships[0].teamId;
 
     const name = args.name.trim();
     if (!name) throw new Error("Token name is required");
@@ -146,8 +138,7 @@ export const create = mutation({
 
     await ctx.db.insert("apiTokens", {
       tokenHash,
-      projectId: args.projectId,
-      teamId: project.teamId,
+      teamId,
       createdBy: userId,
       name,
       scope: "read",
@@ -159,25 +150,25 @@ export const create = mutation({
 });
 
 /**
- * List API tokens for a project the caller is a member of. Includes revoked
- * tokens for audit; the UI may filter them. Never includes the plain token
- * or the hash — those are stored internally only.
+ * List API tokens for the caller's team. Includes revoked tokens for audit;
+ * the UI may filter them. Never includes the plain token or the hash.
  */
 export const list = query({
-  args: { projectId: v.id("projects") },
-  handler: async (ctx, args) => {
+  args: {},
+  handler: async (ctx) => {
     const userId = await getUserId(ctx);
     if (!userId) return [];
 
-    const project = await ctx.db.get("projects", args.projectId);
-    if (!project || !project.teamId) return [];
-
-    const membership = await getTeamMembership(ctx, project.teamId, userId);
-    if (!membership) return [];
+    const memberships = await ctx.db
+      .query("teamMembers")
+      .withIndex("by_userId", (q) => q.eq("userId", userId))
+      .collect();
+    if (memberships.length === 0) return [];
+    const teamId = memberships[0].teamId;
 
     const tokens = await ctx.db
       .query("apiTokens")
-      .withIndex("by_projectId", (q) => q.eq("projectId", args.projectId))
+      .withIndex("by_teamId", (q) => q.eq("teamId", teamId))
       .collect();
 
     return tokens.map((t) => ({
@@ -201,11 +192,8 @@ export const revoke = mutation({
     const token = await ctx.db.get("apiTokens", args.tokenId);
     if (!token) throw new Error("Token not found");
 
-    const project = await ctx.db.get("projects", token.projectId);
-    if (!project || !project.teamId) throw new Error("Project not found");
-
-    const membership = await getTeamMembership(ctx, project.teamId, userId);
-    if (!membership) throw new Error("Not a member of this project's team");
+    const membership = await getTeamMembership(ctx, token.teamId, userId);
+    if (!membership) throw new Error("Not a member of this token's team");
 
     if (!token.revokedAt) {
       await ctx.db.patch("apiTokens", args.tokenId, { revokedAt: Date.now() });

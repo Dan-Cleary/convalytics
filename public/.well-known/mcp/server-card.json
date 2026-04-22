@@ -22,19 +22,19 @@
     },
     {
       "name": "top_pages",
-      "description": "Return the top pages ranked by views in a time window, with unique visitors and share of total."
+      "description": "Return the top pages for a specific project, ranked by views in a time window. Takes `project` (name or id)."
     },
     {
       "name": "top_referrers",
-      "description": "Return the top referring hosts ranked by visits, includes (direct)."
+      "description": "Return the top referring hosts for a specific project, ranked by visits, includes (direct). Takes `project`."
     },
     {
       "name": "events_count",
-      "description": "Count custom events in a time window, optionally filtered to one event name."
+      "description": "Count custom events for a specific project in a time window, optionally filtered to one event name. Takes `project`."
     },
     {
       "name": "recent_events",
-      "description": "Return the most recent custom events; PII (userEmail, userName, props) is redacted by default."
+      "description": "Return the most recent custom events for a specific project; PII is redacted by default. Takes `project`."
     }
   ],
   "contact": {

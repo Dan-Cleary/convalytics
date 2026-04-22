@@ -83,38 +83,59 @@ export function McpContent() {
       </section>
 
       <section>
+        <h2>Token scope</h2>
+        <p>
+          Each API token is scoped to <strong>one team</strong>, not one
+          project. A token grants read access to every project on the team
+          it was created for. The four project-scoped tools below all take
+          a <code>project</code> argument (name or id) so the agent picks
+          which project to query on each call. Use <code>list_projects</code>{" "}
+          first if you're not sure what's available.
+        </p>
+      </section>
+
+      <section>
         <h2>Tools exposed</h2>
         <ul>
           <li>
             <strong>list_projects</strong>: all projects on the token's team
-            (name, writeKey, site URL, deployment slug).
+            (id, name, writeKey, site URL, deployment slug). Team-scoped, no
+            arguments.
           </li>
           <li>
             <strong>get_usage</strong>: current month's custom-event count,
             monthly quota, retention days, and plan name for the team.
+            Team-scoped, no arguments.
           </li>
           <li>
-            <strong>top_pages</strong>: pages ranked by views in a time
-            window, with unique visitors and share of total. Default window:
-            last 7 days. Max 50 results.
+            <strong>top_pages(project, since?, until?, limit?)</strong>:
+            pages ranked by views in a time window, with unique visitors and
+            share of total. Default window: last 7 days. Max 50 results.
           </li>
           <li>
-            <strong>top_referrers</strong>: referring hosts ranked by visits,
-            includes <code>(direct)</code>. Default window: last 7 days.
+            <strong>top_referrers(project, since?, until?, limit?)</strong>:
+            referring hosts ranked by visits, includes <code>(direct)</code>.
+            Default window: last 7 days.
           </li>
           <li>
-            <strong>events_count</strong>: count of custom events,
-            optionally filtered by event name. Returns count, unique
-            visitors, and a <code>truncated</code> flag if the scan hit its
-            cap.
+            <strong>events_count(project, name?, since?, until?)</strong>:
+            count of custom events, optionally filtered by event name.
+            Returns count, unique visitors, and a <code>truncated</code>{" "}
+            flag if the scan hit its cap.
           </li>
           <li>
-            <strong>recent_events</strong>: most recent events, optionally
-            filtered by name. <code>userEmail</code>, <code>userName</code>,
-            and <code>props</code> are redacted by default; pass{" "}
+            <strong>recent_events(project, name?, limit?, redact?)</strong>:
+            most recent events, optionally filtered by name.{" "}
+            <code>userEmail</code>, <code>userName</code>, and{" "}
+            <code>props</code> are redacted by default; pass{" "}
             <code>redact: false</code> to include them.
           </li>
         </ul>
+        <p>
+          <code>project</code> accepts either the project's case-insensitive
+          name (e.g. <code>"slopbench"</code>) or its id from{" "}
+          <code>list_projects</code>.
+        </p>
       </section>
 
       <section>

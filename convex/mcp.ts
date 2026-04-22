@@ -13,6 +13,57 @@ import { v } from "convex/values";
 import { internalQuery } from "./_generated/server";
 import { computeTeamUsage } from "./usage";
 
+/**
+ * Resolve an agent's `project` argument to a concrete writeKey bounded to
+ * the caller's team. Accepts either the project's `_id` or its name
+ * (case-insensitive). Used by http.ts dispatchTool before calling any
+ * project-scoped MCP tool so the agent sees friendly error messages
+ * (available project names) without leaking cross-team data.
+ */
+export const resolveProject = internalQuery({
+  args: { teamId: v.id("teams"), project: v.string() },
+  handler: async (ctx, args) => {
+    const teamProjects = await ctx.db
+      .query("projects")
+      .withIndex("by_teamId", (q) => q.eq("teamId", args.teamId))
+      .collect();
+
+    const asId = ctx.db.normalizeId("projects", args.project);
+    if (asId) {
+      const match = teamProjects.find((p) => p._id === asId);
+      if (match) {
+        return {
+          projectId: match._id,
+          writeKey: match.writeKey,
+          name: match.name,
+        };
+      }
+    }
+
+    const needle = args.project.toLowerCase().trim();
+    const byName = teamProjects.filter(
+      (p) => p.name.toLowerCase() === needle,
+    );
+    if (byName.length === 1) {
+      return {
+        projectId: byName[0]._id,
+        writeKey: byName[0].writeKey,
+        name: byName[0].name,
+      };
+    }
+
+    const available = teamProjects.map((p) => p.name).join(", ") || "(none)";
+    if (byName.length > 1) {
+      throw new Error(
+        `Multiple projects named "${args.project}" on this team. Pass the project id instead. Available: ${available}.`,
+      );
+    }
+    throw new Error(
+      `No project matching "${args.project}" on this team. Available projects: ${available}. Call list_projects for ids.`,
+    );
+  },
+});
+
 const DEFAULT_SINCE_MS = 7 * 24 * 60 * 60 * 1000;
 const DEFAULT_LIMIT = 20;
 const MAX_LIMIT = 100;
