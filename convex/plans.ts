@@ -17,22 +17,26 @@ export const PLANS: Record<
     eventsPerMonth: number;
     retentionDays: number;
     displayName: string;
+    priceMonthly: string;
   }
 > = {
   free: {
     eventsPerMonth: 50_000,
     retentionDays: 90,
     displayName: "Free",
+    priceMonthly: "$0",
   },
   solo: {
     eventsPerMonth: 500_000,
     retentionDays: 365,
     displayName: "Solo",
+    priceMonthly: "$29/mo",
   },
   pro: {
     eventsPerMonth: 5_000_000,
     retentionDays: MAX_RETENTION_DAYS,
     displayName: "Pro",
+    priceMonthly: "$99/mo",
   },
 };
 

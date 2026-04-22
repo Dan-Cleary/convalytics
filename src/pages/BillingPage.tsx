@@ -4,18 +4,12 @@ import { useState } from "react";
 import { formatEventLimit, formatRetention } from "../lib/timeRange";
 import { PLANS as PLAN_DEFS, type PlanId } from "../../convex/plans";
 
-const PLAN_PRICES: Record<PlanId, string> = {
-  free: "$0",
-  solo: "$29/mo",
-  pro: "$99/mo",
-};
-
 const PLAN_ORDER: PlanId[] = ["free", "solo", "pro"];
 
 const PLANS = PLAN_ORDER.map((id) => ({
   id,
   name: PLAN_DEFS[id].displayName,
-  price: PLAN_PRICES[id],
+  price: PLAN_DEFS[id].priceMonthly,
   events: `${formatEventLimit(PLAN_DEFS[id].eventsPerMonth)} events/mo`,
   retention: `${formatRetention(PLAN_DEFS[id].retentionDays)} retention`,
 }));

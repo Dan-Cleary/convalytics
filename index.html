@@ -74,8 +74,20 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="anonymous" />
     <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="/src/index.css" />
+    <style>
+      /* Prerendered marketing content is for crawlers and no-JS clients.
+         When JS runs, we tag the root with .js-ready and CSS hides it so
+         React can render the interactive UI without a duplicate flash. */
+      .js-ready #seo-content {
+        display: none;
+      }
+    </style>
   </head>
   <body>
+    <script>
+      document.documentElement.classList.add("js-ready");
+    </script>
+    <div id="seo-content"></div>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
