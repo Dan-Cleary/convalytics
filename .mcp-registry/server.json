@@ -1,0 +1,25 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-07-09/server.schema.json",
+  "name": "io.github.Dan-Cleary/convalytics",
+  "description": "Read-only analytics tools for AI assistants. Query top pages, top referrers, custom event counts, recent events, usage, and projects for your Convalytics account via MCP. Requires a Convalytics API token and an active Solo or Pro plan.",
+  "version": "1.0.0",
+  "repository": {
+    "url": "https://github.com/Dan-Cleary/convalytics",
+    "source": "github"
+  },
+  "websiteUrl": "https://convalytics.dev/mcp",
+  "remotes": [
+    {
+      "type": "streamable-http",
+      "url": "https://api.convalytics.dev/mcp",
+      "headers": [
+        {
+          "name": "Authorization",
+          "description": "Convalytics API token. Create at https://convalytics.dev/tokens. Paste as 'Bearer cnv_...'.",
+          "isRequired": true,
+          "isSecret": true
+        }
+      ]
+    }
+  ]
+}
