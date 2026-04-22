@@ -131,11 +131,21 @@ export function McpContent() {
             <code>pageviews_count</code> for those.
           </li>
           <li>
-            <strong>recent_events(project, name?, limit?, redact?)</strong>:
-            most recent events, optionally filtered by name.{" "}
+            <strong>recent_events(project, name?, limit?, redact?, user?)</strong>:
+            most recent events, optionally filtered by name and/or user.{" "}
             <code>userEmail</code>, <code>userName</code>, and{" "}
             <code>props</code> are redacted by default; pass{" "}
             <code>redact: false</code> to include them.
+          </li>
+          <li>
+            <strong>user_activity(project, user, since?, until?)</strong>:
+            composite per-user snapshot — identity block (userEmail,
+            userName, firstSeen, lastSeen), totals for pageviews and
+            events, top pages visited, top event names, and the 20 most
+            recent events with props.{" "}
+            <code>user</code> accepts userEmail (case-insensitive) or
+            visitorId. Use this for "how is dancleary@example.com using
+            my app?" questions — one call, full picture.
           </li>
           <li>
             <strong>weekly_digest(project, days?, compare?)</strong>: one

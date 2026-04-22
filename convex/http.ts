@@ -1484,7 +1484,7 @@ const MCP_TOOLS = [
   {
     name: "top_pages",
     description:
-      "Return the top pages for a specific project, ranked by views in a time window. Default window is the last 7 days. Use list_projects first if you don't know the project name. Returns path, views, uniqueVisitors, and percentage of total views for each page.",
+      "Return the top pages for a specific project, ranked by views in a time window. Default window is the last 7 days. Use list_projects first if you don't know the project name. Returns path, views, uniqueVisitors, and percentage of total views for each page. Pass `user` to see pages a specific visitor hit.",
     inputSchema: {
       type: "object",
       properties: {
@@ -1505,6 +1505,11 @@ const MCP_TOOLS = [
         limit: {
           type: "number",
           description: "Maximum number of pages to return. Default 20, max 50.",
+        },
+        user: {
+          type: "string",
+          description:
+            "Optional. Filter to a single visitor. Accepts userEmail (case-insensitive) or visitorId (exact). For a full per-user snapshot prefer user_activity.",
         },
       },
       required: ["project"],
@@ -1537,7 +1542,7 @@ const MCP_TOOLS = [
   {
     name: "pageviews_count",
     description:
-      "Count page views for a specific project in a time window. Page views are the automatic hits captured by the browser script tag (separate from custom events). Use this for web-traffic questions like 'how many pageviews in the last 24 hours'. Default window is the last 7 days.",
+      "Count page views for a specific project in a time window. Page views are the automatic hits captured by the browser script tag (separate from custom events). Use this for web-traffic questions like 'how many pageviews in the last 24 hours'. Default window is the last 7 days. Pass `user` to scope to one visitor.",
     inputSchema: {
       type: "object",
       properties: {
@@ -1548,6 +1553,11 @@ const MCP_TOOLS = [
         },
         since: { type: "number" },
         until: { type: "number" },
+        user: {
+          type: "string",
+          description:
+            "Optional. Filter to one visitor. Accepts userEmail (case-insensitive) or visitorId (exact).",
+        },
       },
       required: ["project"],
       additionalProperties: false,
@@ -1556,7 +1566,7 @@ const MCP_TOOLS = [
   {
     name: "events_count",
     description:
-      "Count CUSTOM PRODUCT events for a specific project in a time window, optionally filtered to one event name. Custom events are emitted by explicit analytics.track() calls in app code (signup_completed, payment_succeeded, etc.). This does NOT count page views — use pageviews_count or weekly_digest for those. Returns count, unique visitors, and a `truncated` flag if the scan hit the maximum scan size.",
+      "Count CUSTOM PRODUCT events for a specific project in a time window, optionally filtered to one event name and/or one user. Custom events are emitted by explicit analytics.track() calls in app code (signup_completed, payment_succeeded, etc.). This does NOT count page views — use pageviews_count or weekly_digest for those. Returns count, unique visitors, and a `truncated` flag if the scan hit the maximum scan size.",
     inputSchema: {
       type: "object",
       properties: {
@@ -1572,6 +1582,11 @@ const MCP_TOOLS = [
         },
         since: { type: "number" },
         until: { type: "number" },
+        user: {
+          type: "string",
+          description:
+            "Optional. Filter to a single user. Accepts userEmail (case-insensitive) or visitorId (exact). Combine with `name` to count a specific event by a specific user.",
+        },
       },
       required: ["project"],
       additionalProperties: false,
@@ -1580,7 +1595,7 @@ const MCP_TOOLS = [
   {
     name: "recent_events",
     description:
-      "Return the most recent custom events for a specific project, optionally filtered to one event name. PII (userEmail, userName, props) is redacted by default; pass redact: false to include them.",
+      "Return the most recent custom events for a specific project, optionally filtered to one event name and/or one user. PII (userEmail, userName, props) is redacted by default; pass redact: false to include them.",
     inputSchema: {
       type: "object",
       properties: {
@@ -1599,8 +1614,37 @@ const MCP_TOOLS = [
           description:
             "If true (default), userEmail/userName are null and props is {}. Set to false to include them.",
         },
+        user: {
+          type: "string",
+          description:
+            "Optional. Filter to one user. Accepts userEmail (case-insensitive) or visitorId (exact).",
+        },
       },
       required: ["project"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "user_activity",
+    description:
+      "Composite snapshot of a specific user's activity on a project. Returns an identity block (visitorId, userEmail, userName, firstSeen, lastSeen), total pageviews, total custom events, session count, top pages this user visited, their most-fired event names, and their 20 most recent events with props. Use this for 'how is dancleary54@gmail.com using my app?' style questions — one call, full picture. For ad-hoc drill-down (just a count, just recent events) pass `user` to the individual tools instead. Default window is the last 7 days.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        project: {
+          type: "string",
+          description:
+            "Project name (case-insensitive) or project id from list_projects.",
+        },
+        user: {
+          type: "string",
+          description:
+            "User identifier. Accepts userEmail (case-insensitive, e.g. 'dan@example.com') or visitorId (the exact string passed as userId on the original track() call).",
+        },
+        since: { type: "number" },
+        until: { type: "number" },
+      },
+      required: ["project", "user"],
       additionalProperties: false,
     },
   },
@@ -1887,6 +1931,7 @@ async function dispatchTool(
         since: numOrUndefined(args.since),
         until: numOrUndefined(args.until),
         limit: numOrUndefined(args.limit),
+        user: strOrUndefined(args.user),
       });
     }
     case "top_referrers": {
@@ -1905,6 +1950,7 @@ async function dispatchTool(
         name: strOrUndefined(args.name),
         since: numOrUndefined(args.since),
         until: numOrUndefined(args.until),
+        user: strOrUndefined(args.user),
       });
     }
     case "pageviews_count": {
@@ -1913,6 +1959,7 @@ async function dispatchTool(
         writeKey,
         since: numOrUndefined(args.since),
         until: numOrUndefined(args.until),
+        user: strOrUndefined(args.user),
       });
     }
     case "recent_events": {
@@ -1922,6 +1969,22 @@ async function dispatchTool(
         name: strOrUndefined(args.name),
         limit: numOrUndefined(args.limit),
         redact: typeof args.redact === "boolean" ? args.redact : undefined,
+        user: strOrUndefined(args.user),
+      });
+    }
+    case "user_activity": {
+      const { writeKey } = await resolveProject(ctx, token.teamId, args);
+      const user = strOrUndefined(args.user);
+      if (!user) {
+        throw new Error(
+          "Missing required parameter: user. Pass an email (case-insensitive) or a visitorId.",
+        );
+      }
+      return ctx.runQuery(internal.mcp.userActivity, {
+        writeKey,
+        user,
+        since: numOrUndefined(args.since),
+        until: numOrUndefined(args.until),
       });
     }
     case "weekly_digest": {

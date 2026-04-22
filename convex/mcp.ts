@@ -88,6 +88,27 @@ function resolveRange(args: {
   return { since, until };
 }
 
+/**
+ * Match a stored row against the `user` argument an agent passed. Emails are
+ * case-insensitive (users don't think in case); visitorId is exact because
+ * it's an opaque identifier. `visitorId` is what the ingest handler stores
+ * the track()-time `userId` argument as — the rename happens at
+ * http.ts:284.
+ */
+function matchesUser(
+  row: { visitorId?: string; userEmail?: string },
+  user: string,
+): boolean {
+  if (!user) return true;
+  if (row.visitorId && row.visitorId === user) return true;
+  if (
+    row.userEmail &&
+    row.userEmail.toLowerCase() === user.toLowerCase()
+  )
+    return true;
+  return false;
+}
+
 /** list_projects — all projects on the token's team. */
 export const listProjects = internalQuery({
   args: { teamId: v.id("teams") },
@@ -120,6 +141,7 @@ export const topPages = internalQuery({
     since: v.optional(v.number()),
     until: v.optional(v.number()),
     limit: v.optional(v.number()),
+    user: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const { since, until } = resolveRange(args);
@@ -133,7 +155,9 @@ export const topPages = internalQuery({
       .order("desc")
       .take(MAX_SCAN);
 
-    const bounded = rows.filter((r) => r.timestamp <= until);
+    const bounded = rows.filter(
+      (r) => r.timestamp <= until && (!args.user || matchesUser(r, args.user)),
+    );
 
     const pageMap = new Map<
       string,
@@ -211,6 +235,7 @@ export const pageviewsCount = internalQuery({
     writeKey: v.string(),
     since: v.optional(v.number()),
     until: v.optional(v.number()),
+    user: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const { since, until } = resolveRange(args);
@@ -223,12 +248,15 @@ export const pageviewsCount = internalQuery({
       .order("desc")
       .take(MAX_SCAN);
 
-    const bounded = rows.filter((r) => r.timestamp <= until);
+    const bounded = rows.filter(
+      (r) => r.timestamp <= until && (!args.user || matchesUser(r, args.user)),
+    );
     const uniqueVisitors = new Set(bounded.map((r) => r.visitorId)).size;
 
     return {
       since,
       until,
+      user: args.user ?? null,
       pageviews: bounded.length,
       uniqueVisitors,
       truncated: rows.length >= MAX_SCAN,
@@ -236,13 +264,14 @@ export const pageviewsCount = internalQuery({
   },
 });
 
-/** events_count — custom event count, optionally filtered by event name. */
+/** events_count — custom event count, optionally filtered by event name and/or user. */
 export const eventsCount = internalQuery({
   args: {
     writeKey: v.string(),
     name: v.optional(v.string()),
     since: v.optional(v.number()),
     until: v.optional(v.number()),
+    user: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const { since, until } = resolveRange(args);
@@ -255,7 +284,9 @@ export const eventsCount = internalQuery({
       .order("desc")
       .take(MAX_SCAN);
 
-    const bounded = rows.filter((r) => r.timestamp <= until);
+    const bounded = rows.filter(
+      (r) => r.timestamp <= until && (!args.user || matchesUser(r, args.user)),
+    );
     const filtered = args.name
       ? bounded.filter((r) => r.name === args.name)
       : bounded;
@@ -264,6 +295,7 @@ export const eventsCount = internalQuery({
 
     return {
       name: args.name ?? null,
+      user: args.user ?? null,
       since,
       until,
       count: filtered.length,
@@ -461,21 +493,22 @@ async function windowStats(
   };
 }
 
-/** recent_events — last N events, optionally filtered by name, with optional prop redaction for PII. */
+/** recent_events — last N events, optionally filtered by name/user, with optional prop redaction for PII. */
 export const recentEvents = internalQuery({
   args: {
     writeKey: v.string(),
     name: v.optional(v.string()),
     limit: v.optional(v.number()),
     redact: v.optional(v.boolean()),
+    user: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const cap = clampLimit(args.limit, 20, 100);
     const redact = args.redact ?? true;
 
-    // Filtering by name post-scan — index doesn't include name. For MVP this
-    // is fine; optimize with a name index if agents use this heavily.
-    const scanSize = args.name ? MAX_SCAN : cap;
+    // Filtering by name/user is post-scan — index doesn't cover them. For
+    // MVP this is fine; add indexes if access pattern warrants.
+    const scanSize = args.name || args.user ? MAX_SCAN : cap;
     const rows = await ctx.db
       .query("events")
       .withIndex("by_writeKey_and_timestamp", (q) =>
@@ -484,9 +517,13 @@ export const recentEvents = internalQuery({
       .order("desc")
       .take(scanSize);
 
-    const filtered = (
-      args.name ? rows.filter((r) => r.name === args.name) : rows
-    ).slice(0, cap);
+    const filtered = rows
+      .filter(
+        (r) =>
+          (!args.name || r.name === args.name) &&
+          (!args.user || matchesUser(r, args.user)),
+      )
+      .slice(0, cap);
 
     return filtered.map((r) => ({
       id: r._id,
@@ -499,5 +536,140 @@ export const recentEvents = internalQuery({
       userName: redact ? null : (r.userName ?? null),
       props: redact ? {} : r.props,
     }));
+  },
+});
+
+/**
+ * user_activity — composite "how is this user using my app?" snapshot.
+ *
+ * Matches `user` against either the stored visitorId (exact; this is what
+ * the ingest handler stores the track()-time `userId` argument as) or the
+ * userEmail (case-insensitive). Returns an identity block, aggregate
+ * counts, top pages this user visited, this user's recent events, and the
+ * event names they fire most.
+ *
+ * Post-scan filter on MAX_SCAN events + pageviews; if agents see
+ * `truncated: true`, narrow the `since`/`until` window. Swap to a proper
+ * index once we see a real project regularly hit the cap.
+ */
+export const userActivity = internalQuery({
+  args: {
+    writeKey: v.string(),
+    user: v.string(),
+    since: v.optional(v.number()),
+    until: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const { since, until } = resolveRange(args);
+
+    const pageviewRows = await ctx.db
+      .query("pageviews")
+      .withIndex("by_writeKey_and_timestamp", (q) =>
+        q.eq("writeKey", args.writeKey).gte("timestamp", since),
+      )
+      .order("desc")
+      .take(MAX_SCAN);
+
+    const eventRows = await ctx.db
+      .query("events")
+      .withIndex("by_writeKey_and_timestamp", (q) =>
+        q.eq("writeKey", args.writeKey).gte("timestamp", since),
+      )
+      .order("desc")
+      .take(MAX_SCAN);
+
+    const matchedPv = pageviewRows.filter(
+      (r) => r.timestamp <= until && matchesUser(r, args.user),
+    );
+    const matchedEv = eventRows.filter(
+      (r) => r.timestamp <= until && matchesUser(r, args.user),
+    );
+
+    if (matchedPv.length === 0 && matchedEv.length === 0) {
+      return {
+        user: null,
+        window: { since, until },
+        totalPageviews: 0,
+        totalEvents: 0,
+        sessionsCount: 0,
+        topPages: [],
+        topEventNames: [],
+        recentEvents: [],
+        truncated: {
+          pageviews: pageviewRows.length >= MAX_SCAN,
+          events: eventRows.length >= MAX_SCAN,
+        },
+      };
+    }
+
+    // Build the identity block from whichever rows have the richest data.
+    // newest row wins for display fields; oldest/newest timestamps give
+    // firstSeen/lastSeen across both tables.
+    const combined = [
+      ...matchedPv.map((r) => ({
+        visitorId: r.visitorId,
+        userEmail: r.userEmail,
+        userName: r.userName,
+        timestamp: r.timestamp,
+      })),
+      ...matchedEv.map((r) => ({
+        visitorId: r.visitorId,
+        userEmail: r.userEmail,
+        userName: r.userName,
+        timestamp: r.timestamp,
+      })),
+    ].sort((a, b) => b.timestamp - a.timestamp);
+
+    const latest = combined[0];
+    const firstSeen = combined[combined.length - 1].timestamp;
+    const lastSeen = combined[0].timestamp;
+    const sessionsCount = new Set(matchedPv.map((r) => r.sessionId)).size;
+
+    const pageCounts = new Map<string, number>();
+    for (const r of matchedPv) {
+      pageCounts.set(r.path, (pageCounts.get(r.path) ?? 0) + 1);
+    }
+    const topPages = [...pageCounts.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 10)
+      .map(([path, views]) => ({ path, views }));
+
+    const eventNameCounts = new Map<string, number>();
+    for (const r of matchedEv) {
+      eventNameCounts.set(r.name, (eventNameCounts.get(r.name) ?? 0) + 1);
+    }
+    const topEventNames = [...eventNameCounts.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 10)
+      .map(([name, count]) => ({ name, count }));
+
+    const recentEvents = matchedEv.slice(0, 20).map((r) => ({
+      name: r.name,
+      timestamp: r.timestamp,
+      environment: r.environment ?? null,
+      props: r.props,
+    }));
+
+    return {
+      user: {
+        matchedBy: args.user,
+        visitorId: latest.visitorId,
+        userEmail: latest.userEmail ?? null,
+        userName: latest.userName ?? null,
+        firstSeen,
+        lastSeen,
+      },
+      window: { since, until },
+      totalPageviews: matchedPv.length,
+      totalEvents: matchedEv.length,
+      sessionsCount,
+      topPages,
+      topEventNames,
+      recentEvents,
+      truncated: {
+        pageviews: pageviewRows.length >= MAX_SCAN,
+        events: eventRows.length >= MAX_SCAN,
+      },
+    };
   },
 });

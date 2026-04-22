@@ -38,7 +38,11 @@
     },
     {
       "name": "recent_events",
-      "description": "Return the most recent custom events for a specific project; PII is redacted by default. Takes `project`."
+      "description": "Return the most recent custom events for a specific project; PII is redacted by default. Takes `project`. Optional `user` filter."
+    },
+    {
+      "name": "user_activity",
+      "description": "Composite per-user snapshot: identity block, totals, top pages, top event names, recent events. Matches by userEmail (case-insensitive) or visitorId. Takes `project` and `user`."
     },
     {
       "name": "weekly_digest",
