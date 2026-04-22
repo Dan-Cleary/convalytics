@@ -79,14 +79,17 @@ Convalytics exposes a Model Context Protocol server at `POST https://api.convaly
 
 **Rate limit.** 120 requests per minute per team. Exceeding returns `429 rate_limit_exceeded` with `Retry-After` and `resetAt`.
 
-**Tools (7).** The five project-scoped tools all take `project` (the project's case-insensitive name or its id from `list_projects`).
+**Tools (8).** The project-scoped tools all take `project` (the project's case-insensitive name or its id from `list_projects`).
+
+Page views (the automatic hits from the browser script) and custom product events (emitted by `analytics.track()`) live in separate tables. `pageviews_count`, `top_pages`, and `top_referrers` query page views. `events_count` and `recent_events` query custom events. `weekly_digest` combines both.
 
 - `list_projects`: all projects on the token's team (id, name, writeKey, site URL, Convex deployment slug). Team-scoped, no arguments.
 - `get_usage`: this month's custom-event count, monthly quota, retention days, plan name. Team-scoped, no arguments.
 - `top_pages({ project, since?, until?, limit? })`: pages ranked by view count with unique visitors and share of total.
 - `top_referrers({ project, since?, until?, limit? })`: referring hosts ranked by visits, includes "(direct)".
-- `events_count({ project, name?, since?, until? })`: count of events, optionally filtered by event name.
-- `recent_events({ project, name?, limit?, redact? })`: most recent events. Default `redact: true` nulls `userEmail`, `userName`, and `props` for PII hygiene; set `redact: false` to include them.
+- `pageviews_count({ project, since?, until? })`: total page views + unique visitors in a window. Use this for "how much web traffic did I get" questions.
+- `events_count({ project, name?, since?, until? })`: count of CUSTOM events, optionally filtered by event name. Does not cover page views.
+- `recent_events({ project, name?, limit?, redact? })`: most recent custom events. Default `redact: true` nulls `userEmail`, `userName`, and `props` for PII hygiene; set `redact: false` to include them.
 - `weekly_digest({ project, days?, compare? })`: composite "how did we do this window?" snapshot. Returns visitors, pageviews, sessions, bounce rate, avg session duration, top 5 pages, top 5 referrers, custom-events total, top 5 event names, plus period-over-period deltas. Default `days: 7`, `compare: true`. Prefer this when the agent just wants to summarize a period rather than chain multiple tools.
 
 Full tool schemas live in the `tools/list` response and at https://convalytics.dev/.well-known/mcp/server-card.json.

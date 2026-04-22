@@ -201,6 +201,41 @@ export const topReferrers = internalQuery({
   },
 });
 
+/**
+ * pageviews_count — total page views (from the browser script) in a window.
+ * Page views live in a separate table from custom events, so this does not
+ * overlap with events_count. Use this for "how much web traffic" questions.
+ */
+export const pageviewsCount = internalQuery({
+  args: {
+    writeKey: v.string(),
+    since: v.optional(v.number()),
+    until: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const { since, until } = resolveRange(args);
+
+    const rows = await ctx.db
+      .query("pageviews")
+      .withIndex("by_writeKey_and_timestamp", (q) =>
+        q.eq("writeKey", args.writeKey).gte("timestamp", since),
+      )
+      .order("desc")
+      .take(MAX_SCAN);
+
+    const bounded = rows.filter((r) => r.timestamp <= until);
+    const uniqueVisitors = new Set(bounded.map((r) => r.visitorId)).size;
+
+    return {
+      since,
+      until,
+      pageviews: bounded.length,
+      uniqueVisitors,
+      truncated: rows.length >= MAX_SCAN,
+    };
+  },
+});
+
 /** events_count — custom event count, optionally filtered by event name. */
 export const eventsCount = internalQuery({
   args: {

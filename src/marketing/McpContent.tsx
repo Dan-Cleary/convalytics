@@ -118,10 +118,17 @@ export function McpContent() {
             Default window: last 7 days.
           </li>
           <li>
+            <strong>pageviews_count(project, since?, until?)</strong>: total
+            page views and unique visitors in a window. The right tool for
+            "how much web traffic did I get" questions. Page views live in
+            a separate table from custom events.
+          </li>
+          <li>
             <strong>events_count(project, name?, since?, until?)</strong>:
-            count of custom events, optionally filtered by event name.
-            Returns count, unique visitors, and a <code>truncated</code>{" "}
-            flag if the scan hit its cap.
+            count of <em>custom</em> events (emitted via{" "}
+            <code>analytics.track()</code>), optionally filtered by event
+            name. Does <strong>not</strong> cover page views — use{" "}
+            <code>pageviews_count</code> for those.
           </li>
           <li>
             <strong>recent_events(project, name?, limit?, redact?)</strong>:

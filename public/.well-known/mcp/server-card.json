@@ -29,8 +29,12 @@
       "description": "Return the top referring hosts for a specific project, ranked by visits, includes (direct). Takes `project`."
     },
     {
+      "name": "pageviews_count",
+      "description": "Count page views for a specific project in a time window (web-traffic, separate from custom events). Takes `project`."
+    },
+    {
       "name": "events_count",
-      "description": "Count custom events for a specific project in a time window, optionally filtered to one event name. Takes `project`."
+      "description": "Count CUSTOM product events for a specific project (not page views — those are in a separate table; use pageviews_count). Takes `project`."
     },
     {
       "name": "recent_events",

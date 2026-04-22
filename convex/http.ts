@@ -1535,9 +1535,28 @@ const MCP_TOOLS = [
     },
   },
   {
+    name: "pageviews_count",
+    description:
+      "Count page views for a specific project in a time window. Page views are the automatic hits captured by the browser script tag (separate from custom events). Use this for web-traffic questions like 'how many pageviews in the last 24 hours'. Default window is the last 7 days.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        project: {
+          type: "string",
+          description:
+            "Project name (case-insensitive) or project id from list_projects.",
+        },
+        since: { type: "number" },
+        until: { type: "number" },
+      },
+      required: ["project"],
+      additionalProperties: false,
+    },
+  },
+  {
     name: "events_count",
     description:
-      "Count custom events for a specific project in a time window, optionally filtered to one event name. Returns count, unique visitors, and a `truncated` flag if the scan hit the maximum scan size.",
+      "Count CUSTOM PRODUCT events for a specific project in a time window, optionally filtered to one event name. Custom events are emitted by explicit analytics.track() calls in app code (signup_completed, payment_succeeded, etc.). This does NOT count page views — use pageviews_count or weekly_digest for those. Returns count, unique visitors, and a `truncated` flag if the scan hit the maximum scan size.",
     inputSchema: {
       type: "object",
       properties: {
@@ -1549,7 +1568,7 @@ const MCP_TOOLS = [
         name: {
           type: "string",
           description:
-            "Optional event name to filter by (e.g. 'signup_completed'). If omitted, counts all events in the window.",
+            "Optional event name to filter by (e.g. 'signup_completed'). If omitted, counts all custom events in the window. Do NOT pass 'page_view' here — page views are in a separate table.",
         },
         since: { type: "number" },
         until: { type: "number" },
@@ -1884,6 +1903,14 @@ async function dispatchTool(
       return ctx.runQuery(internal.mcp.eventsCount, {
         writeKey,
         name: strOrUndefined(args.name),
+        since: numOrUndefined(args.since),
+        until: numOrUndefined(args.until),
+      });
+    }
+    case "pageviews_count": {
+      const { writeKey } = await resolveProject(ctx, token.teamId, args);
+      return ctx.runQuery(internal.mcp.pageviewsCount, {
+        writeKey,
         since: numOrUndefined(args.since),
         until: numOrUndefined(args.until),
       });
