@@ -13,11 +13,26 @@ export function PrivacyContent() {
         <h1>Privacy policy</h1>
         <p>Last updated: April 22, 2026.</p>
         <p>
-          Convalytics is operated by Tethered Software Inc. This policy
-          describes what data we collect, how we use it, and the rights you
-          have over your data.
+          This policy describes what data Convalytics collects, how we use
+          it, and the rights you have over your data.
         </p>
       </header>
+
+      <section>
+        <h2>Owner and data controller</h2>
+        <p>
+          Tethered Software Inc.
+          <br />
+          305 Chapel Hill Road, Atlantic Highlands, NJ 07716, United States
+        </p>
+        <p>
+          Owner contact email:{" "}
+          <a href="mailto:dan@prompthub.us">dan@prompthub.us</a>
+          <br />
+          Product support:{" "}
+          <a href="mailto:hello@convalytics.dev">hello@convalytics.dev</a>
+        </p>
+      </section>
 
       <section>
         <h2>The two data flows</h2>
@@ -181,7 +196,9 @@ export function PrivacyContent() {
       <section>
         <h2>Contact</h2>
         <p>
-          Privacy questions:{" "}
+          Privacy and data-controller questions:{" "}
+          <a href="mailto:dan@prompthub.us">dan@prompthub.us</a>. General
+          product support:{" "}
           <a href="mailto:hello@convalytics.dev">hello@convalytics.dev</a>.
         </p>
       </section>
