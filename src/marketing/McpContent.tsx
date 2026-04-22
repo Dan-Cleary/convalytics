@@ -45,7 +45,7 @@ export function McpContent() {
       <section>
         <h2>Install in Claude Code</h2>
         <pre>
-{`claude mcp add convalytics https://api.convalytics.dev/mcp \\
+{`claude mcp add --transport http convalytics https://api.convalytics.dev/mcp \\
   --header "Authorization: Bearer $CONVALYTICS_TOKEN"`}
         </pre>
       </section>

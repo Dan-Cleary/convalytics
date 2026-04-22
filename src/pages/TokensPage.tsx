@@ -231,7 +231,7 @@ export function TokensPage() {
                   color: "#1a1814",
                 }}
               >
-{`claude mcp add convalytics https://api.convalytics.dev/mcp \\
+{`claude mcp add --transport http convalytics https://api.convalytics.dev/mcp \\
   --header "Authorization: Bearer ${justCreatedToken}"`}
               </pre>
             </details>

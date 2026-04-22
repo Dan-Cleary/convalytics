@@ -92,7 +92,7 @@ Full tool schemas live in the `tools/list` response and at https://convalytics.d
 
 **Install in Claude Code:**
 ```
-claude mcp add convalytics https://api.convalytics.dev/mcp --header "Authorization: Bearer $CONVALYTICS_TOKEN"
+claude mcp add --transport http convalytics https://api.convalytics.dev/mcp --header "Authorization: Bearer $CONVALYTICS_TOKEN"
 ```
 
 **Install in Claude Desktop** (edit `claude_desktop_config.json`):

@@ -80,7 +80,7 @@ otherwise:
 **Install snippet (if asked):**
 
 ```
-claude mcp add convalytics https://api.convalytics.dev/mcp \
+claude mcp add --transport http convalytics https://api.convalytics.dev/mcp \
   --header "Authorization: Bearer $CONVALYTICS_TOKEN"
 ```
 
