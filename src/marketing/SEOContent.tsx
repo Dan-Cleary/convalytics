@@ -129,6 +129,18 @@ export function SEOContent() {
       </section>
 
       <section>
+        <h2>Query your analytics with Claude</h2>
+        <p>
+          The Convalytics <a href="/mcp">MCP server</a> exposes read-only
+          tools over Model Context Protocol, so Claude Desktop, Claude Code,
+          Cursor, Windsurf, and any other MCP-capable assistant can answer
+          questions about your analytics in natural language: top pages,
+          referrers, custom-event counts, recent events, and usage.
+          Available on the Solo and Pro plans.
+        </p>
+      </section>
+
+      <section>
         <h2>Authentication model</h2>
         <p>
           Convalytics uses a single public write key as its API credential.
@@ -176,6 +188,14 @@ export function SEOContent() {
           <li>
             <a href="/.well-known/api-catalog">API catalog (RFC 9727)</a>: a
             linkset of all public API resources
+          </li>
+          <li>
+            <a href="/mcp">MCP server</a>: Model Context Protocol endpoint
+            for AI assistants (Solo+ plan required)
+          </li>
+          <li>
+            <a href="/.well-known/mcp/server-card.json">MCP server card</a>:
+            structured capability description for MCP discovery
           </li>
           <li>
             <a href="https://github.com/Dan-Cleary/convalytics">

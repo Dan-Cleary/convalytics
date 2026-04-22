@@ -1456,4 +1456,425 @@ http.route({
 
 registerStripeRoutes(http);
 
+// ---------------------------------------------------------------------------
+// MCP (Model Context Protocol) server
+//
+// Remote read-only analytics queries for AI assistants (Claude Desktop,
+// Cursor, Windsurf, Claude Code, etc.). Protocol: JSON-RPC 2.0 over POST.
+// Auth: `Authorization: Bearer cnv_...` where cnv_... is a user-generated
+// API token created at /tokens in the dashboard. Gated to Solo+ plans; Free
+// teams receive 402 with { error: "plan_required" }.
+//
+// Tools (6) are declared inline below; their handlers live in convex/mcp.ts
+// as internalQuery exports. The handler for /mcp validates the token, runs
+// the plan gate, rate-limits per token, then dispatches the JSON-RPC method.
+// ---------------------------------------------------------------------------
+
+const MCP_PROTOCOL_VERSION = "2025-06-18";
+const MCP_SERVER_NAME = "convalytics";
+const MCP_SERVER_VERSION = "1.0.0";
+const MCP_RATE_LIMIT_PER_MIN = 120;
+
+async function sha256Hex(input: string): Promise<string> {
+  const bytes = new TextEncoder().encode(input);
+  const digest = await crypto.subtle.digest("SHA-256", bytes);
+  return Array.from(new Uint8Array(digest))
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+}
+
+const MCP_TOOLS = [
+  {
+    name: "list_projects",
+    description:
+      "List all Convalytics projects on the team this token belongs to. Useful when the agent needs to confirm the project it's querying against. No arguments.",
+    inputSchema: { type: "object", properties: {}, additionalProperties: false },
+  },
+  {
+    name: "get_usage",
+    description:
+      "Return the current month's custom-event usage, monthly quota, retention days, and plan name for the team.",
+    inputSchema: { type: "object", properties: {}, additionalProperties: false },
+  },
+  {
+    name: "top_pages",
+    description:
+      "Return the top pages ranked by page views in a time window. Default window is the last 7 days. Returns path, views, uniqueVisitors, and percentage of total views for each page.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        since: {
+          type: "number",
+          description:
+            "Start of window as unix milliseconds. Defaults to 7 days ago.",
+        },
+        until: {
+          type: "number",
+          description: "End of window as unix milliseconds. Defaults to now.",
+        },
+        limit: {
+          type: "number",
+          description: "Maximum number of pages to return. Default 20, max 50.",
+        },
+      },
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "top_referrers",
+    description:
+      "Return the top referring hosts ranked by visit count in a time window. Includes '(direct)' for visits with no referrer. Default window is the last 7 days.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        since: { type: "number" },
+        until: { type: "number" },
+        limit: {
+          type: "number",
+          description: "Maximum number of referrers to return. Default 10, max 50.",
+        },
+      },
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "events_count",
+    description:
+      "Count custom events in a time window, optionally filtered to one event name. Returns count, unique visitors, and a `truncated` flag if the scan hit the maximum scan size.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        name: {
+          type: "string",
+          description:
+            "Optional event name to filter by (e.g. 'signup_completed'). If omitted, counts all events in the window.",
+        },
+        since: { type: "number" },
+        until: { type: "number" },
+      },
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "recent_events",
+    description:
+      "Return the most recent custom events, optionally filtered to one event name. PII (userEmail, userName, props) is redacted by default; pass redact: false to include them.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        name: { type: "string" },
+        limit: {
+          type: "number",
+          description: "Maximum number of events to return. Default 20, max 100.",
+        },
+        redact: {
+          type: "boolean",
+          description:
+            "If true (default), userEmail/userName are null and props is {}. Set to false to include them.",
+        },
+      },
+      additionalProperties: false,
+    },
+  },
+] as const;
+
+function jsonRpcResponse(
+  id: number | string | null,
+  result: unknown,
+  cors: Record<string, string>,
+): Response {
+  return new Response(
+    JSON.stringify({ jsonrpc: "2.0", id, result }),
+    { status: 200, headers: { ...cors, "Content-Type": "application/json" } },
+  );
+}
+
+function jsonRpcError(
+  id: number | string | null,
+  code: number,
+  message: string,
+  cors: Record<string, string>,
+  data?: unknown,
+): Response {
+  return new Response(
+    JSON.stringify({
+      jsonrpc: "2.0",
+      id,
+      error: { code, message, ...(data !== undefined ? { data } : {}) },
+    }),
+    { status: 200, headers: { ...cors, "Content-Type": "application/json" } },
+  );
+}
+
+function toolResult(content: unknown) {
+  return {
+    content: [
+      { type: "text", text: JSON.stringify(content, null, 2) },
+    ],
+  };
+}
+
+http.route({
+  path: "/mcp",
+  method: "POST",
+  handler: httpAction(async (ctx, req) => {
+    const cors = corsHeaders(req);
+
+    // --- Auth ---------------------------------------------------------------
+    const authHeader = req.headers.get("Authorization") ?? "";
+    const bearer = authHeader.startsWith("Bearer ")
+      ? authHeader.slice("Bearer ".length).trim()
+      : "";
+    if (!bearer) {
+      return new Response(
+        JSON.stringify({
+          error: "invalid_token",
+          message:
+            "Missing Authorization header. Use: Authorization: Bearer cnv_...",
+        }),
+        {
+          status: 401,
+          headers: { ...cors, "Content-Type": "application/json" },
+        },
+      );
+    }
+
+    const tokenHash = await sha256Hex(bearer);
+    const ctxToken = await ctx.runQuery(internal.apiTokens.validate, {
+      tokenHash,
+    });
+    if (!ctxToken) {
+      return new Response(
+        JSON.stringify({
+          error: "invalid_token",
+          message: "Token is invalid or has been revoked.",
+        }),
+        {
+          status: 401,
+          headers: { ...cors, "Content-Type": "application/json" },
+        },
+      );
+    }
+
+    // --- Plan gate (Solo+) --------------------------------------------------
+    if (ctxToken.plan === "free") {
+      return new Response(
+        JSON.stringify({
+          error: "plan_required",
+          message:
+            "Convalytics MCP requires the Solo plan or higher. Upgrade at https://convalytics.dev/billing.",
+          plan: ctxToken.plan,
+          required_plans: ["solo", "pro"],
+        }),
+        {
+          status: 402,
+          headers: { ...cors, "Content-Type": "application/json" },
+        },
+      );
+    }
+
+    // --- Rate limit ---------------------------------------------------------
+    const rl = await ctx.runMutation(internal.rateLimit.check, {
+      key: `mcp:${ctxToken.tokenId}`,
+      limit: MCP_RATE_LIMIT_PER_MIN,
+    });
+    if (!rl.allowed) {
+      const retryAfter = Math.max(
+        1,
+        Math.ceil((rl.resetAt - Date.now()) / 1000),
+      );
+      return new Response(
+        JSON.stringify({
+          error: "rate_limit_exceeded",
+          message: `MCP rate limit exceeded (${MCP_RATE_LIMIT_PER_MIN} requests/min). Retry after reset.`,
+          retryAfter,
+          resetAt: rl.resetAt,
+        }),
+        {
+          status: 429,
+          headers: {
+            ...cors,
+            "Content-Type": "application/json",
+            "Retry-After": String(retryAfter),
+          },
+        },
+      );
+    }
+
+    // --- Parse JSON-RPC envelope -------------------------------------------
+    let payload: {
+      jsonrpc?: unknown;
+      id?: unknown;
+      method?: unknown;
+      params?: unknown;
+    };
+    try {
+      const text = await req.text();
+      payload = JSON.parse(text) as typeof payload;
+    } catch {
+      return jsonRpcError(null, -32700, "Parse error", cors);
+    }
+
+    const id =
+      typeof payload.id === "number" ||
+      typeof payload.id === "string" ||
+      payload.id === null
+        ? payload.id
+        : null;
+
+    if (payload.jsonrpc !== "2.0" || typeof payload.method !== "string") {
+      return jsonRpcError(id, -32600, "Invalid Request", cors);
+    }
+
+    const method = payload.method;
+    const params = (payload.params ?? {}) as Record<string, unknown>;
+
+    // --- Dispatch ----------------------------------------------------------
+    let response: Response;
+    switch (method) {
+      case "initialize": {
+        response = jsonRpcResponse(
+          id,
+          {
+            protocolVersion: MCP_PROTOCOL_VERSION,
+            capabilities: { tools: { listChanged: false } },
+            serverInfo: {
+              name: MCP_SERVER_NAME,
+              version: MCP_SERVER_VERSION,
+            },
+          },
+          cors,
+        );
+        break;
+      }
+      case "notifications/initialized":
+      case "notifications/cancelled": {
+        // Notifications have no id and expect no response body.
+        response = new Response(null, { status: 204, headers: cors });
+        break;
+      }
+      case "ping": {
+        response = jsonRpcResponse(id, {}, cors);
+        break;
+      }
+      case "tools/list": {
+        response = jsonRpcResponse(id, { tools: MCP_TOOLS }, cors);
+        break;
+      }
+      case "tools/call": {
+        const toolName = typeof params.name === "string" ? params.name : null;
+        const toolArgs = (params.arguments ?? {}) as Record<string, unknown>;
+        if (!toolName) {
+          response = jsonRpcError(
+            id,
+            -32602,
+            "Missing tool name in params.name",
+            cors,
+          );
+          break;
+        }
+        try {
+          const result = await dispatchTool(ctx, ctxToken, toolName, toolArgs);
+          response = jsonRpcResponse(id, toolResult(result), cors);
+        } catch (e) {
+          const msg = e instanceof Error ? e.message : String(e);
+          response = jsonRpcError(id, -32602, msg, cors);
+        }
+        break;
+      }
+      default: {
+        response = jsonRpcError(
+          id,
+          -32601,
+          `Method not found: ${method}`,
+          cors,
+        );
+      }
+    }
+
+    // Fire-and-forget update of lastUsedAt so the dashboard "last used" column
+    // reflects real usage without blocking the response.
+    void ctx.runMutation(internal.apiTokens.touchLastUsed, {
+      tokenId: ctxToken.tokenId,
+    });
+
+    return response;
+  }),
+});
+
+http.route({
+  path: "/mcp",
+  method: "OPTIONS",
+  handler: httpAction(async (_, req) => {
+    return new Response(null, {
+      status: 204,
+      headers: {
+        ...corsHeaders(req),
+        "Access-Control-Allow-Methods": "POST, OPTIONS",
+        "Access-Control-Allow-Headers": "Content-Type, Authorization",
+      },
+    });
+  }),
+});
+
+type McpTokenContext = {
+  tokenId: Id<"apiTokens">;
+  projectId: Id<"projects">;
+  teamId: Id<"teams">;
+  writeKey: string;
+  plan: string;
+};
+
+async function dispatchTool(
+  ctx: Parameters<Parameters<typeof httpAction>[0]>[0],
+  token: McpTokenContext,
+  name: string,
+  args: Record<string, unknown>,
+) {
+  switch (name) {
+    case "list_projects":
+      return ctx.runQuery(internal.mcp.listProjects, { teamId: token.teamId });
+    case "get_usage":
+      return ctx.runQuery(internal.mcp.getUsage, { teamId: token.teamId });
+    case "top_pages":
+      return ctx.runQuery(internal.mcp.topPages, {
+        writeKey: token.writeKey,
+        since: numOrUndefined(args.since),
+        until: numOrUndefined(args.until),
+        limit: numOrUndefined(args.limit),
+      });
+    case "top_referrers":
+      return ctx.runQuery(internal.mcp.topReferrers, {
+        writeKey: token.writeKey,
+        since: numOrUndefined(args.since),
+        until: numOrUndefined(args.until),
+        limit: numOrUndefined(args.limit),
+      });
+    case "events_count":
+      return ctx.runQuery(internal.mcp.eventsCount, {
+        writeKey: token.writeKey,
+        name: strOrUndefined(args.name),
+        since: numOrUndefined(args.since),
+        until: numOrUndefined(args.until),
+      });
+    case "recent_events":
+      return ctx.runQuery(internal.mcp.recentEvents, {
+        writeKey: token.writeKey,
+        name: strOrUndefined(args.name),
+        limit: numOrUndefined(args.limit),
+        redact: typeof args.redact === "boolean" ? args.redact : undefined,
+      });
+    default:
+      throw new Error(`Unknown tool: ${name}`);
+  }
+}
+
+function numOrUndefined(v: unknown): number | undefined {
+  return typeof v === "number" && Number.isFinite(v) ? v : undefined;
+}
+
+function strOrUndefined(v: unknown): string | undefined {
+  return typeof v === "string" && v.length > 0 ? v : undefined;
+}
+
 export default http;

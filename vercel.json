@@ -6,10 +6,12 @@
     { "source": "/about", "destination": "/about/index.html" },
     { "source": "/privacy", "destination": "/privacy/index.html" },
     { "source": "/contact", "destination": "/contact/index.html" },
+    { "source": "/mcp", "destination": "/mcp/index.html" },
     { "source": "/events", "destination": "/index.html" },
     { "source": "/pages", "destination": "/index.html" },
     { "source": "/billing", "destination": "/index.html" },
     { "source": "/members", "destination": "/index.html" },
+    { "source": "/tokens", "destination": "/index.html" },
     { "source": "/overview", "destination": "/index.html" },
     { "source": "/oauth/callback", "destination": "/index.html" },
     { "source": "/claim/:claimToken", "destination": "/index.html" },
@@ -20,6 +22,12 @@
       "source": "/.well-known/api-catalog",
       "headers": [
         { "key": "Content-Type", "value": "application/linkset+json; charset=utf-8" }
+      ]
+    },
+    {
+      "source": "/.well-known/mcp/server-card.json",
+      "headers": [
+        { "key": "Content-Type", "value": "application/json; charset=utf-8" }
       ]
     },
     {

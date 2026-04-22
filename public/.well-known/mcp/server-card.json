@@ -1,0 +1,48 @@
+{
+  "name": "convalytics",
+  "displayName": "Convalytics",
+  "description": "Read-only analytics tools for AI assistants. Query top pages, top referrers, custom event counts, recent events, usage, and projects for your Convalytics account via Model Context Protocol. Requires a Convalytics API token generated at https://convalytics.dev/tokens and an active Solo or Pro plan.",
+  "version": "1.0.0",
+  "serverUrl": "https://api.convalytics.dev/mcp",
+  "transport": "http",
+  "documentationUrl": "https://convalytics.dev/mcp",
+  "auth": {
+    "type": "bearer",
+    "scheme": "Bearer",
+    "description": "Convalytics API token. Create at https://convalytics.dev/tokens, pass as Authorization: Bearer cnv_..."
+  },
+  "tools": [
+    {
+      "name": "list_projects",
+      "description": "List all Convalytics projects on the team this token belongs to."
+    },
+    {
+      "name": "get_usage",
+      "description": "Return the current month's custom-event usage, monthly quota, retention days, and plan name for the team."
+    },
+    {
+      "name": "top_pages",
+      "description": "Return the top pages ranked by views in a time window, with unique visitors and share of total."
+    },
+    {
+      "name": "top_referrers",
+      "description": "Return the top referring hosts ranked by visits, includes (direct)."
+    },
+    {
+      "name": "events_count",
+      "description": "Count custom events in a time window, optionally filtered to one event name."
+    },
+    {
+      "name": "recent_events",
+      "description": "Return the most recent custom events; PII (userEmail, userName, props) is redacted by default."
+    }
+  ],
+  "contact": {
+    "email": "hello@convalytics.dev",
+    "url": "https://convalytics.dev/contact"
+  },
+  "publisher": {
+    "name": "Tethered Software Inc.",
+    "url": "https://convalytics.dev/about"
+  }
+}

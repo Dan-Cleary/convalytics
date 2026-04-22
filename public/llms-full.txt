@@ -69,6 +69,46 @@ Content-Type: application/json
 
 Batch endpoint (up to 100 events per request): `POST /ingest/batch` with `{ writeKey, events: [...] }`.
 
+## MCP server (read-only queries for AI assistants)
+
+Convalytics exposes a Model Context Protocol server at `POST https://api.convalytics.dev/mcp` so Claude Desktop, Claude Code, Cursor, Windsurf, and other MCP-capable clients can answer questions about analytics data in chat. Protocol: JSON-RPC 2.0.
+
+**Auth.** Bearer token, not the write key. Users generate a read-scoped API token at https://convalytics.dev/tokens, then pass it as `Authorization: Bearer cnv_...`. Tokens bind to one project.
+
+**Plan requirement.** The MCP endpoint is gated to the Solo ($29/mo) and Pro ($99/mo) plans. API-token creation itself is free on every plan, but the `/mcp` endpoint returns `402 plan_required` for Free-tier teams.
+
+**Rate limit.** 120 requests per minute per token. Exceeding returns `429 rate_limit_exceeded` with `Retry-After` and `resetAt`.
+
+**Tools (6).**
+
+- `list_projects`: all projects on the token's team (id, name, writeKey, site URL, Convex deployment slug).
+- `get_usage`: this month's custom-event count, monthly quota, retention days, plan name.
+- `top_pages({ since?, until?, limit? })`: pages ranked by view count with unique visitors and share of total.
+- `top_referrers({ since?, until?, limit? })`: referring hosts ranked by visits, includes "(direct)".
+- `events_count({ name?, since?, until? })`: count of events, optionally filtered by event name.
+- `recent_events({ name?, limit?, redact? })`: most recent events. Default `redact: true` nulls `userEmail`, `userName`, and `props` for PII hygiene; set `redact: false` to include them.
+
+Full tool schemas live in the `tools/list` response and at https://convalytics.dev/.well-known/mcp/server-card.json.
+
+**Install in Claude Code:**
+```
+claude mcp add convalytics https://api.convalytics.dev/mcp --header "Authorization: Bearer $CONVALYTICS_TOKEN"
+```
+
+**Install in Claude Desktop** (edit `claude_desktop_config.json`):
+```
+{
+  "mcpServers": {
+    "convalytics": {
+      "url": "https://api.convalytics.dev/mcp",
+      "headers": { "Authorization": "Bearer cnv_..." }
+    }
+  }
+}
+```
+
+Not in v1: `funnel` tool, write/admin tools, OAuth, MCP Apps UI resources, stdio transport. See https://convalytics.dev/mcp for latest details.
+
 ## Authentication
 
 Convalytics uses a **public write key** as its sole API credential. It is a scoped, non-secret identifier with these properties:

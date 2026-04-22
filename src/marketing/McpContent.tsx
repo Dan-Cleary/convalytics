@@ -1,0 +1,183 @@
+// Rendered as static HTML at build time into dist/mcp/index.html and also
+// mounted by React at /mcp. See scripts/prerender.mts and App.tsx.
+
+export function McpContent() {
+  return (
+    <main>
+      <header>
+        <h1>Convalytics MCP server</h1>
+        <p>
+          <strong>
+            Read-only analytics for AI assistants via Model Context Protocol.
+          </strong>{" "}
+          Ask Claude Desktop, Claude Code, Cursor, Windsurf, or any MCP-capable
+          client questions about your Convalytics data in natural language:
+          <em>"what are my top pages this week,"</em>{" "}
+          <em>"how many signups in the last 24 hours,"</em>{" "}
+          <em>"show me the last ten payment_succeeded events."</em>
+        </p>
+      </header>
+
+      <section>
+        <h2>Endpoint</h2>
+        <p>
+          <code>POST https://api.convalytics.dev/mcp</code>
+        </p>
+        <p>
+          JSON-RPC 2.0. Auth via{" "}
+          <code>Authorization: Bearer cnv_...</code> using an API token
+          generated at <a href="/tokens">/tokens</a> in the dashboard.
+        </p>
+      </section>
+
+      <section>
+        <h2>Plan requirement</h2>
+        <p>
+          Convalytics MCP is available on the <strong>Solo</strong> plan
+          ($29/mo) and <strong>Pro</strong> plan ($99/mo). API tokens
+          themselves can be generated on any plan, but the{" "}
+          <code>/mcp</code> endpoint returns <code>402 plan_required</code>{" "}
+          for Free-tier tokens. Upgrade at{" "}
+          <a href="/billing">convalytics.dev/billing</a>.
+        </p>
+      </section>
+
+      <section>
+        <h2>Install in Claude Code</h2>
+        <pre>
+{`claude mcp add convalytics https://api.convalytics.dev/mcp \\
+  --header "Authorization: Bearer $CONVALYTICS_TOKEN"`}
+        </pre>
+      </section>
+
+      <section>
+        <h2>Install in Claude Desktop</h2>
+        <p>
+          Edit{" "}
+          <code>
+            ~/Library/Application Support/Claude/claude_desktop_config.json
+          </code>
+          :
+        </p>
+        <pre>
+{`{
+  "mcpServers": {
+    "convalytics": {
+      "url": "https://api.convalytics.dev/mcp",
+      "headers": {
+        "Authorization": "Bearer cnv_..."
+      }
+    }
+  }
+}`}
+        </pre>
+      </section>
+
+      <section>
+        <h2>Install in Cursor / Windsurf</h2>
+        <p>
+          Both follow the same JSON shape in their MCP settings. Add a new
+          server with URL <code>https://api.convalytics.dev/mcp</code> and an{" "}
+          <code>Authorization: Bearer cnv_...</code> header.
+        </p>
+      </section>
+
+      <section>
+        <h2>Tools exposed</h2>
+        <ul>
+          <li>
+            <strong>list_projects</strong>: all projects on the token's team
+            (name, writeKey, site URL, deployment slug).
+          </li>
+          <li>
+            <strong>get_usage</strong>: current month's custom-event count,
+            monthly quota, retention days, and plan name for the team.
+          </li>
+          <li>
+            <strong>top_pages</strong>: pages ranked by views in a time
+            window, with unique visitors and share of total. Default window:
+            last 7 days. Max 50 results.
+          </li>
+          <li>
+            <strong>top_referrers</strong>: referring hosts ranked by visits,
+            includes <code>(direct)</code>. Default window: last 7 days.
+          </li>
+          <li>
+            <strong>events_count</strong>: count of custom events,
+            optionally filtered by event name. Returns count, unique
+            visitors, and a <code>truncated</code> flag if the scan hit its
+            cap.
+          </li>
+          <li>
+            <strong>recent_events</strong>: most recent events, optionally
+            filtered by name. <code>userEmail</code>, <code>userName</code>,
+            and <code>props</code> are redacted by default; pass{" "}
+            <code>redact: false</code> to include them.
+          </li>
+        </ul>
+      </section>
+
+      <section>
+        <h2>Rate limits and errors</h2>
+        <ul>
+          <li>
+            <strong>120 requests per minute</strong> per token. Exceeding
+            returns <code>429 rate_limit_exceeded</code> with a{" "}
+            <code>Retry-After</code> header and a <code>resetAt</code>{" "}
+            timestamp.
+          </li>
+          <li>
+            <strong>401 invalid_token</strong> for missing, malformed, or
+            revoked tokens.
+          </li>
+          <li>
+            <strong>402 plan_required</strong> for Free-plan teams.
+          </li>
+          <li>
+            JSON-RPC protocol errors (parse, invalid request, method not
+            found) are returned in the standard JSON-RPC 2.0 error shape
+            with the appropriate code.
+          </li>
+        </ul>
+      </section>
+
+      <section>
+        <h2>Not included in v1</h2>
+        <p>
+          No write or admin tools. No <code>funnel</code> tool until the
+          dashboard ships funnel views. No OAuth flow (API token is the only
+          auth in v1). No MCP Apps UI resources. If one of these matters to
+          you,{" "}
+          <a href="/contact">tell us</a>.
+        </p>
+      </section>
+
+      <section>
+        <h2>Discovery</h2>
+        <ul>
+          <li>
+            Server card:{" "}
+            <a href="/.well-known/mcp/server-card.json">
+              /.well-known/mcp/server-card.json
+            </a>
+          </li>
+          <li>
+            Full product manual (includes the same tool list):{" "}
+            <a href="/llms-full.txt">/llms-full.txt</a>
+          </li>
+          <li>
+            OpenAPI schema for ingest endpoints (separate from MCP):{" "}
+            <a href="/openapi.json">/openapi.json</a>
+          </li>
+        </ul>
+      </section>
+
+      <nav aria-label="Site navigation">
+        <p>
+          <a href="/">Home</a> · <a href="/about">About</a> ·{" "}
+          <a href="/privacy">Privacy</a> · <a href="/contact">Contact</a>
+        </p>
+      </nav>
+    </main>
+  );
+}

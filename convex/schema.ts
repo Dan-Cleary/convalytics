@@ -170,4 +170,27 @@ export default defineSchema({
     window: v.number(),
     count: v.number(),
   }).index("by_key_and_window", ["key", "window"]),
+
+  // -------------------------------------------------------------------------
+  // API tokens — user-generated credentials scoped to one project.
+  //
+  // First consumer is MCP (Convalytics MCP server gated to Solo+). Intentionally
+  // generic — future consumers (REST read API, webhook signing) expand `scope`.
+  // Plain token shown once at creation; only the sha-256 hash is stored. Same
+  // reveal-once pattern as teamInvites.
+  // -------------------------------------------------------------------------
+  apiTokens: defineTable({
+    tokenHash: v.string(),
+    projectId: v.id("projects"),
+    teamId: v.id("teams"),
+    createdBy: v.id("users"),
+    name: v.string(),
+    scope: v.union(v.literal("read")),
+    createdAt: v.number(),
+    lastUsedAt: v.optional(v.number()),
+    revokedAt: v.optional(v.number()),
+  })
+    .index("by_tokenHash", ["tokenHash"])
+    .index("by_projectId", ["projectId"])
+    .index("by_createdBy", ["createdBy"]),
 });

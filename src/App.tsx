@@ -7,6 +7,7 @@ import { SignInForm } from "./components/SignInForm";
 import { AboutContent } from "./marketing/AboutContent";
 import { PrivacyContent } from "./marketing/PrivacyContent";
 import { ContactContent } from "./marketing/ContactContent";
+import { McpContent } from "./marketing/McpContent";
 import { MarketingPage } from "./marketing/MarketingPage";
 import { Sidebar } from "./components/Sidebar";
 import { BillingSuccessModal } from "./components/BillingSuccessModal";
@@ -18,6 +19,7 @@ import { OAuthCallback } from "./pages/OAuthCallback";
 import { ClaimPage } from "./pages/ClaimPage";
 import { BillingPage } from "./pages/BillingPage";
 import { MembersPage } from "./pages/MembersPage";
+import { TokensPage } from "./pages/TokensPage";
 import { AcceptInvitePage } from "./pages/AcceptInvitePage";
 import { useState, useEffect, Component, type ReactNode } from "react";
 import {
@@ -86,6 +88,14 @@ export default function App() {
           element={
             <MarketingPage>
               <ContactContent />
+            </MarketingPage>
+          }
+        />
+        <Route
+          path="/mcp"
+          element={
+            <MarketingPage>
+              <McpContent />
             </MarketingPage>
           }
         />
@@ -270,6 +280,7 @@ function Dashboard() {
           <Route path="/events" element={<EventsPage {...sharedProps} />} />
           <Route path="/billing" element={<BillingPage />} />
           <Route path="/members" element={<MembersPage />} />
+          <Route path="/tokens" element={<TokensPage />} />
           <Route path="*" element={<Navigate to="/overview" replace />} />
         </Routes>
         </PageErrorBoundary>

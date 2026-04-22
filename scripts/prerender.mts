@@ -9,6 +9,7 @@ import { SEOContent } from "../src/marketing/SEOContent.js";
 import { AboutContent } from "../src/marketing/AboutContent.js";
 import { PrivacyContent } from "../src/marketing/PrivacyContent.js";
 import { ContactContent } from "../src/marketing/ContactContent.js";
+import { McpContent } from "../src/marketing/McpContent.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const distDir = resolve(__dirname, "../dist");
@@ -49,6 +50,13 @@ const ROUTES: Route[] = [
     title: "Contact | Convalytics",
     description:
       "Support, bug reports, security disclosure, and open-source contribution channels for Convalytics.",
+  },
+  {
+    path: "/mcp",
+    component: McpContent,
+    title: "MCP server | Convalytics",
+    description:
+      "Convalytics MCP server exposes read-only analytics tools to Claude Desktop, Claude Code, Cursor, Windsurf, and other MCP-capable AI assistants.",
   },
 ];
 

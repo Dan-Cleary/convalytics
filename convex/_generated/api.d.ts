@@ -8,6 +8,7 @@
  * @module
  */
 
+import type * as apiTokens from "../apiTokens.js";
 import type * as auth from "../auth.js";
 import type * as authHelpers from "../authHelpers.js";
 import type * as billing from "../billing.js";
@@ -23,6 +24,7 @@ import type * as events from "../events.js";
 import type * as health from "../health.js";
 import type * as http from "../http.js";
 import type * as invites from "../invites.js";
+import type * as mcp from "../mcp.js";
 import type * as notifications from "../notifications.js";
 import type * as oauth from "../oauth.js";
 import type * as pageviews from "../pageviews.js";
@@ -42,6 +44,7 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  apiTokens: typeof apiTokens;
   auth: typeof auth;
   authHelpers: typeof authHelpers;
   billing: typeof billing;
@@ -57,6 +60,7 @@ declare const fullApi: ApiFromModules<{
   health: typeof health;
   http: typeof http;
   invites: typeof invites;
+  mcp: typeof mcp;
   notifications: typeof notifications;
   oauth: typeof oauth;
   pageviews: typeof pageviews;
