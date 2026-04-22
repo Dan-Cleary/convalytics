@@ -18,16 +18,24 @@ import {
   query,
 } from "./_generated/server";
 import { getTeamMembership, getUserId, requireAuth } from "./authHelpers";
+import { sha256Hex } from "./tokenHash";
+import type { Doc, Id } from "./_generated/dataModel";
 
 const MAX_NAME_LEN = 100;
+const LAST_USED_DEBOUNCE_MS = 60_000;
 
-async function sha256Hex(input: string): Promise<string> {
-  const bytes = new TextEncoder().encode(input);
-  const digest = await crypto.subtle.digest("SHA-256", bytes);
-  return Array.from(new Uint8Array(digest))
-    .map((b) => b.toString(16).padStart(2, "0"))
-    .join("");
-}
+/**
+ * Shape returned by `validate` — exported so /mcp and other HTTP handlers can
+ * strongly type the validated context without re-declaring it locally.
+ */
+export type ValidatedApiToken = {
+  tokenId: Id<"apiTokens">;
+  projectId: Id<"projects">;
+  teamId: Id<"teams">;
+  writeKey: string;
+  scope: Doc<"apiTokens">["scope"];
+  plan: Doc<"teams">["plan"];
+};
 
 function generateToken(): string {
   const bytes = new Uint8Array(32);
@@ -82,11 +90,24 @@ export const validate = internalQuery({
   },
 });
 
-/** Fire-and-forget lastUsedAt update; safe to ignore from the HTTP critical path. */
+/**
+ * Fire-and-forget lastUsedAt update. Debounced: only writes if the existing
+ * value is older than LAST_USED_DEBOUNCE_MS. At 120 req/min/token we don't
+ * want to patch the same row twice a second — OCC contention against the
+ * dashboard `list` reactive query and wasted writes.
+ */
 export const touchLastUsed = internalMutation({
   args: { tokenId: v.id("apiTokens") },
   handler: async (ctx, args) => {
-    await ctx.db.patch("apiTokens", args.tokenId, { lastUsedAt: Date.now() });
+    const token = await ctx.db.get("apiTokens", args.tokenId);
+    if (!token) return;
+    const now = Date.now();
+    if (
+      !token.lastUsedAt ||
+      now - token.lastUsedAt > LAST_USED_DEBOUNCE_MS
+    ) {
+      await ctx.db.patch("apiTokens", args.tokenId, { lastUsedAt: now });
+    }
   },
 });
 

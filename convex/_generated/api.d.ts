@@ -34,6 +34,7 @@ import type * as rateLimit from "../rateLimit.js";
 import type * as retention from "../retention.js";
 import type * as teams from "../teams.js";
 import type * as testEmail from "../testEmail.js";
+import type * as tokenHash from "../tokenHash.js";
 import type * as ua from "../ua.js";
 import type * as usage from "../usage.js";
 
@@ -70,6 +71,7 @@ declare const fullApi: ApiFromModules<{
   retention: typeof retention;
   teams: typeof teams;
   testEmail: typeof testEmail;
+  tokenHash: typeof tokenHash;
   ua: typeof ua;
   usage: typeof usage;
 }>;

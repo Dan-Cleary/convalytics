@@ -1,5 +1,6 @@
 import { httpRouter } from "convex/server";
 import { httpAction } from "./_generated/server";
+import type { ActionCtx } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { Id } from "./_generated/dataModel";
 import { auth } from "./auth";
@@ -9,6 +10,8 @@ import {
   UNCLAIMED_PROJECTS_PER_IP_PER_HOUR,
 } from "./plans";
 import { parseUA } from "./ua";
+import { sha256Hex } from "./tokenHash";
+import type { ValidatedApiToken } from "./apiTokens";
 
 const http = httpRouter();
 
@@ -1456,32 +1459,14 @@ http.route({
 
 registerStripeRoutes(http);
 
-// ---------------------------------------------------------------------------
-// MCP (Model Context Protocol) server
-//
-// Remote read-only analytics queries for AI assistants (Claude Desktop,
-// Cursor, Windsurf, Claude Code, etc.). Protocol: JSON-RPC 2.0 over POST.
-// Auth: `Authorization: Bearer cnv_...` where cnv_... is a user-generated
-// API token created at /tokens in the dashboard. Gated to Solo+ plans; Free
-// teams receive 402 with { error: "plan_required" }.
-//
-// Tools (6) are declared inline below; their handlers live in convex/mcp.ts
-// as internalQuery exports. The handler for /mcp validates the token, runs
-// the plan gate, rate-limits per token, then dispatches the JSON-RPC method.
-// ---------------------------------------------------------------------------
+// MCP (Model Context Protocol) remote server. Read-only analytics tools for
+// MCP-capable AI assistants. Gated to Solo+ plans; Free teams receive 402.
+// Rate-limited per team so a user can't bypass the cap by minting tokens.
 
 const MCP_PROTOCOL_VERSION = "2025-06-18";
 const MCP_SERVER_NAME = "convalytics";
 const MCP_SERVER_VERSION = "1.0.0";
 const MCP_RATE_LIMIT_PER_MIN = 120;
-
-async function sha256Hex(input: string): Promise<string> {
-  const bytes = new TextEncoder().encode(input);
-  const digest = await crypto.subtle.digest("SHA-256", bytes);
-  return Array.from(new Uint8Array(digest))
-    .map((b) => b.toString(16).padStart(2, "0"))
-    .join("");
-}
 
 const MCP_TOOLS = [
   {
@@ -1620,7 +1605,6 @@ http.route({
   handler: httpAction(async (ctx, req) => {
     const cors = corsHeaders(req);
 
-    // --- Auth ---------------------------------------------------------------
     const authHeader = req.headers.get("Authorization") ?? "";
     const bearer = authHeader.startsWith("Bearer ")
       ? authHeader.slice("Bearer ".length).trim()
@@ -1656,7 +1640,6 @@ http.route({
       );
     }
 
-    // --- Plan gate (Solo+) --------------------------------------------------
     if (ctxToken.plan === "free") {
       return new Response(
         JSON.stringify({
@@ -1673,9 +1656,10 @@ http.route({
       );
     }
 
-    // --- Rate limit ---------------------------------------------------------
+    // Keyed on teamId, not tokenId — a team shouldn't be able to multiply
+    // its effective rate limit by creating more tokens.
     const rl = await ctx.runMutation(internal.rateLimit.check, {
-      key: `mcp:${ctxToken.tokenId}`,
+      key: `mcp:${ctxToken.teamId}`,
       limit: MCP_RATE_LIMIT_PER_MIN,
     });
     if (!rl.allowed) {
@@ -1701,7 +1685,6 @@ http.route({
       );
     }
 
-    // --- Parse JSON-RPC envelope -------------------------------------------
     let payload: {
       jsonrpc?: unknown;
       id?: unknown;
@@ -1729,7 +1712,6 @@ http.route({
     const method = payload.method;
     const params = (payload.params ?? {}) as Record<string, unknown>;
 
-    // --- Dispatch ----------------------------------------------------------
     let response: Response;
     switch (method) {
       case "initialize": {
@@ -1817,17 +1799,9 @@ http.route({
   }),
 });
 
-type McpTokenContext = {
-  tokenId: Id<"apiTokens">;
-  projectId: Id<"projects">;
-  teamId: Id<"teams">;
-  writeKey: string;
-  plan: string;
-};
-
 async function dispatchTool(
-  ctx: Parameters<Parameters<typeof httpAction>[0]>[0],
-  token: McpTokenContext,
+  ctx: ActionCtx,
+  token: ValidatedApiToken,
   name: string,
   args: Record<string, unknown>,
 ) {

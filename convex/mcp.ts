@@ -11,7 +11,7 @@
 
 import { v } from "convex/values";
 import { internalQuery } from "./_generated/server";
-import { PlanId, PLANS } from "./plans";
+import { computeTeamUsage } from "./usage";
 
 const DEFAULT_SINCE_MS = 7 * 24 * 60 * 60 * 1000;
 const DEFAULT_LIMIT = 20;
@@ -36,15 +36,6 @@ function resolveRange(args: {
   return { since, until };
 }
 
-function monthKey(): string {
-  const d = new Date();
-  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
-}
-
-// ---------------------------------------------------------------------------
-// Tool handlers
-// ---------------------------------------------------------------------------
-
 /** list_projects — all projects on the token's team. */
 export const listProjects = internalQuery({
   args: { teamId: v.id("teams") },
@@ -67,29 +58,7 @@ export const listProjects = internalQuery({
 /** get_usage — current month's events, quota, retention for the token's team. */
 export const getUsage = internalQuery({
   args: { teamId: v.id("teams") },
-  handler: async (ctx, args) => {
-    const team = await ctx.db.get("teams", args.teamId);
-    if (!team) return null;
-
-    const plan = (team.plan ?? "free") as PlanId;
-    const limit =
-      team.usageLimitEventsPerMonth ??
-      PLANS[plan]?.eventsPerMonth ??
-      PLANS.free.eventsPerMonth;
-    const currentMonth = monthKey();
-    const usage =
-      team.usageMonthKey === currentMonth
-        ? (team.usageEventsThisMonth ?? 0)
-        : 0;
-
-    return {
-      plan,
-      usage,
-      limit,
-      retentionDays: PLANS[plan]?.retentionDays ?? PLANS.free.retentionDays,
-      hasStripeSubscription: !!team.stripeSubscriptionId,
-    };
-  },
+  handler: async (ctx, args) => computeTeamUsage(ctx, args.teamId),
 });
 
 /** top_pages — page views ranked by count in the given window. */

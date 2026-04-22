@@ -5,9 +5,41 @@ import { MutationCtx, QueryCtx } from "./_generated/server";
 import { PLANS, type PlanId } from "./plans";
 import { getUserId, getUserTeamIds } from "./authHelpers";
 
-function monthKey(): string {
+export function monthKey(): string {
   const now = new Date();
   return `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}`;
+}
+
+/**
+ * Shared usage snapshot for a team — used by both the dashboard's
+ * `getMyUsage` query and the MCP `get_usage` tool so the two surfaces
+ * can never drift.
+ */
+export async function computeTeamUsage(
+  ctx: QueryCtx | MutationCtx,
+  teamId: Id<"teams">,
+) {
+  const team = await ctx.db.get("teams", teamId);
+  if (!team) return null;
+
+  const plan = (team.plan ?? "free") as PlanId;
+  const limit =
+    team.usageLimitEventsPerMonth ??
+    PLANS[plan]?.eventsPerMonth ??
+    PLANS.free.eventsPerMonth;
+  const currentMonth = monthKey();
+  const usage =
+    team.usageMonthKey === currentMonth
+      ? (team.usageEventsThisMonth ?? 0)
+      : 0;
+
+  return {
+    plan,
+    usage,
+    limit,
+    retentionDays: PLANS[plan]?.retentionDays ?? PLANS.free.retentionDays,
+    hasStripeSubscription: !!team.stripeSubscriptionId,
+  };
 }
 
 function monthWindowStart(): number {
@@ -191,26 +223,6 @@ export const getMyUsage = query({
     const teamIds = await getUserTeamIds(ctx, userId);
     if (teamIds.length === 0) return null;
 
-    const team = await ctx.db.get("teams", teamIds[0]);
-    if (!team) return null;
-
-    const plan = (team.plan ?? "free") as PlanId;
-    const limit =
-      team.usageLimitEventsPerMonth ??
-      PLANS[plan]?.eventsPerMonth ??
-      PLANS.free.eventsPerMonth;
-    const currentMonth = monthKey();
-    const usage =
-      team.usageMonthKey === currentMonth
-        ? (team.usageEventsThisMonth ?? 0)
-        : 0;
-
-    return {
-      plan,
-      usage,
-      limit,
-      retentionDays: PLANS[plan]?.retentionDays ?? PLANS.free.retentionDays,
-      hasStripeSubscription: !!team.stripeSubscriptionId,
-    };
+    return computeTeamUsage(ctx, teamIds[0]);
   },
 });

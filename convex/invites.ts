@@ -20,22 +20,15 @@ import { render } from "@react-email/render";
 import { InviteEmail } from "./emails/InviteEmail";
 import { FROM, REPLY_TO, resend } from "./emailConfig";
 import type { QueryCtx, MutationCtx } from "./_generated/server";
+import { sha256Hex } from "./tokenHash";
 
 const INVITE_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
-
-async function hashInviteToken(token: string): Promise<string> {
-  const bytes = new TextEncoder().encode(token);
-  const digest = await crypto.subtle.digest("SHA-256", bytes);
-  return Array.from(new Uint8Array(digest))
-    .map((b) => b.toString(16).padStart(2, "0"))
-    .join("");
-}
 
 async function findInviteByTokenHash(
   ctx: Pick<QueryCtx | MutationCtx, "db">,
   token: string,
 ) {
-  const tokenHash = await hashInviteToken(token);
+  const tokenHash = await sha256Hex(token);
   return await ctx.db
     .query("teamInvites")
     .withIndex("by_tokenHash", (q) => q.eq("tokenHash", tokenHash))
@@ -198,7 +191,7 @@ export const createInvite = mutation({
     const token =
       crypto.randomUUID().replace(/-/g, "") +
       crypto.randomUUID().replace(/-/g, "");
-    const tokenHash = await hashInviteToken(token);
+    const tokenHash = await sha256Hex(token);
 
     await ctx.db.insert("teamInvites", {
       teamId,

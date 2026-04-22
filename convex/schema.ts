@@ -185,7 +185,7 @@ export default defineSchema({
     teamId: v.id("teams"),
     createdBy: v.id("users"),
     name: v.string(),
-    scope: v.union(v.literal("read")),
+    scope: v.literal("read"),
     createdAt: v.number(),
     lastUsedAt: v.optional(v.number()),
     revokedAt: v.optional(v.number()),
