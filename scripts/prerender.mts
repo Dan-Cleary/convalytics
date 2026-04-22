@@ -6,6 +6,9 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { renderToStaticMarkup } from "react-dom/server";
 import { SEOContent } from "../src/marketing/SEOContent.js";
+import { AboutContent } from "../src/marketing/AboutContent.js";
+import { PrivacyContent } from "../src/marketing/PrivacyContent.js";
+import { ContactContent } from "../src/marketing/ContactContent.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const distDir = resolve(__dirname, "../dist");
@@ -24,7 +27,30 @@ interface Route {
   description?: string;
 }
 
-const ROUTES: Route[] = [{ path: "/", component: SEOContent }];
+const ROUTES: Route[] = [
+  { path: "/", component: SEOContent },
+  {
+    path: "/about",
+    component: AboutContent,
+    title: "About Convalytics",
+    description:
+      "Convalytics is analytics for Convex apps, built by Dan Cleary at Tethered Software Inc. Open-source Convex backend component, agent-first setup.",
+  },
+  {
+    path: "/privacy",
+    component: PrivacyContent,
+    title: "Privacy policy | Convalytics",
+    description:
+      "What data Convalytics collects, how it's used, retention, third parties, and your rights under GDPR and CCPA.",
+  },
+  {
+    path: "/contact",
+    component: ContactContent,
+    title: "Contact | Convalytics",
+    description:
+      "Support, bug reports, security disclosure, and open-source contribution channels for Convalytics.",
+  },
+];
 
 const SEO_SLOT = '<div id="seo-content"></div>';
 if (!template.includes(SEO_SLOT)) {

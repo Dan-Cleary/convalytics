@@ -3,7 +3,17 @@
   "rewrites": [
     { "source": "/skill.md", "destination": "https://raw.githubusercontent.com/Dan-Cleary/convalytics-convex-component/main/SKILL.md" },
     { "source": "/llms.txt", "destination": "https://api.convalytics.dev/llms.txt" },
-    { "source": "/((?!\\.well-known/).*)", "destination": "/index.html" }
+    { "source": "/about", "destination": "/about/index.html" },
+    { "source": "/privacy", "destination": "/privacy/index.html" },
+    { "source": "/contact", "destination": "/contact/index.html" },
+    { "source": "/events", "destination": "/index.html" },
+    { "source": "/pages", "destination": "/index.html" },
+    { "source": "/billing", "destination": "/index.html" },
+    { "source": "/members", "destination": "/index.html" },
+    { "source": "/overview", "destination": "/index.html" },
+    { "source": "/oauth/callback", "destination": "/index.html" },
+    { "source": "/claim/:claimToken", "destination": "/index.html" },
+    { "source": "/invite/:inviteToken", "destination": "/index.html" }
   ],
   "headers": [
     {

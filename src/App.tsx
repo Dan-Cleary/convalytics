@@ -4,6 +4,10 @@ import { useAuthActions } from "@convex-dev/auth/react";
 import { api } from "../convex/_generated/api";
 import type { PlanId } from "../convex/plans";
 import { SignInForm } from "./components/SignInForm";
+import { AboutContent } from "./marketing/AboutContent";
+import { PrivacyContent } from "./marketing/PrivacyContent";
+import { ContactContent } from "./marketing/ContactContent";
+import { MarketingPage } from "./marketing/MarketingPage";
 import { Sidebar } from "./components/Sidebar";
 import { BillingSuccessModal } from "./components/BillingSuccessModal";
 import { Overview } from "./pages/Overview";
@@ -60,6 +64,30 @@ export default function App() {
         <Route
           path="/invite/:inviteToken"
           element={<InvitePageWrapper />}
+        />
+        <Route
+          path="/about"
+          element={
+            <MarketingPage>
+              <AboutContent />
+            </MarketingPage>
+          }
+        />
+        <Route
+          path="/privacy"
+          element={
+            <MarketingPage>
+              <PrivacyContent />
+            </MarketingPage>
+          }
+        />
+        <Route
+          path="/contact"
+          element={
+            <MarketingPage>
+              <ContactContent />
+            </MarketingPage>
+          }
         />
         {/* Home — sign-in OR redirect to dashboard */}
         <Route
