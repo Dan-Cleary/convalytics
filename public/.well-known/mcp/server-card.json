@@ -35,6 +35,10 @@
     {
       "name": "recent_events",
       "description": "Return the most recent custom events for a specific project; PII is redacted by default. Takes `project`."
+    },
+    {
+      "name": "weekly_digest",
+      "description": "Composite snapshot over a lookback window: visitors, pageviews, sessions, bounce rate, session duration, top 5 pages, top 5 referrers, top 5 events. Includes period-over-period comparison. Takes `project`, optional `days` (default 7) and `compare` (default true)."
     }
   ],
   "contact": {

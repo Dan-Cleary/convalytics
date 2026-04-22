@@ -11,6 +11,7 @@
 
 import { v } from "convex/values";
 import { internalQuery } from "./_generated/server";
+import type { QueryCtx } from "./_generated/server";
 import { computeTeamUsage } from "./usage";
 
 /**
@@ -236,6 +237,194 @@ export const eventsCount = internalQuery({
     };
   },
 });
+
+/**
+ * weekly_digest — composite snapshot so an agent gets "how did we do this
+ * window?" in one call. Aggregates pageviews + events + top-5s, plus an
+ * optional period-over-period delta against the prior equal-length period.
+ *
+ * Cheaper than chaining 4-5 tools because we do one scan per table per
+ * period. The `truncated` flags tell the agent whether the scan cap kicked
+ * in (in which case narrow `days` to get exact numbers).
+ */
+const DIGEST_SCAN_CAP = 50_000;
+
+export const weeklyDigest = internalQuery({
+  args: {
+    writeKey: v.string(),
+    days: v.optional(v.number()),
+    compare: v.optional(v.boolean()),
+  },
+  handler: async (ctx, args) => {
+    const days = Math.min(Math.max(args.days ?? 7, 1), 90);
+    const compare = args.compare ?? true;
+    const DAY_MS = 24 * 60 * 60 * 1000;
+    const now = Date.now();
+    const current = { since: now - days * DAY_MS, until: now };
+    const previous = compare
+      ? { since: now - 2 * days * DAY_MS, until: now - days * DAY_MS }
+      : null;
+
+    const currentStats = await windowStats(ctx, args.writeKey, current);
+    const previousStats = previous
+      ? await windowStats(ctx, args.writeKey, previous)
+      : null;
+
+    return {
+      window: { days, since: current.since, until: current.until },
+      current: currentStats,
+      previous: previousStats,
+      comparison: previousStats
+        ? {
+            uniqueVisitorsDelta: pctDelta(
+              currentStats.traffic.uniqueVisitors,
+              previousStats.traffic.uniqueVisitors,
+            ),
+            pageviewsDelta: pctDelta(
+              currentStats.traffic.pageviews,
+              previousStats.traffic.pageviews,
+            ),
+            sessionsDelta: pctDelta(
+              currentStats.traffic.sessions,
+              previousStats.traffic.sessions,
+            ),
+            // Bounce-rate delta is in percentage points, not percent change.
+            bounceRatePointsDelta:
+              currentStats.traffic.bounceRate -
+              previousStats.traffic.bounceRate,
+            avgSessionDurationDelta: pctDelta(
+              currentStats.traffic.avgSessionDurationSeconds,
+              previousStats.traffic.avgSessionDurationSeconds,
+            ),
+            customEventsDelta: pctDelta(
+              currentStats.customEventsTotal,
+              previousStats.customEventsTotal,
+            ),
+          }
+        : null,
+    };
+  },
+});
+
+function pctDelta(curr: number, prev: number): number | null {
+  if (prev === 0) return curr > 0 ? null : 0;
+  return Math.round(((curr - prev) / prev) * 1000) / 10;
+}
+
+type WindowRange = { since: number; until: number };
+
+async function windowStats(
+  ctx: QueryCtx,
+  writeKey: string,
+  range: WindowRange,
+) {
+  const pageviewRows = await ctx.db
+    .query("pageviews")
+    .withIndex("by_writeKey_and_timestamp", (q) =>
+      q.eq("writeKey", writeKey).gte("timestamp", range.since),
+    )
+    .order("desc")
+    .take(DIGEST_SCAN_CAP);
+
+  const eventRows = await ctx.db
+    .query("events")
+    .withIndex("by_writeKey_and_timestamp", (q) =>
+      q.eq("writeKey", writeKey).gte("timestamp", range.since),
+    )
+    .order("desc")
+    .take(DIGEST_SCAN_CAP);
+
+  const pageviews = pageviewRows.filter((r) => r.timestamp <= range.until);
+  const events = eventRows.filter((r) => r.timestamp <= range.until);
+
+  const visitors = new Set(pageviews.map((r) => r.visitorId));
+  const sessionStats = new Map<
+    string,
+    { count: number; minTs: number; maxTs: number }
+  >();
+  const pageMap = new Map<string, { views: number; visitors: Set<string> }>();
+  const refMap = new Map<string, number>();
+
+  for (const r of pageviews) {
+    const s = sessionStats.get(r.sessionId) ?? {
+      count: 0,
+      minTs: r.timestamp,
+      maxTs: r.timestamp,
+    };
+    s.count++;
+    s.minTs = Math.min(s.minTs, r.timestamp);
+    s.maxTs = Math.max(s.maxTs, r.timestamp);
+    sessionStats.set(r.sessionId, s);
+
+    const p = pageMap.get(r.path) ?? {
+      views: 0,
+      visitors: new Set<string>(),
+    };
+    p.views++;
+    p.visitors.add(r.visitorId);
+    pageMap.set(r.path, p);
+
+    const host = r.referrerHost || "(direct)";
+    refMap.set(host, (refMap.get(host) ?? 0) + 1);
+  }
+
+  const sessions = sessionStats.size;
+  const bounced = [...sessionStats.values()].filter(
+    (s) => s.count === 1,
+  ).length;
+  const bounceRate = sessions > 0 ? Math.round((bounced / sessions) * 100) : 0;
+
+  // Session duration uses only sessions with at least 2 pageviews so
+  // single-hit sessions don't drag the average to zero.
+  const durations = [...sessionStats.values()]
+    .filter((s) => s.count > 1)
+    .map((s) => (s.maxTs - s.minTs) / 1000);
+  const avgSessionDurationSeconds =
+    durations.length > 0
+      ? Math.round(durations.reduce((a, b) => a + b, 0) / durations.length)
+      : 0;
+
+  const topPages = [...pageMap.entries()]
+    .sort((a, b) => b[1].views - a[1].views)
+    .slice(0, 5)
+    .map(([path, { views, visitors: vs }]) => ({
+      path,
+      views,
+      uniqueVisitors: vs.size,
+    }));
+
+  const topReferrers = [...refMap.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 5)
+    .map(([source, visits]) => ({ source, visits }));
+
+  const eventNameCounts = new Map<string, number>();
+  for (const e of events) {
+    eventNameCounts.set(e.name, (eventNameCounts.get(e.name) ?? 0) + 1);
+  }
+  const topEvents = [...eventNameCounts.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 5)
+    .map(([name, count]) => ({ name, count }));
+
+  return {
+    traffic: {
+      uniqueVisitors: visitors.size,
+      pageviews: pageviews.length,
+      sessions,
+      bounceRate,
+      avgSessionDurationSeconds,
+    },
+    topPages,
+    topReferrers,
+    customEventsTotal: events.length,
+    topEvents,
+    truncated: {
+      pageviews: pageviewRows.length >= DIGEST_SCAN_CAP,
+      events: eventRows.length >= DIGEST_SCAN_CAP,
+    },
+  };
+}
 
 /** recent_events — last N events, optionally filtered by name, with optional prop redaction for PII. */
 export const recentEvents = internalQuery({

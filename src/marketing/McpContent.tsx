@@ -130,6 +130,16 @@ export function McpContent() {
             <code>props</code> are redacted by default; pass{" "}
             <code>redact: false</code> to include them.
           </li>
+          <li>
+            <strong>weekly_digest(project, days?, compare?)</strong>: one
+            composite snapshot of a project's web analytics. Returns visitors,
+            pageviews, sessions, bounce rate, avg session duration, top 5
+            pages, top 5 referrers, total custom events, top 5 event names,
+            plus period-over-period deltas against the prior equal-length
+            window. Default <code>days: 7</code>, <code>compare: true</code>.
+            Use this instead of chaining top_pages + top_referrers +
+            events_count when the agent just wants to report on a window.
+          </li>
         </ul>
         <p>
           <code>project</code> accepts either the project's case-insensitive

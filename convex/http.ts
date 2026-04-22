@@ -1585,6 +1585,33 @@ const MCP_TOOLS = [
       additionalProperties: false,
     },
   },
+  {
+    name: "weekly_digest",
+    description:
+      "Composite snapshot of a project's web analytics over a lookback window. Returns unique visitors, pageviews, sessions, bounce rate, average session duration, top 5 pages, top 5 referrers, total custom events, and top 5 event names. Includes period-over-period comparison against the prior equal-length window unless compare: false. Prefer this over chaining top_pages + top_referrers + events_count when the agent just wants to report on the week.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        project: {
+          type: "string",
+          description:
+            "Project name (case-insensitive) or project id from list_projects.",
+        },
+        days: {
+          type: "number",
+          description:
+            "Lookback window in days, 1 to 90. Default 7.",
+        },
+        compare: {
+          type: "boolean",
+          description:
+            "Include period-over-period comparison against the prior equal-length window. Default true. Set false for faster response when only current numbers matter.",
+        },
+      },
+      required: ["project"],
+      additionalProperties: false,
+    },
+  },
 ] as const;
 
 function jsonRpcResponse(
@@ -1868,6 +1895,14 @@ async function dispatchTool(
         name: strOrUndefined(args.name),
         limit: numOrUndefined(args.limit),
         redact: typeof args.redact === "boolean" ? args.redact : undefined,
+      });
+    }
+    case "weekly_digest": {
+      const { writeKey } = await resolveProject(ctx, token.teamId, args);
+      return ctx.runQuery(internal.mcp.weeklyDigest, {
+        writeKey,
+        days: numOrUndefined(args.days),
+        compare: typeof args.compare === "boolean" ? args.compare : undefined,
       });
     }
     default:
