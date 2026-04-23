@@ -1755,7 +1755,15 @@ http.route({
         }),
         {
           status: 401,
-          headers: { ...cors, "Content-Type": "application/json" },
+          headers: {
+            ...cors,
+            "Content-Type": "application/json",
+            // RFC 6750 Bearer challenge. No `resource_metadata` or
+            // `authorization_uri` because we do NOT implement OAuth; clients
+            // that probe for OAuth discovery (Smithery) see this and stop
+            // looking for it.
+            "WWW-Authenticate": 'Bearer realm="convalytics-mcp"',
+          },
         },
       );
     }
@@ -1772,7 +1780,12 @@ http.route({
         }),
         {
           status: 401,
-          headers: { ...cors, "Content-Type": "application/json" },
+          headers: {
+            ...cors,
+            "Content-Type": "application/json",
+            "WWW-Authenticate":
+              'Bearer realm="convalytics-mcp", error="invalid_token", error_description="Token is invalid or has been revoked"',
+          },
         },
       );
     }
