@@ -1792,6 +1792,18 @@ http.route({
     if (method === "tools/list") {
       return jsonRpcResponse(id, { tools: MCP_TOOLS }, cors);
     }
+    // Spec-optional capability probes. We don't implement resources,
+    // prompts, or triggers, but returning empty arrays keeps registry
+    // scanners (Smithery) from emitting warnings about them.
+    if (method === "resources/list") {
+      return jsonRpcResponse(id, { resources: [] }, cors);
+    }
+    if (method === "prompts/list") {
+      return jsonRpcResponse(id, { prompts: [] }, cors);
+    }
+    if (method === "triggers/list") {
+      return jsonRpcResponse(id, { triggers: [] }, cors);
+    }
 
     // Everything else (tools/call, and any future auth'd method) requires
     // a token + plan + rate-limit budget.
