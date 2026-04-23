@@ -1736,10 +1736,69 @@ http.route({
   handler: httpAction(async (ctx, req) => {
     const cors = corsHeaders(req);
 
+    // Parse the JSON-RPC request early so we can route public discovery
+    // methods (initialize, tools/list, ping) without requiring auth. That
+    // matches how most remote MCP servers behave (PostHog, Linear, etc.)
+    // and keeps registry scanners like Smithery from chasing an OAuth
+    // discovery path just to see the tool list.
+    let payload: {
+      jsonrpc?: unknown;
+      id?: unknown;
+      method?: unknown;
+      params?: unknown;
+    };
+    try {
+      const text = await req.text();
+      payload = JSON.parse(text) as typeof payload;
+    } catch {
+      return jsonRpcError(null, -32700, "Parse error", cors);
+    }
+
+    const id =
+      typeof payload.id === "number" ||
+      typeof payload.id === "string" ||
+      payload.id === null
+        ? payload.id
+        : null;
+
+    if (payload.jsonrpc !== "2.0" || typeof payload.method !== "string") {
+      return jsonRpcError(id, -32600, "Invalid Request", cors);
+    }
+
+    const method = payload.method;
+    const params = (payload.params ?? {}) as Record<string, unknown>;
+
+    // Public discovery — no auth required.
+    if (method === "initialize") {
+      return jsonRpcResponse(
+        id,
+        {
+          protocolVersion: MCP_PROTOCOL_VERSION,
+          capabilities: { tools: { listChanged: false } },
+          serverInfo: {
+            name: MCP_SERVER_NAME,
+            version: MCP_SERVER_VERSION,
+          },
+        },
+        cors,
+      );
+    }
+    if (method === "notifications/initialized" || method === "notifications/cancelled") {
+      return new Response(null, { status: 204, headers: cors });
+    }
+    if (method === "ping") {
+      return jsonRpcResponse(id, {}, cors);
+    }
+    if (method === "tools/list") {
+      return jsonRpcResponse(id, { tools: MCP_TOOLS }, cors);
+    }
+
+    // Everything else (tools/call, and any future auth'd method) requires
+    // a token + plan + rate-limit budget.
+
     // Accept either `Bearer cnv_...` (what Claude Code/Desktop/Cursor emit
     // by convention) or a bare `cnv_...` (what the Smithery gateway
     // forwards — its simple header-pass-through doesn't template a prefix).
-    // Both map to the same token; the Bearer prefix is informational.
     const authHeader = (req.headers.get("Authorization") ?? "").trim();
     const bearer = authHeader.startsWith("Bearer ")
       ? authHeader.slice("Bearer ".length).trim()
@@ -1747,24 +1806,11 @@ http.route({
         ? authHeader
         : "";
     if (!bearer) {
-      return new Response(
-        JSON.stringify({
-          error: "invalid_token",
-          message:
-            "Missing or malformed Authorization header. Use: Authorization: Bearer cnv_... (or a bare cnv_... token).",
-        }),
-        {
-          status: 401,
-          headers: {
-            ...cors,
-            "Content-Type": "application/json",
-            // RFC 6750 Bearer challenge. No `resource_metadata` or
-            // `authorization_uri` because we do NOT implement OAuth; clients
-            // that probe for OAuth discovery (Smithery) see this and stop
-            // looking for it.
-            "WWW-Authenticate": 'Bearer realm="convalytics-mcp"',
-          },
-        },
+      return jsonRpcError(
+        id,
+        -32001,
+        "Authentication required. Send your Convalytics API token in the Authorization header: 'Bearer cnv_...' or bare 'cnv_...'. Create a token at https://convalytics.dev/tokens.",
+        cors,
       );
     }
 
@@ -1773,20 +1819,11 @@ http.route({
       tokenHash,
     });
     if (!ctxToken) {
-      return new Response(
-        JSON.stringify({
-          error: "invalid_token",
-          message: "Token is invalid or has been revoked.",
-        }),
-        {
-          status: 401,
-          headers: {
-            ...cors,
-            "Content-Type": "application/json",
-            "WWW-Authenticate":
-              'Bearer realm="convalytics-mcp", error="invalid_token", error_description="Token is invalid or has been revoked"',
-          },
-        },
+      return jsonRpcError(
+        id,
+        -32001,
+        "Token is invalid or has been revoked. Create a new one at https://convalytics.dev/tokens.",
+        cors,
       );
     }
 
@@ -1835,64 +1872,11 @@ http.route({
       );
     }
 
-    let payload: {
-      jsonrpc?: unknown;
-      id?: unknown;
-      method?: unknown;
-      params?: unknown;
-    };
-    try {
-      const text = await req.text();
-      payload = JSON.parse(text) as typeof payload;
-    } catch {
-      return jsonRpcError(null, -32700, "Parse error", cors);
-    }
-
-    const id =
-      typeof payload.id === "number" ||
-      typeof payload.id === "string" ||
-      payload.id === null
-        ? payload.id
-        : null;
-
-    if (payload.jsonrpc !== "2.0" || typeof payload.method !== "string") {
-      return jsonRpcError(id, -32600, "Invalid Request", cors);
-    }
-
-    const method = payload.method;
-    const params = (payload.params ?? {}) as Record<string, unknown>;
-
+    // initialize / tools/list / ping / notifications are handled earlier,
+    // pre-auth. We only reach here for tools/call (and any future method
+    // that requires the token + plan + rate-limit budget).
     let response: Response;
     switch (method) {
-      case "initialize": {
-        response = jsonRpcResponse(
-          id,
-          {
-            protocolVersion: MCP_PROTOCOL_VERSION,
-            capabilities: { tools: { listChanged: false } },
-            serverInfo: {
-              name: MCP_SERVER_NAME,
-              version: MCP_SERVER_VERSION,
-            },
-          },
-          cors,
-        );
-        break;
-      }
-      case "notifications/initialized":
-      case "notifications/cancelled": {
-        // Notifications have no id and expect no response body.
-        response = new Response(null, { status: 204, headers: cors });
-        break;
-      }
-      case "ping": {
-        response = jsonRpcResponse(id, {}, cors);
-        break;
-      }
-      case "tools/list": {
-        response = jsonRpcResponse(id, { tools: MCP_TOOLS }, cors);
-        break;
-      }
       case "tools/call": {
         const toolName = typeof params.name === "string" ? params.name : null;
         const toolArgs = (params.arguments ?? {}) as Record<string, unknown>;
