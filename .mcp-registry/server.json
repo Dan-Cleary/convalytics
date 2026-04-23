@@ -1,7 +1,7 @@
 {
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-07-09/server.schema.json",
   "name": "io.github.Dan-Cleary/convalytics",
-  "description": "Read-only analytics tools for AI assistants. Query top pages, top referrers, custom event counts, recent events, usage, and projects for your Convalytics account via MCP. Requires a Convalytics API token and an active Solo or Pro plan.",
+  "description": "Read-only analytics for Convex apps, queryable via MCP from Claude, Cursor, and other clients.",
   "version": "1.0.0",
   "repository": {
     "url": "https://github.com/Dan-Cleary/convalytics",

@@ -2067,4 +2067,25 @@ function strOrUndefined(v: unknown): string | undefined {
   return typeof v === "string" && v.length > 0 ? v : undefined;
 }
 
+const notFoundJson = httpAction(async (_ctx, req) => {
+  const { pathname } = new URL(req.url);
+  return new Response(
+    JSON.stringify({
+      error: "not_found",
+      message: `No route for ${req.method} ${pathname}. See https://convalytics.dev/llms-full.txt`,
+    }),
+    {
+      status: 404,
+      headers: {
+        "Content-Type": "application/json; charset=utf-8",
+        ...corsHeaders(req),
+      },
+    },
+  );
+});
+
+for (const method of ["GET", "POST", "PUT", "PATCH", "DELETE"] as const) {
+  http.route({ pathPrefix: "/", method, handler: notFoundJson });
+}
+
 export default http;
