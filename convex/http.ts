@@ -1485,18 +1485,42 @@ const MCP_SERVER_NAME = "convalytics";
 const MCP_SERVER_VERSION = "1.0.0";
 const MCP_RATE_LIMIT_PER_MIN = 120;
 
+// Shared descriptions to keep MCP tool schemas DRY — every project-scoped
+// tool accepts the same project/since/until semantics.
+const PROJECT_DESC =
+  "Project name (case-insensitive, e.g. 'slopbench') or project id from list_projects.";
+const SINCE_DESC =
+  "Start of window as unix milliseconds. Defaults to 7 days ago.";
+const UNTIL_DESC = "End of window as unix milliseconds. Defaults to now.";
+const USER_DESC =
+  "Optional. Filter to one visitor/user. Accepts userEmail (case-insensitive) or visitorId (exact). For the full per-user snapshot prefer user_activity.";
+
+// Annotations on every tool (MCP spec 2025-06-18). All Convalytics tools are
+// read-only (no writes), deterministic for the same inputs within a scan
+// window, and closed-world (only read from Convalytics's own DB, no external
+// calls). These hints let MCP clients display appropriate UI and optimize
+// planning — registry-quality scanners also give credit for having them.
+const READ_ONLY_ANNOTATIONS = {
+  readOnlyHint: true,
+  destructiveHint: false,
+  idempotentHint: true,
+  openWorldHint: false,
+} as const;
+
 const MCP_TOOLS = [
   {
     name: "list_projects",
     description:
       "List all Convalytics projects on the team this token belongs to. Useful when the agent needs to confirm the project it's querying against. No arguments.",
     inputSchema: { type: "object", properties: {}, additionalProperties: false },
+    annotations: { ...READ_ONLY_ANNOTATIONS, title: "List projects" },
   },
   {
     name: "get_usage",
     description:
       "Return the current month's custom-event usage, monthly quota, retention days, and plan name for the team.",
     inputSchema: { type: "object", properties: {}, additionalProperties: false },
+    annotations: { ...READ_ONLY_ANNOTATIONS, title: "Get usage and plan" },
   },
   {
     name: "top_pages",
@@ -1505,33 +1529,19 @@ const MCP_TOOLS = [
     inputSchema: {
       type: "object",
       properties: {
-        project: {
-          type: "string",
-          description:
-            "Project name (case-insensitive, e.g. 'slopbench') or project id from list_projects.",
-        },
-        since: {
-          type: "number",
-          description:
-            "Start of window as unix milliseconds. Defaults to 7 days ago.",
-        },
-        until: {
-          type: "number",
-          description: "End of window as unix milliseconds. Defaults to now.",
-        },
+        project: { type: "string", description: PROJECT_DESC },
+        since: { type: "number", description: SINCE_DESC },
+        until: { type: "number", description: UNTIL_DESC },
         limit: {
           type: "number",
           description: "Maximum number of pages to return. Default 20, max 50.",
         },
-        user: {
-          type: "string",
-          description:
-            "Optional. Filter to a single visitor. Accepts userEmail (case-insensitive) or visitorId (exact). For a full per-user snapshot prefer user_activity.",
-        },
+        user: { type: "string", description: USER_DESC },
       },
       required: ["project"],
       additionalProperties: false,
     },
+    annotations: { ...READ_ONLY_ANNOTATIONS, title: "Top pages" },
   },
   {
     name: "top_referrers",
@@ -1540,13 +1550,9 @@ const MCP_TOOLS = [
     inputSchema: {
       type: "object",
       properties: {
-        project: {
-          type: "string",
-          description:
-            "Project name (case-insensitive) or project id from list_projects.",
-        },
-        since: { type: "number" },
-        until: { type: "number" },
+        project: { type: "string", description: PROJECT_DESC },
+        since: { type: "number", description: SINCE_DESC },
+        until: { type: "number", description: UNTIL_DESC },
         limit: {
           type: "number",
           description: "Maximum number of referrers to return. Default 10, max 50.",
@@ -1555,6 +1561,7 @@ const MCP_TOOLS = [
       required: ["project"],
       additionalProperties: false,
     },
+    annotations: { ...READ_ONLY_ANNOTATIONS, title: "Top referrers" },
   },
   {
     name: "pageviews_count",
@@ -1563,22 +1570,15 @@ const MCP_TOOLS = [
     inputSchema: {
       type: "object",
       properties: {
-        project: {
-          type: "string",
-          description:
-            "Project name (case-insensitive) or project id from list_projects.",
-        },
-        since: { type: "number" },
-        until: { type: "number" },
-        user: {
-          type: "string",
-          description:
-            "Optional. Filter to one visitor. Accepts userEmail (case-insensitive) or visitorId (exact).",
-        },
+        project: { type: "string", description: PROJECT_DESC },
+        since: { type: "number", description: SINCE_DESC },
+        until: { type: "number", description: UNTIL_DESC },
+        user: { type: "string", description: USER_DESC },
       },
       required: ["project"],
       additionalProperties: false,
     },
+    annotations: { ...READ_ONLY_ANNOTATIONS, title: "Page views count" },
   },
   {
     name: "events_count",
@@ -1587,27 +1587,20 @@ const MCP_TOOLS = [
     inputSchema: {
       type: "object",
       properties: {
-        project: {
-          type: "string",
-          description:
-            "Project name (case-insensitive) or project id from list_projects.",
-        },
+        project: { type: "string", description: PROJECT_DESC },
         name: {
           type: "string",
           description:
             "Optional event name to filter by (e.g. 'signup_completed'). If omitted, counts all custom events in the window. Do NOT pass 'page_view' here — page views are in a separate table.",
         },
-        since: { type: "number" },
-        until: { type: "number" },
-        user: {
-          type: "string",
-          description:
-            "Optional. Filter to a single user. Accepts userEmail (case-insensitive) or visitorId (exact). Combine with `name` to count a specific event by a specific user.",
-        },
+        since: { type: "number", description: SINCE_DESC },
+        until: { type: "number", description: UNTIL_DESC },
+        user: { type: "string", description: USER_DESC },
       },
       required: ["project"],
       additionalProperties: false,
     },
+    annotations: { ...READ_ONLY_ANNOTATIONS, title: "Events count" },
   },
   {
     name: "recent_events",
@@ -1616,12 +1609,12 @@ const MCP_TOOLS = [
     inputSchema: {
       type: "object",
       properties: {
-        project: {
+        project: { type: "string", description: PROJECT_DESC },
+        name: {
           type: "string",
           description:
-            "Project name (case-insensitive) or project id from list_projects.",
+            "Optional event name to filter by (e.g. 'signup_completed'). Omit to return events of any name.",
         },
-        name: { type: "string" },
         limit: {
           type: "number",
           description: "Maximum number of events to return. Default 20, max 100.",
@@ -1631,15 +1624,12 @@ const MCP_TOOLS = [
           description:
             "If true (default), userEmail/userName are null and props is {}. Set to false to include them.",
         },
-        user: {
-          type: "string",
-          description:
-            "Optional. Filter to one user. Accepts userEmail (case-insensitive) or visitorId (exact).",
-        },
+        user: { type: "string", description: USER_DESC },
       },
       required: ["project"],
       additionalProperties: false,
     },
+    annotations: { ...READ_ONLY_ANNOTATIONS, title: "Recent events" },
   },
   {
     name: "user_activity",
@@ -1648,35 +1638,29 @@ const MCP_TOOLS = [
     inputSchema: {
       type: "object",
       properties: {
-        project: {
-          type: "string",
-          description:
-            "Project name (case-insensitive) or project id from list_projects.",
-        },
+        project: { type: "string", description: PROJECT_DESC },
         user: {
           type: "string",
           description:
             "User identifier. Accepts userEmail (case-insensitive, e.g. 'dan@example.com') or visitorId (the exact string passed as userId on the original track() call).",
         },
-        since: { type: "number" },
-        until: { type: "number" },
+        since: { type: "number", description: SINCE_DESC },
+        until: { type: "number", description: UNTIL_DESC },
       },
       required: ["project", "user"],
       additionalProperties: false,
     },
+    annotations: { ...READ_ONLY_ANNOTATIONS, title: "User activity" },
   },
   {
     name: "weekly_digest",
     description:
       "Composite snapshot of a project's web analytics over a lookback window. Returns unique visitors, pageviews, sessions, bounce rate, average session duration, top 5 pages, top 5 referrers, total custom events, and top 5 event names. Includes period-over-period comparison against the prior equal-length window unless compare: false. Prefer this over chaining top_pages + top_referrers + events_count when the agent just wants to report on the week.",
+    annotations: { ...READ_ONLY_ANNOTATIONS, title: "Weekly digest" },
     inputSchema: {
       type: "object",
       properties: {
-        project: {
-          type: "string",
-          description:
-            "Project name (case-insensitive) or project id from list_projects.",
-        },
+        project: { type: "string", description: PROJECT_DESC },
         days: {
           type: "number",
           description:
