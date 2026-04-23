@@ -1736,16 +1736,22 @@ http.route({
   handler: httpAction(async (ctx, req) => {
     const cors = corsHeaders(req);
 
-    const authHeader = req.headers.get("Authorization") ?? "";
+    // Accept either `Bearer cnv_...` (what Claude Code/Desktop/Cursor emit
+    // by convention) or a bare `cnv_...` (what the Smithery gateway
+    // forwards — its simple header-pass-through doesn't template a prefix).
+    // Both map to the same token; the Bearer prefix is informational.
+    const authHeader = (req.headers.get("Authorization") ?? "").trim();
     const bearer = authHeader.startsWith("Bearer ")
       ? authHeader.slice("Bearer ".length).trim()
-      : "";
+      : authHeader.startsWith("cnv_")
+        ? authHeader
+        : "";
     if (!bearer) {
       return new Response(
         JSON.stringify({
           error: "invalid_token",
           message:
-            "Missing Authorization header. Use: Authorization: Bearer cnv_...",
+            "Missing or malformed Authorization header. Use: Authorization: Bearer cnv_... (or a bare cnv_... token).",
         }),
         {
           status: 401,
