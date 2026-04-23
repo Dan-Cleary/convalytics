@@ -10,6 +10,14 @@
       "description": "Create one at https://convalytics.dev/tokens. The MCP endpoint requires the Solo ($29/mo) or Pro ($99/mo) plan.",
       "x-from": { "header": "x-convalytics-token" },
       "x-to":   { "header": "Authorization" }
+    },
+    "environment": {
+      "type": "string",
+      "title": "Environment filter",
+      "description": "Optional. Scope every query to one environment so mixed dev + prod traffic doesn't pollute results. Leave blank to include everything. Matches what the Environment toggle does on the convalytics.dev dashboard.",
+      "enum": ["production", "development"],
+      "x-from": { "header": "x-convalytics-environment" },
+      "x-to":   { "header": "x-convalytics-environment" }
     }
   },
   "required": ["apiKey"]

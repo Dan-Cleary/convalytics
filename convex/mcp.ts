@@ -89,6 +89,69 @@ function resolveRange(args: {
 }
 
 /**
+ * Scan pageviews in a window, using the environment-scoped index when the
+ * caller narrowed to one env (faster + cheaper than scanning all rows then
+ * filtering in-memory). Shared by top_pages, top_referrers, pageviews_count,
+ * user_activity, and weekly_digest.
+ */
+function scanPageviews(
+  ctx: QueryCtx,
+  writeKey: string,
+  since: number,
+  environment: string | undefined,
+  limit: number,
+) {
+  if (environment) {
+    return ctx.db
+      .query("pageviews")
+      .withIndex("by_writeKey_and_environment_and_timestamp", (q) =>
+        q
+          .eq("writeKey", writeKey)
+          .eq("environment", environment)
+          .gte("timestamp", since),
+      )
+      .order("desc")
+      .take(limit);
+  }
+  return ctx.db
+    .query("pageviews")
+    .withIndex("by_writeKey_and_timestamp", (q) =>
+      q.eq("writeKey", writeKey).gte("timestamp", since),
+    )
+    .order("desc")
+    .take(limit);
+}
+
+/** Same shape for events — keeps both tables' env-scoped indexes honored. */
+function scanEvents(
+  ctx: QueryCtx,
+  writeKey: string,
+  since: number,
+  environment: string | undefined,
+  limit: number,
+) {
+  if (environment) {
+    return ctx.db
+      .query("events")
+      .withIndex("by_writeKey_and_environment_and_timestamp", (q) =>
+        q
+          .eq("writeKey", writeKey)
+          .eq("environment", environment)
+          .gte("timestamp", since),
+      )
+      .order("desc")
+      .take(limit);
+  }
+  return ctx.db
+    .query("events")
+    .withIndex("by_writeKey_and_timestamp", (q) =>
+      q.eq("writeKey", writeKey).gte("timestamp", since),
+    )
+    .order("desc")
+    .take(limit);
+}
+
+/**
  * Match a stored row against the `user` argument an agent passed. Emails are
  * case-insensitive (users don't think in case); visitorId is exact because
  * it's an opaque identifier. `visitorId` is what the ingest handler stores
@@ -142,18 +205,19 @@ export const topPages = internalQuery({
     until: v.optional(v.number()),
     limit: v.optional(v.number()),
     user: v.optional(v.string()),
+    environment: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const { since, until } = resolveRange(args);
     const cap = clampLimit(args.limit, 20, 50);
 
-    const rows = await ctx.db
-      .query("pageviews")
-      .withIndex("by_writeKey_and_timestamp", (q) =>
-        q.eq("writeKey", args.writeKey).gte("timestamp", since),
-      )
-      .order("desc")
-      .take(MAX_SCAN);
+    const rows = await scanPageviews(
+      ctx,
+      args.writeKey,
+      since,
+      args.environment,
+      MAX_SCAN,
+    );
 
     const bounded = rows.filter(
       (r) => r.timestamp <= until && (!args.user || matchesUser(r, args.user)),
@@ -195,18 +259,19 @@ export const topReferrers = internalQuery({
     since: v.optional(v.number()),
     until: v.optional(v.number()),
     limit: v.optional(v.number()),
+    environment: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const { since, until } = resolveRange(args);
     const cap = clampLimit(args.limit, 10, 50);
 
-    const rows = await ctx.db
-      .query("pageviews")
-      .withIndex("by_writeKey_and_timestamp", (q) =>
-        q.eq("writeKey", args.writeKey).gte("timestamp", since),
-      )
-      .order("desc")
-      .take(MAX_SCAN / 2);
+    const rows = await scanPageviews(
+      ctx,
+      args.writeKey,
+      since,
+      args.environment,
+      MAX_SCAN / 2,
+    );
 
     const bounded = rows.filter((r) => r.timestamp <= until);
 
@@ -236,17 +301,18 @@ export const pageviewsCount = internalQuery({
     since: v.optional(v.number()),
     until: v.optional(v.number()),
     user: v.optional(v.string()),
+    environment: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const { since, until } = resolveRange(args);
 
-    const rows = await ctx.db
-      .query("pageviews")
-      .withIndex("by_writeKey_and_timestamp", (q) =>
-        q.eq("writeKey", args.writeKey).gte("timestamp", since),
-      )
-      .order("desc")
-      .take(MAX_SCAN);
+    const rows = await scanPageviews(
+      ctx,
+      args.writeKey,
+      since,
+      args.environment,
+      MAX_SCAN,
+    );
 
     const bounded = rows.filter(
       (r) => r.timestamp <= until && (!args.user || matchesUser(r, args.user)),
@@ -272,17 +338,18 @@ export const eventsCount = internalQuery({
     since: v.optional(v.number()),
     until: v.optional(v.number()),
     user: v.optional(v.string()),
+    environment: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const { since, until } = resolveRange(args);
 
-    const rows = await ctx.db
-      .query("events")
-      .withIndex("by_writeKey_and_timestamp", (q) =>
-        q.eq("writeKey", args.writeKey).gte("timestamp", since),
-      )
-      .order("desc")
-      .take(MAX_SCAN);
+    const rows = await scanEvents(
+      ctx,
+      args.writeKey,
+      since,
+      args.environment,
+      MAX_SCAN,
+    );
 
     const bounded = rows.filter(
       (r) => r.timestamp <= until && (!args.user || matchesUser(r, args.user)),
@@ -321,6 +388,7 @@ export const weeklyDigest = internalQuery({
     writeKey: v.string(),
     days: v.optional(v.number()),
     compare: v.optional(v.boolean()),
+    environment: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const days = Math.min(Math.max(args.days ?? 7, 1), 90);
@@ -332,9 +400,14 @@ export const weeklyDigest = internalQuery({
       ? { since: now - 2 * days * DAY_MS, until: now - days * DAY_MS }
       : null;
 
-    const currentStats = await windowStats(ctx, args.writeKey, current);
+    const currentStats = await windowStats(
+      ctx,
+      args.writeKey,
+      current,
+      args.environment,
+    );
     const previousStats = previous
-      ? await windowStats(ctx, args.writeKey, previous)
+      ? await windowStats(ctx, args.writeKey, previous, args.environment)
       : null;
 
     return {
@@ -384,22 +457,23 @@ async function windowStats(
   ctx: QueryCtx,
   writeKey: string,
   range: WindowRange,
+  environment: string | undefined,
 ) {
-  const pageviewRows = await ctx.db
-    .query("pageviews")
-    .withIndex("by_writeKey_and_timestamp", (q) =>
-      q.eq("writeKey", writeKey).gte("timestamp", range.since),
-    )
-    .order("desc")
-    .take(DIGEST_SCAN_CAP);
+  const pageviewRows = await scanPageviews(
+    ctx,
+    writeKey,
+    range.since,
+    environment,
+    DIGEST_SCAN_CAP,
+  );
 
-  const eventRows = await ctx.db
-    .query("events")
-    .withIndex("by_writeKey_and_timestamp", (q) =>
-      q.eq("writeKey", writeKey).gte("timestamp", range.since),
-    )
-    .order("desc")
-    .take(DIGEST_SCAN_CAP);
+  const eventRows = await scanEvents(
+    ctx,
+    writeKey,
+    range.since,
+    environment,
+    DIGEST_SCAN_CAP,
+  );
 
   const pageviews = pageviewRows.filter((r) => r.timestamp <= range.until);
   const events = eventRows.filter((r) => r.timestamp <= range.until);
@@ -501,21 +575,33 @@ export const recentEvents = internalQuery({
     limit: v.optional(v.number()),
     redact: v.optional(v.boolean()),
     user: v.optional(v.string()),
+    environment: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const cap = clampLimit(args.limit, 20, 100);
     const redact = args.redact ?? true;
 
     // Filtering by name/user is post-scan — index doesn't cover them. For
-    // MVP this is fine; add indexes if access pattern warrants.
+    // MVP this is fine; add indexes if access pattern warrants. Environment
+    // uses a proper index when provided.
     const scanSize = args.name || args.user ? MAX_SCAN : cap;
-    const rows = await ctx.db
-      .query("events")
-      .withIndex("by_writeKey_and_timestamp", (q) =>
-        q.eq("writeKey", args.writeKey),
-      )
-      .order("desc")
-      .take(scanSize);
+    const rows = args.environment
+      ? await ctx.db
+          .query("events")
+          .withIndex("by_writeKey_and_environment_and_timestamp", (q) =>
+            q
+              .eq("writeKey", args.writeKey)
+              .eq("environment", args.environment),
+          )
+          .order("desc")
+          .take(scanSize)
+      : await ctx.db
+          .query("events")
+          .withIndex("by_writeKey_and_timestamp", (q) =>
+            q.eq("writeKey", args.writeKey),
+          )
+          .order("desc")
+          .take(scanSize);
 
     const filtered = rows
       .filter(
@@ -558,25 +644,26 @@ export const userActivity = internalQuery({
     user: v.string(),
     since: v.optional(v.number()),
     until: v.optional(v.number()),
+    environment: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const { since, until } = resolveRange(args);
 
-    const pageviewRows = await ctx.db
-      .query("pageviews")
-      .withIndex("by_writeKey_and_timestamp", (q) =>
-        q.eq("writeKey", args.writeKey).gte("timestamp", since),
-      )
-      .order("desc")
-      .take(MAX_SCAN);
+    const pageviewRows = await scanPageviews(
+      ctx,
+      args.writeKey,
+      since,
+      args.environment,
+      MAX_SCAN,
+    );
 
-    const eventRows = await ctx.db
-      .query("events")
-      .withIndex("by_writeKey_and_timestamp", (q) =>
-        q.eq("writeKey", args.writeKey).gte("timestamp", since),
-      )
-      .order("desc")
-      .take(MAX_SCAN);
+    const eventRows = await scanEvents(
+      ctx,
+      args.writeKey,
+      since,
+      args.environment,
+      MAX_SCAN,
+    );
 
     const matchedPv = pageviewRows.filter(
       (r) => r.timestamp <= until && matchesUser(r, args.user),

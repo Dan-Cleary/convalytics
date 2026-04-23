@@ -77,6 +77,8 @@ Convalytics exposes a Model Context Protocol server at `POST https://api.convaly
 
 **Plan requirement.** The MCP endpoint is gated to the Solo ($29/mo) and Pro ($99/mo) plans. API-token creation itself is free on every plan, but the `/mcp` endpoint returns `402 plan_required` for Free-tier teams.
 
+**Environment filter.** Clients can scope an entire MCP session to one environment by setting the `x-convalytics-environment` request header to `production` or `development`. When set, every tool (top_pages, events_count, user_activity, weekly_digest, etc.) auto-filters rows to that environment — matches the Environment toggle on the dashboard. Omit the header to see all events. The Smithery config exposes this as an optional "Environment filter" field at install time.
+
 **Rate limit.** 120 requests per minute per team. Exceeding returns `429 rate_limit_exceeded` with `Retry-After` and `resetAt`.
 
 **Tools (9).** The project-scoped tools all take `project` (the project's case-insensitive name or its id from `list_projects`).

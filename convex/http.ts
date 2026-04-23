@@ -1839,6 +1839,14 @@ http.route({
       );
     }
 
+    // Optional environment filter sourced from the Smithery config (header
+     // `x-convalytics-environment`) or any MCP client that sets it directly.
+     // Scopes all tool queries to one environment for the session — matches
+     // the Environment toggle on the dashboard. Undefined = no filter.
+    const environment = parseEnvironment(
+      req.headers.get("x-convalytics-environment"),
+    );
+
     // Keyed on teamId, not tokenId — a team shouldn't be able to multiply
     // its effective rate limit by creating more tokens.
     const rl = await ctx.runMutation(internal.rateLimit.check, {
@@ -1886,7 +1894,13 @@ http.route({
           break;
         }
         try {
-          const result = await dispatchTool(ctx, ctxToken, toolName, toolArgs);
+          const result = await dispatchTool(
+            ctx,
+            ctxToken,
+            toolName,
+            toolArgs,
+            environment,
+          );
           response = jsonRpcResponse(id, toolResult(result), cors);
         } catch (e) {
           const msg = e instanceof Error ? e.message : String(e);
@@ -1934,6 +1948,7 @@ async function dispatchTool(
   token: ValidatedApiToken,
   name: string,
   args: Record<string, unknown>,
+  environment: string | undefined,
 ) {
   switch (name) {
     case "list_projects":
@@ -1948,6 +1963,7 @@ async function dispatchTool(
         until: numOrUndefined(args.until),
         limit: numOrUndefined(args.limit),
         user: strOrUndefined(args.user),
+        environment,
       });
     }
     case "top_referrers": {
@@ -1957,6 +1973,7 @@ async function dispatchTool(
         since: numOrUndefined(args.since),
         until: numOrUndefined(args.until),
         limit: numOrUndefined(args.limit),
+        environment,
       });
     }
     case "events_count": {
@@ -1967,6 +1984,7 @@ async function dispatchTool(
         since: numOrUndefined(args.since),
         until: numOrUndefined(args.until),
         user: strOrUndefined(args.user),
+        environment,
       });
     }
     case "pageviews_count": {
@@ -1976,6 +1994,7 @@ async function dispatchTool(
         since: numOrUndefined(args.since),
         until: numOrUndefined(args.until),
         user: strOrUndefined(args.user),
+        environment,
       });
     }
     case "recent_events": {
@@ -1986,6 +2005,7 @@ async function dispatchTool(
         limit: numOrUndefined(args.limit),
         redact: typeof args.redact === "boolean" ? args.redact : undefined,
         user: strOrUndefined(args.user),
+        environment,
       });
     }
     case "user_activity": {
@@ -2001,6 +2021,7 @@ async function dispatchTool(
         user,
         since: numOrUndefined(args.since),
         until: numOrUndefined(args.until),
+        environment,
       });
     }
     case "weekly_digest": {
@@ -2009,6 +2030,7 @@ async function dispatchTool(
         writeKey,
         days: numOrUndefined(args.days),
         compare: typeof args.compare === "boolean" ? args.compare : undefined,
+        environment,
       });
     }
     default:
@@ -2032,6 +2054,13 @@ async function resolveProject(
 
 function numOrUndefined(v: unknown): number | undefined {
   return typeof v === "number" && Number.isFinite(v) ? v : undefined;
+}
+
+function parseEnvironment(raw: string | null | undefined): string | undefined {
+  if (!raw) return undefined;
+  const trimmed = raw.trim().toLowerCase();
+  if (trimmed === "production" || trimmed === "development") return trimmed;
+  return undefined;
 }
 
 function strOrUndefined(v: unknown): string | undefined {
