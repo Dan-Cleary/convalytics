@@ -1,0 +1,16 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "title": "Convalytics MCP connection",
+  "description": "Read-only analytics queries for Claude Desktop, Claude Code, Cursor, Windsurf, and other MCP-capable clients. Requires a Convalytics API token and a Solo or Pro plan.",
+  "properties": {
+    "apiKey": {
+      "type": "string",
+      "title": "Convalytics API token",
+      "description": "Create one at https://convalytics.dev/tokens. The MCP endpoint requires the Solo ($29/mo) or Pro ($99/mo) plan.",
+      "x-from": { "header": "x-convalytics-token" },
+      "x-to":   { "header": "Authorization" }
+    }
+  },
+  "required": ["apiKey"]
+}
