@@ -328,7 +328,7 @@ async function verify() {
     userId: `cli-verify-${Date.now()}`,
     sessionId: crypto.randomUUID(),
     timestamp: Date.now(),
-    props: { source: "cli", version: "0.1.0" },
+    props: { source: "cli", version: "0.2.0" },
   };
 
   step(`Sending test event "convalytics_verify" to ${INGEST_URL}...`);
