@@ -686,7 +686,7 @@ async function requireActiveFunnel(
   teamId: Id<"teams">,
   funnelId: Id<"funnels">,
 ) {
-  const funnel = await ctx.db.get(funnelId);
+  const funnel = await ctx.db.get("funnels", funnelId);
   if (!funnel || funnel.teamId !== teamId || funnel.status === "deleted") {
     throw new Error("Funnel not found");
   }
@@ -795,7 +795,7 @@ export const updateFunnel = internalMutation({
     conversionWindowMs: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
-    const funnel = await ctx.db.get(args.funnelId);
+    const funnel = await ctx.db.get("funnels", args.funnelId);
     if (!funnel || funnel.teamId !== args.teamId) {
       throw new Error("Funnel not found");
     }
@@ -816,7 +816,7 @@ export const updateFunnel = internalMutation({
       patch.conversionWindowMs = args.conversionWindowMs;
     }
 
-    await ctx.db.patch(args.funnelId, patch);
+    await ctx.db.patch("funnels", args.funnelId, patch);
     return { ok: true };
   },
 });
@@ -828,14 +828,14 @@ export const updateFunnel = internalMutation({
 export const deleteFunnel = internalMutation({
   args: { teamId: v.id("teams"), funnelId: v.id("funnels") },
   handler: async (ctx, args) => {
-    const funnel = await ctx.db.get(args.funnelId);
+    const funnel = await ctx.db.get("funnels", args.funnelId);
     if (!funnel || funnel.teamId !== args.teamId) {
       throw new Error("Funnel not found");
     }
     if (funnel.status === "deleted") return { ok: true };
 
     const now = Date.now();
-    await ctx.db.patch(args.funnelId, {
+    await ctx.db.patch("funnels", args.funnelId, {
       status: "deleted",
       deletedAt: now,
       updatedAt: now,

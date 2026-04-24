@@ -42,7 +42,7 @@ async function requireFunnelForTeam(
   funnelId: Id<"funnels">,
   userId: Id<"users">,
 ): Promise<Doc<"funnels">> {
-  const funnel = await ctx.db.get(funnelId);
+  const funnel = await ctx.db.get("funnels", funnelId);
   if (!funnel) throw new Error("Funnel not found");
   const membership = await getTeamMembership(ctx, funnel.teamId, userId);
   if (!membership) throw new Error("Funnel not found");
@@ -165,7 +165,7 @@ export const update = mutation({
       patch.conversionWindowMs = args.conversionWindowMs;
     }
 
-    await ctx.db.patch(args.funnelId, patch);
+    await ctx.db.patch("funnels", args.funnelId, patch);
   },
 });
 
@@ -177,7 +177,7 @@ export const remove = mutation({
     if (!isActive(funnel)) return;
 
     const now = Date.now();
-    await ctx.db.patch(args.funnelId, {
+    await ctx.db.patch("funnels", args.funnelId, {
       status: "deleted",
       deletedAt: now,
       updatedAt: now,
@@ -265,7 +265,7 @@ export async function computeFunnel(
   until: number | undefined,
   environment: string | undefined,
 ) {
-  const project = await ctx.db.get(funnel.projectId);
+  const project = await ctx.db.get("projects", funnel.projectId);
   if (!project) {
     throw new Error("Project for this funnel no longer exists");
   }

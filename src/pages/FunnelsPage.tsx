@@ -227,19 +227,21 @@ function FunnelEditor({
   const [err, setErr] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
-  // One-shot hydration when the loaded funnel doc arrives. Latching on
-  // funnelId (not state emptiness) avoids clobbering the user's edits if
-  // they clear every field — a valid "rewrite from scratch" flow.
-  const hydratedFor = useRef<Id<"funnels"> | null>(null);
-  useEffect(() => {
-    if (!funnelId || !existing) return;
-    if (hydratedFor.current === funnelId) return;
-    hydratedFor.current = funnelId;
+  // One-shot hydration when the loaded funnel doc arrives. Latch on
+  // funnelId (not state emptiness) so clearing every field in a saved
+  // funnel — a valid "rewrite from scratch" flow — doesn't re-trigger
+  // hydration. Uses the React 19 "storing information from previous
+  // renders" pattern (setState during render with a sentinel) — same
+  // pattern `App.tsx` uses for `lastSyncedUrlProject`; satisfies the
+  // react-hooks/set-state-in-effect rule.
+  const [hydratedFor, setHydratedFor] = useState<Id<"funnels"> | null>(null);
+  if (funnelId && existing && hydratedFor !== funnelId) {
+    setHydratedFor(funnelId);
     setName(existing.name);
     setDescription(existing.description ?? "");
     setConversionWindowMs(existing.conversionWindowMs);
     setSteps(existing.steps.map((s) => ({ kind: s.kind, match: s.match, label: s.label ?? "" })));
-  }, [funnelId, existing]);
+  }
 
   const update = (i: number, patch: Partial<StepDraft>) => {
     setSteps((prev) => prev.map((s, idx) => (idx === i ? { ...s, ...patch } : s)));
@@ -410,7 +412,7 @@ function FunnelEditor({
           <button
             className="text-xs font-medium uppercase tracking-widest cursor-pointer"
             style={{ color: "#c2362b" }}
-            onClick={handleDelete}
+            onClick={() => void handleDelete()}
           >
             Delete
           </button>
@@ -716,10 +718,10 @@ function MatchCombobox({
     .filter((s) => !q || s.toLowerCase().includes(q))
     .slice(0, 8);
 
-  // Keep active index inside filtered bounds when the list shrinks.
-  useEffect(() => {
-    if (active >= filtered.length) setActive(0);
-  }, [filtered.length, active]);
+  // Clamp at render rather than in an effect (avoids a cascading render
+  // whenever the filter shrinks past the current index).
+  const activeIndex =
+    filtered.length === 0 ? 0 : Math.min(active, filtered.length - 1);
 
   return (
     <div ref={ref} className="relative flex-1">
@@ -744,9 +746,9 @@ function MatchCombobox({
           } else if (e.key === "ArrowUp") {
             e.preventDefault();
             setActive((i) => Math.max(i - 1, 0));
-          } else if (e.key === "Enter" && filtered[active]) {
+          } else if (e.key === "Enter" && filtered[activeIndex]) {
             e.preventDefault();
-            onChange(filtered[active]);
+            onChange(filtered[activeIndex]);
             setOpen(false);
           } else if (e.key === "Escape") {
             setOpen(false);
@@ -764,8 +766,8 @@ function MatchCombobox({
               key={s}
               className="w-full text-left px-3 py-2 text-xs font-mono cursor-pointer"
               style={{
-                background: i === active ? "#1a1814" : "transparent",
-                color: i === active ? "#fff" : "#1a1814",
+                background: i === activeIndex ? "#1a1814" : "transparent",
+                color: i === activeIndex ? "#fff" : "#1a1814",
               }}
               onMouseEnter={() => setActive(i)}
               onClick={() => {

@@ -160,7 +160,7 @@ async function ensureDemoApiToken(
   userId: Id<"users">,
   now: number,
 ): Promise<string> {
-  const project = await ctx.db.get(projectId);
+  const project = await ctx.db.get("projects", projectId);
   if (!project || !project.teamId) throw new Error("Project has no team");
 
   // Bump the team to solo plan so MCP isn't gated off during local demo.
@@ -168,14 +168,14 @@ async function ensureDemoApiToken(
   // billing state on shared/prod deployments. Keep the quota in sync with
   // the plan so UI (usage.getMyUsage) and enforcement (checkAndIncrement)
   // agree; bumping plan alone would silently drift the two.
-  const team = await ctx.db.get(project.teamId);
+  const team = await ctx.db.get("teams", project.teamId);
   if (team?.stripeSubscriptionId) {
     throw new Error(
       "refusing to modify a team with an active Stripe subscription; run seedDemo against a dev deployment only",
     );
   }
   if (team && team.plan === "free") {
-    await ctx.db.patch(project.teamId, {
+    await ctx.db.patch("teams", project.teamId, {
       plan: "solo",
       usageLimitEventsPerMonth: 500_000,
     });
@@ -281,7 +281,7 @@ async function ensureDemoFunnel(
     return;
   }
 
-  const project = await ctx.db.get(projectId);
+  const project = await ctx.db.get("projects", projectId);
   if (!project || !project.teamId) return;
 
   await ctx.db.insert("funnels", {
