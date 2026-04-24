@@ -51,7 +51,7 @@ claude mcp add --transport http convalytics https://api.convalytics.dev/mcp \
   --header "Authorization: Bearer $CONVALYTICS_TOKEN"
 ```
 
-Generate a token at [convalytics.dev/tokens](https://convalytics.dev/tokens). Nine read-only tools including `weekly_digest` (one-call project summary) and `user_activity` (one-call per-user snapshot). Requires the Solo plan or higher.
+Generate a token at [convalytics.dev/tokens](https://convalytics.dev/tokens). Nine read-only tools including `weekly_digest` and `user_activity`, plus six funnel tools: `list_funnels`, `get_funnel`, `compute_funnel` (read) and `create_funnel`, `update_funnel`, `delete_funnel` (require a token with `scope="write"`). Requires the Solo plan or higher.
 
 ## Pricing
 

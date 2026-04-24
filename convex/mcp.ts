@@ -24,6 +24,9 @@ import {
   DEFAULT_CONVERSION_WINDOW_MS,
   computeFunnel,
   funnelStepValidator,
+  validateConversionWindow,
+  validateFunnelName,
+  validateSteps,
 } from "./funnels";
 import type { QueryCtx } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
@@ -761,20 +764,15 @@ export const createFunnel = internalMutation({
     if (!project || project.teamId !== args.teamId) {
       throw new Error("Project not found for this team");
     }
-    if (args.steps.length < 2 || args.steps.length > 10) {
-      throw new Error("A funnel needs 2–10 steps");
-    }
-    for (const [i, s] of args.steps.entries()) {
-      if (!s.match || !s.match.trim()) {
-        throw new Error(`Step ${i + 1}: match cannot be empty`);
-      }
-    }
+    const cleanName = validateFunnelName(args.name);
+    validateSteps(args.steps);
+    validateConversionWindow(args.conversionWindowMs);
 
     const now = Date.now();
     const id = await ctx.db.insert("funnels", {
       projectId: project._id,
       teamId: args.teamId,
-      name: args.name.trim(),
+      name: cleanName,
       description: args.description?.trim() || undefined,
       steps: args.steps,
       conversionWindowMs: args.conversionWindowMs,
@@ -806,16 +804,15 @@ export const updateFunnel = internalMutation({
     }
 
     const patch: Record<string, unknown> = { updatedAt: Date.now() };
-    if (args.name !== undefined) patch.name = args.name.trim();
+    if (args.name !== undefined) patch.name = validateFunnelName(args.name);
     if (args.description !== undefined)
       patch.description = args.description.trim() || undefined;
     if (args.steps !== undefined) {
-      if (args.steps.length < 2 || args.steps.length > 10) {
-        throw new Error("A funnel needs 2–10 steps");
-      }
+      validateSteps(args.steps);
       patch.steps = args.steps;
     }
     if (args.conversionWindowMs !== undefined) {
+      validateConversionWindow(args.conversionWindowMs);
       patch.conversionWindowMs = args.conversionWindowMs;
     }
 

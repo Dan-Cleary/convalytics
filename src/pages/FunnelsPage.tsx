@@ -1,7 +1,8 @@
 import { useMutation, useQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { Button } from "../components/Button";
 import { TimeRangePicker } from "../components/TimeRangePicker";
 import { sinceForRange, defaultRangeForRetention, type RangeKey } from "../lib/timeRange";
 
@@ -104,13 +105,7 @@ function FunnelList({
         <p className="text-xs" style={{ color: "#9b9488" }}>
           Saved ordered-step conversion analyses. Agents can create and query these via MCP.
         </p>
-        <button
-          className="text-xs font-bold uppercase tracking-widest px-4 py-2 cursor-pointer transition-colors"
-          style={{ background: "#e8651c", color: "#fff", border: "2px solid #1a1814", boxShadow: "3px 3px 0px #1a1814" }}
-          onClick={onNew}
-        >
-          + New Funnel
-        </button>
+        <NewFunnelButton onClick={onNew} />
       </div>
 
       {funnels === undefined ? (
@@ -121,31 +116,84 @@ function FunnelList({
           <p className="text-xs" style={{ color: "#9b9488" }}>Create one to see step-by-step conversion.</p>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {funnels.map((f) => (
-            <button
-              key={f.id}
-              style={CARD_STYLE}
-              className="p-4 text-left cursor-pointer transition-transform"
-              onClick={() => onOpen(f.id)}
-              onMouseEnter={(e) => (e.currentTarget.style.transform = "translate(-1px, -1px)")}
-              onMouseLeave={(e) => (e.currentTarget.style.transform = "translate(0, 0)")}
-            >
-              <p className="text-sm font-bold mb-1" style={{ color: "#1a1814" }}>{f.name}</p>
-              {f.description && (
-                <p className="text-xs mb-2 line-clamp-2" style={{ color: "#6b6456" }}>{f.description}</p>
-              )}
-              <div className="flex items-center gap-3 text-[10px] uppercase tracking-widest" style={{ color: "#9b9488" }}>
-                <span>{f.stepCount} step{f.stepCount === 1 ? "" : "s"}</span>
-                <span>·</span>
-                <span>{formatWindow(f.conversionWindowMs)} window</span>
-              </div>
-            </button>
-          ))}
+        <div style={CARD_STYLE}>
+          <table className="w-full">
+            <thead>
+              <tr style={{ borderBottom: "2px solid #1a1814" }}>
+                <FunnelTh>Name</FunnelTh>
+                <FunnelTh align="right">Steps</FunnelTh>
+                <FunnelTh align="right">Window</FunnelTh>
+                <FunnelTh align="right">Updated</FunnelTh>
+                <FunnelTh><span className="sr-only">Open</span></FunnelTh>
+              </tr>
+            </thead>
+            <tbody>
+              {funnels.map((f) => (
+                <tr
+                  key={f.id}
+                  className="cursor-pointer transition-colors"
+                  style={{ borderBottom: "1px solid #e9e6db" }}
+                  onClick={() => onOpen(f.id)}
+                  onMouseEnter={(e) => (e.currentTarget.style.background = "#f5f2eb")}
+                  onMouseLeave={(e) => (e.currentTarget.style.background = "")}
+                >
+                  <td className="px-5 py-3 max-w-0">
+                    <span className="text-sm font-medium block" style={{ color: "#1a1814" }}>
+                      {f.name}
+                    </span>
+                    {f.description && (
+                      <span className="text-[11px] block truncate" style={{ color: "#9b9488" }}>
+                        {f.description}
+                      </span>
+                    )}
+                  </td>
+                  <td className="px-5 py-3 text-xs text-right tabular-nums" style={{ color: "#6b6456" }}>
+                    {f.stepCount}
+                  </td>
+                  <td className="px-5 py-3 text-xs text-right tabular-nums" style={{ color: "#6b6456" }}>
+                    {formatWindow(f.conversionWindowMs)}
+                  </td>
+                  <td className="px-5 py-3 text-xs text-right whitespace-nowrap" style={{ color: "#9b9488" }}>
+                    {formatRelativeTime(f.updatedAt)}
+                  </td>
+                  <td className="px-5 py-3 text-right" style={{ color: "#c4bfb2" }}>
+                    →
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       )}
     </div>
   );
+}
+
+function FunnelTh({ children, align }: { children: React.ReactNode; align?: "right" }) {
+  return (
+    <th
+      className={`px-5 py-2.5 text-[10px] font-bold uppercase tracking-wider ${align === "right" ? "text-right" : "text-left"}`}
+      style={{ color: "#9b9488" }}
+    >
+      {children}
+    </th>
+  );
+}
+
+function NewFunnelButton({ onClick }: { onClick: () => void }) {
+  return (
+    <Button onClick={onClick}>+ New Funnel</Button>
+  );
+}
+
+function formatRelativeTime(ms: number): string {
+  const delta = Date.now() - ms;
+  const min = 60_000, hr = 60 * min, day = 24 * hr;
+  if (delta < min) return "just now";
+  if (delta < hr) return `${Math.floor(delta / min)}m ago`;
+  if (delta < day) return `${Math.floor(delta / hr)}h ago`;
+  if (delta < 30 * day) return `${Math.floor(delta / day)}d ago`;
+  return new Date(ms).toLocaleDateString();
 }
 
 function FunnelEditor({
@@ -160,6 +208,7 @@ function FunnelEditor({
   onCancel: () => void;
 }) {
   const existing = useQuery(api.funnels.get, funnelId ? { funnelId } : "skip");
+  const suggestions = useQuery(api.funnels.suggestStepMatches, { writeKey });
   const createFn = useMutation(api.funnels.create);
   const updateFn = useMutation(api.funnels.update);
   const removeFn = useMutation(api.funnels.remove);
@@ -178,16 +227,31 @@ function FunnelEditor({
   const [err, setErr] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
-  // Once the existing funnel loads, hydrate form state (for edit mode).
-  if (funnelId && existing && name === "" && description === "" && steps.every((s) => s.match === "")) {
+  // One-shot hydration when the loaded funnel doc arrives. Latching on
+  // funnelId (not state emptiness) avoids clobbering the user's edits if
+  // they clear every field — a valid "rewrite from scratch" flow.
+  const hydratedFor = useRef<Id<"funnels"> | null>(null);
+  useEffect(() => {
+    if (!funnelId || !existing) return;
+    if (hydratedFor.current === funnelId) return;
+    hydratedFor.current = funnelId;
     setName(existing.name);
     setDescription(existing.description ?? "");
     setConversionWindowMs(existing.conversionWindowMs);
     setSteps(existing.steps.map((s) => ({ kind: s.kind, match: s.match, label: s.label ?? "" })));
-  }
+  }, [funnelId, existing]);
 
   const update = (i: number, patch: Partial<StepDraft>) => {
     setSteps((prev) => prev.map((s, idx) => (idx === i ? { ...s, ...patch } : s)));
+  };
+
+  const swapSteps = (i: number, j: number) => {
+    setSteps((prev) => {
+      if (j < 0 || j >= prev.length || i === j) return prev;
+      const copy = [...prev];
+      [copy[i], copy[j]] = [copy[j], copy[i]];
+      return copy;
+    });
   };
 
   const save = async () => {
@@ -274,21 +338,19 @@ function FunnelEditor({
           {steps.map((s, i) => (
             <div key={i} className="flex items-start gap-2">
               <span className="text-[10px] font-bold tabular-nums w-5 text-right pt-2.5" style={{ color: "#9b9488" }}>{i + 1}.</span>
-              <select
-                className="text-xs px-2 py-2 cursor-pointer focus:outline-none"
-                style={{ background: "#fff", border: "2px solid #1a1814", color: "#1a1814" }}
+              <KindSelect
                 value={s.kind}
-                onChange={(e) => update(i, { kind: e.target.value as "event" | "pageview" })}
-              >
-                <option value="event">Event</option>
-                <option value="pageview">Pageview</option>
-              </select>
-              <input
-                className="flex-1 text-xs px-3 py-2 focus:outline-none"
-                style={{ background: "#fff", border: "2px solid #1a1814", color: "#1a1814" }}
+                onChange={(kind) => update(i, { kind })}
+              />
+              <MatchCombobox
+                kind={s.kind}
                 value={s.match}
-                onChange={(e) => update(i, { match: e.target.value })}
-                placeholder={s.kind === "event" ? "signup_completed" : "/pricing"}
+                onChange={(match) => update(i, { match })}
+                suggestions={
+                  s.kind === "event"
+                    ? suggestions?.eventNames ?? []
+                    : suggestions?.pageviewPaths ?? []
+                }
               />
               <input
                 className="text-xs px-3 py-2 w-32 focus:outline-none"
@@ -297,16 +359,27 @@ function FunnelEditor({
                 onChange={(e) => update(i, { label: e.target.value })}
                 placeholder="Label (opt)"
               />
-              {steps.length > 2 && (
-                <button
-                  className="text-xs px-2 py-2 cursor-pointer"
-                  style={{ color: "#9b9488", background: "#fff", border: "2px solid #1a1814" }}
-                  onClick={() => setSteps((prev) => prev.filter((_, idx) => idx !== i))}
-                  aria-label="Remove step"
-                >
-                  ×
-                </button>
-              )}
+              <IconBtn
+                onClick={() => swapSteps(i, i - 1)}
+                disabled={i === 0}
+                aria-label="Move up"
+              >
+                ↑
+              </IconBtn>
+              <IconBtn
+                onClick={() => swapSteps(i, i + 1)}
+                disabled={i === steps.length - 1}
+                aria-label="Move down"
+              >
+                ↓
+              </IconBtn>
+              <IconBtn
+                onClick={() => setSteps((prev) => prev.filter((_, idx) => idx !== i))}
+                disabled={steps.length <= 2}
+                aria-label="Remove step"
+              >
+                ×
+              </IconBtn>
             </div>
           ))}
           {steps.length < 10 && (
@@ -339,14 +412,9 @@ function FunnelEditor({
         ) : (
           <span />
         )}
-        <button
-          className="text-xs font-bold uppercase tracking-widest px-5 py-2 cursor-pointer"
-          style={{ background: "#e8651c", color: "#fff", border: "2px solid #1a1814", boxShadow: "3px 3px 0px #1a1814" }}
-          disabled={saving}
-          onClick={() => void save()}
-        >
+        <Button disabled={saving} onClick={() => void save()}>
           {saving ? "Saving..." : funnelId ? "Save changes" : "Create funnel"}
-        </button>
+        </Button>
       </div>
     </div>
   );
@@ -394,14 +462,32 @@ function FunnelView({
         <p className="text-xs py-8 text-center" style={{ color: "#c4bfb2" }}>Computing...</p>
       ) : (
         <div style={CARD_STYLE} className="p-5">
-          <div className="flex items-baseline justify-between mb-4">
-            <div>
-              <p className="text-[10px] font-bold uppercase tracking-widest mb-1" style={{ color: "#9b9488" }}>
-                Overall conversion
-              </p>
-              <p className="text-3xl font-bold tabular-nums" style={{ color: "#1a1814" }}>
-                {Math.round(result.overallConversion * 1000) / 10}%
-              </p>
+          <div className="flex items-baseline justify-between mb-4 flex-wrap gap-4">
+            <div className="flex gap-8">
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-widest mb-1" style={{ color: "#9b9488" }}>
+                  Overall conversion
+                </p>
+                <p className="text-3xl font-bold tabular-nums" style={{ color: "#1a1814" }}>
+                  {Math.round(result.overallConversion * 1000) / 10}%
+                </p>
+              </div>
+              {(() => {
+                const totalMs = result.steps.reduce(
+                  (acc, s) => acc + (s.avgTimeToConvertMs ?? 0),
+                  0,
+                );
+                return totalMs > 0 ? (
+                  <div>
+                    <p className="text-[10px] font-bold uppercase tracking-widest mb-1" style={{ color: "#9b9488" }}>
+                      Avg time to convert
+                    </p>
+                    <p className="text-3xl font-bold tabular-nums" style={{ color: "#1a1814" }}>
+                      {formatDuration(totalMs)}
+                    </p>
+                  </div>
+                ) : null;
+              })()}
             </div>
             <div className="text-right">
               <p className="text-[10px] uppercase tracking-widest" style={{ color: "#9b9488" }}>
@@ -444,14 +530,28 @@ function FunnelView({
                       }}
                     />
                   </div>
-                  {i > 0 && (
-                    <div className="flex items-center gap-3 text-[10px]" style={{ color: "#9b9488" }}>
-                      <span>From prev: {Math.round(s.conversionFromPrev * 1000) / 10}%</span>
-                      {s.avgTimeToConvertMs !== null && (
-                        <span>· Avg time: {formatDuration(s.avgTimeToConvertMs)}</span>
-                      )}
-                    </div>
-                  )}
+                  {i > 0 && (() => {
+                    const prevVisitors = result.steps[i - 1].visitors;
+                    const dropped = Math.max(0, prevVisitors - s.visitors);
+                    const dropPct = prevVisitors > 0
+                      ? Math.round((dropped / prevVisitors) * 1000) / 10
+                      : 0;
+                    return (
+                      <div className="flex items-center justify-between gap-3 text-[10px]" style={{ color: "#9b9488" }}>
+                        <div className="flex gap-3">
+                          <span>From prev: {Math.round(s.conversionFromPrev * 1000) / 10}%</span>
+                          {s.avgTimeToConvertMs !== null && (
+                            <span>· Avg time: {formatDuration(s.avgTimeToConvertMs)}</span>
+                          )}
+                        </div>
+                        {dropped > 0 && (
+                          <span style={{ color: "#c2362b" }}>
+                            ↓ {dropped.toLocaleString()} dropped ({dropPct}%)
+                          </span>
+                        )}
+                      </div>
+                    );
+                  })()}
                 </div>
               );
             })}
@@ -483,4 +583,205 @@ function formatDuration(ms: number): string {
   if (ms < 60 * 60_000) return `${Math.round(ms / 60_000)}m`;
   if (ms < 24 * 60 * 60_000) return `${Math.round((ms / (60 * 60_000)) * 10) / 10}h`;
   return `${Math.round((ms / (24 * 60 * 60_000)) * 10) / 10}d`;
+}
+
+function IconBtn({
+  children,
+  onClick,
+  disabled,
+  ...rest
+}: {
+  children: React.ReactNode;
+  onClick: () => void;
+  disabled?: boolean;
+  "aria-label"?: string;
+}) {
+  return (
+    <button
+      className="text-xs px-2 py-2 cursor-pointer w-8 text-center disabled:cursor-not-allowed"
+      style={{
+        background: "#fff",
+        border: "2px solid #1a1814",
+        color: disabled ? "#c4bfb2" : "#1a1814",
+        opacity: disabled ? 0.5 : 1,
+      }}
+      onClick={onClick}
+      disabled={disabled}
+      {...rest}
+    >
+      {children}
+    </button>
+  );
+}
+
+function KindSelect({
+  value,
+  onChange,
+}: {
+  value: "event" | "pageview";
+  onChange: (v: "event" | "pageview") => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    function handle(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    }
+    document.addEventListener("mousedown", handle);
+    return () => document.removeEventListener("mousedown", handle);
+  }, [open]);
+
+  const options: Array<{ value: "event" | "pageview"; label: string }> = [
+    { value: "event", label: "Event" },
+    { value: "pageview", label: "Pageview" },
+  ];
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        className="text-xs px-3 py-2 w-28 flex items-center justify-between gap-2 cursor-pointer"
+        style={{ background: "#fff", border: "2px solid #1a1814", color: "#1a1814" }}
+        onClick={() => setOpen((o) => !o)}
+        type="button"
+      >
+        <span>{value === "event" ? "Event" : "Pageview"}</span>
+        <span style={{ color: "#9b9488" }}>{open ? "▲" : "▼"}</span>
+      </button>
+      {open && (
+        <div
+          className="absolute left-0 top-full mt-1 w-28 z-20"
+          style={{ background: "#fff", border: "2px solid #1a1814", boxShadow: "3px 3px 0 #1a1814" }}
+        >
+          {options.map((o) => (
+            <button
+              key={o.value}
+              className="w-full text-left px-3 py-2 text-xs cursor-pointer"
+              style={{
+                background: o.value === value ? "#1a1814" : "transparent",
+                color: o.value === value ? "#fff" : "#1a1814",
+              }}
+              onMouseEnter={(e) => {
+                if (o.value !== value) e.currentTarget.style.background = "#e9e6db";
+              }}
+              onMouseLeave={(e) => {
+                if (o.value !== value) e.currentTarget.style.background = "transparent";
+              }}
+              onClick={() => {
+                onChange(o.value);
+                setOpen(false);
+              }}
+              type="button"
+            >
+              {o.label}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function MatchCombobox({
+  kind,
+  value,
+  onChange,
+  suggestions,
+}: {
+  kind: "event" | "pageview";
+  value: string;
+  onChange: (v: string) => void;
+  suggestions: string[];
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  const [active, setActive] = useState(0);
+
+  useEffect(() => {
+    if (!open) return;
+    function handle(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    }
+    document.addEventListener("mousedown", handle);
+    return () => document.removeEventListener("mousedown", handle);
+  }, [open]);
+
+  const q = value.trim().toLowerCase();
+  const filtered = suggestions
+    .filter((s) => !q || s.toLowerCase().includes(q))
+    .slice(0, 8);
+
+  // Keep active index inside filtered bounds when the list shrinks.
+  useEffect(() => {
+    if (active >= filtered.length) setActive(0);
+  }, [filtered.length, active]);
+
+  return (
+    <div ref={ref} className="relative flex-1">
+      <input
+        className="w-full text-xs px-3 py-2 focus:outline-none"
+        style={{ background: "#fff", border: "2px solid #1a1814", color: "#1a1814" }}
+        value={value}
+        onChange={(e) => {
+          onChange(e.target.value);
+          setOpen(true);
+          setActive(0);
+        }}
+        onFocus={() => setOpen(true)}
+        onKeyDown={(e) => {
+          if (!open && (e.key === "ArrowDown" || e.key === "ArrowUp")) {
+            setOpen(true);
+            return;
+          }
+          if (e.key === "ArrowDown") {
+            e.preventDefault();
+            setActive((i) => Math.min(i + 1, Math.max(filtered.length - 1, 0)));
+          } else if (e.key === "ArrowUp") {
+            e.preventDefault();
+            setActive((i) => Math.max(i - 1, 0));
+          } else if (e.key === "Enter" && filtered[active]) {
+            e.preventDefault();
+            onChange(filtered[active]);
+            setOpen(false);
+          } else if (e.key === "Escape") {
+            setOpen(false);
+          }
+        }}
+        placeholder={kind === "event" ? "signup_completed" : "/pricing"}
+      />
+      {open && filtered.length > 0 && (
+        <div
+          className="absolute left-0 right-0 top-full mt-1 z-20 max-h-64 overflow-y-auto"
+          style={{ background: "#fff", border: "2px solid #1a1814", boxShadow: "3px 3px 0 #1a1814" }}
+        >
+          {filtered.map((s, i) => (
+            <button
+              key={s}
+              className="w-full text-left px-3 py-2 text-xs font-mono cursor-pointer"
+              style={{
+                background: i === active ? "#1a1814" : "transparent",
+                color: i === active ? "#fff" : "#1a1814",
+              }}
+              onMouseEnter={() => setActive(i)}
+              onClick={() => {
+                onChange(s);
+                setOpen(false);
+              }}
+              type="button"
+            >
+              {s}
+            </button>
+          ))}
+        </div>
+      )}
+      {open && filtered.length === 0 && value && (
+        <div
+          className="absolute left-0 right-0 top-full mt-1 z-20 px-3 py-2 text-[10px]"
+          style={{ background: "#fff", border: "2px solid #1a1814", color: "#9b9488" }}
+        >
+          No matches in recent data — will use "{value}" as-is.
+        </div>
+      )}
+    </div>
+  );
 }

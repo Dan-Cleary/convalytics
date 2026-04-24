@@ -118,6 +118,7 @@ export const create = mutation({
       throw new Error("Project not found or access denied");
     }
 
+    const cleanName = validateFunnelName(args.name);
     validateSteps(args.steps);
     validateConversionWindow(args.conversionWindowMs);
 
@@ -125,7 +126,7 @@ export const create = mutation({
     return await ctx.db.insert("funnels", {
       projectId: project._id,
       teamId: project.teamId,
-      name: args.name.trim(),
+      name: cleanName,
       description: args.description?.trim() || undefined,
       steps: args.steps,
       conversionWindowMs: args.conversionWindowMs,
@@ -152,7 +153,7 @@ export const update = mutation({
     }
 
     const patch: Partial<Doc<"funnels">> = { updatedAt: Date.now() };
-    if (args.name !== undefined) patch.name = args.name.trim();
+    if (args.name !== undefined) patch.name = validateFunnelName(args.name);
     if (args.description !== undefined)
       patch.description = args.description.trim() || undefined;
     if (args.steps !== undefined) {
@@ -181,6 +182,42 @@ export const remove = mutation({
       deletedAt: now,
       updatedAt: now,
     });
+  },
+});
+
+/**
+ * Dashboard editor autocomplete source. Returns distinct event names and
+ * pageview paths seen on the project in the last 7 days, ordered by volume.
+ * Narrow window because this is a reactive query: every ingest on the
+ * project invalidates the subscription and reruns the scan while the editor
+ * is open. 7d is plenty for "what have I been tracking lately?" — anything
+ * older tends to be stale anyway.
+ */
+export const suggestStepMatches = query({
+  args: { writeKey: v.string() },
+  handler: async (ctx, args) => {
+    const project = await validateProjectAccess(ctx, args.writeKey);
+    if (!project) return { eventNames: [], pageviewPaths: [] };
+
+    const since = Date.now() - 7 * 24 * 60 * 60 * 1000;
+    const events = await scanEvents(ctx, args.writeKey, since, undefined, MAX_SCAN);
+    const pageviews = await scanPageviews(ctx, args.writeKey, since, undefined, MAX_SCAN);
+
+    const evCounts = new Map<string, number>();
+    for (const e of events) evCounts.set(e.name, (evCounts.get(e.name) ?? 0) + 1);
+    const pvCounts = new Map<string, number>();
+    for (const p of pageviews) pvCounts.set(p.path, (pvCounts.get(p.path) ?? 0) + 1);
+
+    return {
+      eventNames: [...evCounts.entries()]
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 50)
+        .map(([name]) => name),
+      pageviewPaths: [...pvCounts.entries()]
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 50)
+        .map(([path]) => path),
+    };
   },
 });
 
@@ -297,18 +334,19 @@ export async function computeFunnel(
     let prevT: number | null = null;
     for (let i = 0; i < funnel.steps.length; i++) {
       const step: FunnelStep = funnel.steps[i];
-      const minT: number = prevT ?? resolvedSince;
+      // Step 0: match anywhere in the window, inclusive of `since`.
+      // Step i>0: match strictly AFTER prevT, otherwise two consecutive
+      // identical steps would be satisfied by one event (the prev-step hit
+      // would match itself because `>= prevT` is true).
       const maxT: number =
         prevT !== null
           ? Math.min(prevT + cw, resolvedUntil)
           : resolvedUntil;
-      const hit: Marker | undefined = timeline.find(
-        (m) =>
-          m.kind === step.kind &&
-          m.match === step.match &&
-          m.timestamp >= minT &&
-          m.timestamp <= maxT,
-      );
+      const hit: Marker | undefined = timeline.find((m) => {
+        if (m.kind !== step.kind || m.match !== step.match) return false;
+        if (m.timestamp > maxT) return false;
+        return prevT !== null ? m.timestamp > prevT : m.timestamp >= resolvedSince;
+      });
       if (!hit) break;
       stepAgg[i].visitors++;
       if (prevT !== null) {
@@ -355,7 +393,7 @@ function round4(n: number): number {
   return Math.round(n * 10_000) / 10_000;
 }
 
-function validateSteps(steps: FunnelStep[]) {
+export function validateSteps(steps: FunnelStep[]) {
   if (steps.length < 2) {
     throw new Error("A funnel needs at least 2 steps");
   }
@@ -369,7 +407,7 @@ function validateSteps(steps: FunnelStep[]) {
   }
 }
 
-function validateConversionWindow(ms: number | undefined) {
+export function validateConversionWindow(ms: number | undefined) {
   if (ms === undefined) return;
   if (
     !Number.isFinite(ms) ||
@@ -380,4 +418,10 @@ function validateConversionWindow(ms: number | undefined) {
       `conversionWindowMs must be between ${MIN_CONVERSION_WINDOW_MS} (1 min) and ${MAX_CONVERSION_WINDOW_MS} (90 days)`,
     );
   }
+}
+
+export function validateFunnelName(name: string): string {
+  const trimmed = name.trim();
+  if (!trimmed) throw new Error("Funnel name cannot be empty");
+  return trimmed;
 }

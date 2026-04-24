@@ -163,10 +163,22 @@ async function ensureDemoApiToken(
   const project = await ctx.db.get(projectId);
   if (!project || !project.teamId) throw new Error("Project has no team");
 
-  // Bump the team to solo plan so MCP isn't gated off.
+  // Bump the team to solo plan so MCP isn't gated off during local demo.
+  // Refuse if the team has a real Stripe subscription — don't mess with
+  // billing state on shared/prod deployments. Keep the quota in sync with
+  // the plan so UI (usage.getMyUsage) and enforcement (checkAndIncrement)
+  // agree; bumping plan alone would silently drift the two.
   const team = await ctx.db.get(project.teamId);
+  if (team?.stripeSubscriptionId) {
+    throw new Error(
+      "refusing to modify a team with an active Stripe subscription; run seedDemo against a dev deployment only",
+    );
+  }
   if (team && team.plan === "free") {
-    await ctx.db.patch(project.teamId, { plan: "solo" });
+    await ctx.db.patch(project.teamId, {
+      plan: "solo",
+      usageLimitEventsPerMonth: 500_000,
+    });
   }
 
   // Deterministic demo token so repeat runs hand back the same string.

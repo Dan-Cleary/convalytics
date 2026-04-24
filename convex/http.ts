@@ -598,7 +598,7 @@ On sign-out, call reset() to revert to anonymous tracking:
 Identity persists in localStorage across page reloads until reset() is called.
 The dashboard shows email > name > anonymous ID with cascading priority.
 
-## MCP server (read-only queries for AI assistants)
+## MCP server (read + funnel-write tools for AI assistants)
 
 Once events are flowing, developers can query their analytics conversationally
 via Claude Desktop, Claude Code, Cursor, Windsurf, or any MCP-capable client.
@@ -610,6 +610,11 @@ Nine read-only tools: list_projects, get_usage, top_pages, top_referrers,
 pageviews_count, events_count, recent_events, weekly_digest (project summary
 with period-over-period comparison), user_activity (per-user snapshot —
 matches by userEmail or visitorId).
+
+Six funnel tools: list_funnels, get_funnel, compute_funnel (read), plus
+create_funnel, update_funnel, delete_funnel (write — require a token minted
+with scope="write" at /tokens; default scope="read" tokens can only call the
+read side). delete_funnel is a soft delete.
 
 Gated to Solo+ plans. Tokens are team-scoped; each MCP tool takes an explicit
 project argument. Full docs at https://convalytics.dev/mcp and
@@ -2090,6 +2095,12 @@ http.route({
   }),
 });
 
+const WRITE_SCOPED_TOOLS = new Set([
+  "create_funnel",
+  "update_funnel",
+  "delete_funnel",
+]);
+
 async function dispatchTool(
   ctx: ActionCtx,
   token: ValidatedApiToken,
@@ -2097,6 +2108,11 @@ async function dispatchTool(
   args: Record<string, unknown>,
   environment: string | undefined,
 ) {
+  if (WRITE_SCOPED_TOOLS.has(name) && token.scope !== "write") {
+    throw new Error(
+      `Tool "${name}" requires a token with scope="write". The token in use is read-only — mint a write-scoped token at https://convalytics.dev/tokens.`,
+    );
+  }
   switch (name) {
     case "list_projects":
       return ctx.runQuery(internal.mcp.listProjects, { teamId: token.teamId });

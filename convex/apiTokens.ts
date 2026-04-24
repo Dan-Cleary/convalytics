@@ -111,12 +111,17 @@ export const touchLastUsed = internalMutation({
 
 /**
  * Create a new API token scoped to the caller's team. Returns the plain token
- * ONCE; subsequent reads only see metadata. v1 scope is always "read"
- * (MCP read tools).
+ * ONCE; subsequent reads only see metadata.
+ *
+ * Default scope is "read" (the nine analytics queries). Pass scope="write"
+ * to also unlock funnel create/update/delete tools over MCP. Keep the default
+ * conservative: the dashboard UI should ask the user before minting a write
+ * token so third-party agents don't inherit mutation rights silently.
  */
 export const create = mutation({
   args: {
     name: v.string(),
+    scope: v.optional(v.union(v.literal("read"), v.literal("write"))),
   },
   handler: async (ctx, args) => {
     const userId = await requireAuth(ctx);
@@ -143,7 +148,7 @@ export const create = mutation({
       teamId,
       createdBy: userId,
       name,
-      scope: "read",
+      scope: args.scope ?? "read",
       createdAt: Date.now(),
     });
 

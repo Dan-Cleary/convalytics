@@ -2,7 +2,7 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "type": "object",
   "title": "Convalytics MCP connection",
-  "description": "Read-only analytics queries for Claude Desktop, Claude Code, Cursor, Windsurf, and other MCP-capable clients. Requires a Convalytics API token and a Solo or Pro plan.",
+  "description": "Analytics queries plus saved conversion funnels for Claude Desktop, Claude Code, Cursor, Windsurf, and other MCP-capable clients. Default read-scoped tokens cover nine analytics tools and three funnel read tools; write-scoped tokens additionally let agents create/update/delete funnels. Requires a Convalytics API token and a Solo or Pro plan.",
   "properties": {
     "apiKey": {
       "type": "string",

@@ -86,11 +86,15 @@ export function McpContent() {
         <h2>Token scope</h2>
         <p>
           Each API token is scoped to <strong>one team</strong>, not one
-          project. A token grants read access to every project on the team
-          it was created for. The four project-scoped tools below all take
-          a <code>project</code> argument (name or id) so the agent picks
-          which project to query on each call. Use <code>list_projects</code>{" "}
-          first if you're not sure what's available.
+          project. Tokens are minted with either{" "}
+          <code>scope="read"</code> (default — the nine analytics queries
+          and the three funnel read tools) or{" "}
+          <code>scope="write"</code> (also unlocks{" "}
+          <code>create_funnel</code>, <code>update_funnel</code>, and{" "}
+          <code>delete_funnel</code>). Project-scoped tools all take a{" "}
+          <code>project</code> argument (name or id); funnel tools take a{" "}
+          <code>funnelId</code>. Use <code>list_projects</code> /{" "}
+          <code>list_funnels</code> first if you're not sure what's available.
         </p>
       </section>
 
@@ -157,6 +161,38 @@ export function McpContent() {
             Use this instead of chaining top_pages + top_referrers +
             events_count when the agent just wants to report on a window.
           </li>
+          <li>
+            <strong>list_funnels(project)</strong>: active saved funnels on
+            a project. A funnel is a 2–10 step ordered sequence of event or
+            pageview matches with a per-funnel conversion window.
+          </li>
+          <li>
+            <strong>get_funnel(funnelId)</strong>: full definition of one
+            funnel — name, description, ordered steps, conversionWindowMs.
+          </li>
+          <li>
+            <strong>compute_funnel(funnelId, since?, until?)</strong>: run
+            the analysis and return per-step visitor count, conversion from
+            previous step, conversion from start, and average time to
+            convert between steps.
+          </li>
+          <li>
+            <strong>create_funnel(project, name, steps, description?, conversionWindowMs?)</strong>:
+            insert a new funnel. Requires a write-scoped token. Steps are{" "}
+            <code>{"{ kind: \"event\" | \"pageview\", match: string, label? }"}</code>.
+            conversionWindowMs bounded 60,000 (1 min) to 7,776,000,000 (90 days);
+            defaults to 7 days.
+          </li>
+          <li>
+            <strong>update_funnel(funnelId, ...)</strong>: patch name,
+            description, steps, or conversionWindowMs. Requires a
+            write-scoped token.
+          </li>
+          <li>
+            <strong>delete_funnel(funnelId)</strong>: soft delete — row is
+            retained with status='deleted' and hidden from list/get/compute.
+            Idempotent. Requires a write-scoped token.
+          </li>
         </ul>
         <p>
           <code>project</code> accepts either the project's case-insensitive
@@ -192,10 +228,8 @@ export function McpContent() {
       <section>
         <h2>Not included in v1</h2>
         <p>
-          No write or admin tools. No <code>funnel</code> tool until the
-          dashboard ships funnel views. No OAuth flow (API token is the only
-          auth in v1). No MCP Apps UI resources. If one of these matters to
-          you,{" "}
+          No retention or trend tools. No OAuth flow (API token is the only
+          auth). No MCP Apps UI resources. If one of these matters to you,{" "}
           <a href="/contact">tell us</a>.
         </p>
       </section>

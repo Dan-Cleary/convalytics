@@ -224,7 +224,11 @@ export default defineSchema({
     teamId: v.id("teams"),
     createdBy: v.id("users"),
     name: v.string(),
-    scope: v.literal("read"),
+    // "read" tokens can call every read-only MCP tool (the nine analytics
+    // queries). "write" tokens additionally unlock create_funnel /
+    // update_funnel / delete_funnel. Existing tokens created before this
+    // union existed keep their "read" value and remain read-only.
+    scope: v.union(v.literal("read"), v.literal("write")),
     createdAt: v.number(),
     lastUsedAt: v.optional(v.number()),
     revokedAt: v.optional(v.number()),

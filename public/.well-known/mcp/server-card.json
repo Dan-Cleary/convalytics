@@ -1,7 +1,7 @@
 {
   "name": "convalytics",
   "displayName": "Convalytics",
-  "description": "Read-only analytics tools for AI assistants. Query top pages, top referrers, custom event counts, recent events, usage, and projects for your Convalytics account via Model Context Protocol. Requires a Convalytics API token generated at https://convalytics.dev/tokens and an active Solo or Pro plan.",
+  "description": "Analytics tools for AI assistants over Model Context Protocol. Nine read-only tools query top pages, top referrers, event counts, recent events, usage, and projects. Six funnel tools list/read/compute, and (with a write-scoped token) create/update/delete saved conversion funnels. Requires a Convalytics API token from https://convalytics.dev/tokens and an active Solo or Pro plan.",
   "version": "1.0.0",
   "serverUrl": "https://api.convalytics.dev/mcp",
   "transport": "http",
@@ -47,6 +47,30 @@
     {
       "name": "weekly_digest",
       "description": "Composite snapshot over a lookback window: visitors, pageviews, sessions, bounce rate, session duration, top 5 pages, top 5 referrers, top 5 events. Includes period-over-period comparison. Takes `project`, optional `days` (default 7) and `compare` (default true)."
+    },
+    {
+      "name": "list_funnels",
+      "description": "List saved conversion funnels on a project. Takes `project`."
+    },
+    {
+      "name": "get_funnel",
+      "description": "Return the full definition of one funnel by id: name, description, ordered steps, and conversion window. Takes `funnelId`."
+    },
+    {
+      "name": "compute_funnel",
+      "description": "Run a funnel over a time window and return per-step visitor count, conversion from previous step, conversion from start, and average time to convert. Takes `funnelId`."
+    },
+    {
+      "name": "create_funnel",
+      "description": "Create a new funnel (2–10 ordered event/pageview steps, conversionWindowMs default 7 days). Requires a write-scoped token. Takes `project`, `name`, `steps`."
+    },
+    {
+      "name": "update_funnel",
+      "description": "Patch an existing funnel's name/description/steps/conversionWindowMs. Requires a write-scoped token. Takes `funnelId`."
+    },
+    {
+      "name": "delete_funnel",
+      "description": "Soft delete a funnel (retained with status='deleted', excluded from list/get/compute). Idempotent. Requires a write-scoped token. Takes `funnelId`."
     }
   ],
   "contact": {

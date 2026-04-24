@@ -129,14 +129,16 @@ export function SEOContent() {
       </section>
 
       <section>
-        <h2>Query your analytics with Claude</h2>
+        <h2>Query and build with Claude</h2>
         <p>
-          The Convalytics <a href="/mcp">MCP server</a> exposes read-only
-          tools over Model Context Protocol, so Claude Desktop, Claude Code,
-          Cursor, Windsurf, and any other MCP-capable assistant can answer
+          The Convalytics <a href="/mcp">MCP server</a> exposes 15 tools
+          over Model Context Protocol. Nine read-only tools answer
           questions about your analytics in natural language: top pages,
-          referrers, custom-event counts, recent events, and usage.
-          Available on the Solo and Pro plans.
+          referrers, custom-event counts, recent events, per-user activity,
+          and usage. Six funnel tools list / get / compute saved conversion
+          funnels, and with a write-scoped token let an agent create,
+          update, or delete funnels directly from chat. Available on the
+          Solo and Pro plans.
         </p>
       </section>
 
