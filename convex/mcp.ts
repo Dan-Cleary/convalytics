@@ -10,9 +10,23 @@
  */
 
 import { v } from "convex/values";
-import { internalQuery } from "./_generated/server";
-import type { QueryCtx } from "./_generated/server";
+import { internalMutation, internalQuery } from "./_generated/server";
 import { computeTeamUsage } from "./usage";
+import {
+  MAX_SCAN,
+  clampLimit,
+  matchesUser,
+  resolveRange,
+  scanEvents,
+  scanPageviews,
+} from "./_analytics";
+import {
+  DEFAULT_CONVERSION_WINDOW_MS,
+  computeFunnel,
+  funnelStepValidator,
+} from "./funnels";
+import type { QueryCtx } from "./_generated/server";
+import type { Id } from "./_generated/dataModel";
 
 /**
  * Resolve an agent's `project` argument to a concrete writeKey bounded to
@@ -64,113 +78,6 @@ export const resolveProject = internalQuery({
     );
   },
 });
-
-const DEFAULT_SINCE_MS = 7 * 24 * 60 * 60 * 1000;
-const DEFAULT_LIMIT = 20;
-const MAX_LIMIT = 100;
-const MAX_SCAN = 10_000;
-
-function clampLimit(
-  limit: number | undefined,
-  def = DEFAULT_LIMIT,
-  max = MAX_LIMIT,
-): number {
-  if (!limit || limit <= 0) return def;
-  return Math.min(limit, max);
-}
-
-function resolveRange(args: {
-  since?: number;
-  until?: number;
-}): { since: number; until: number } {
-  const until = args.until ?? Date.now();
-  const since = args.since ?? until - DEFAULT_SINCE_MS;
-  return { since, until };
-}
-
-/**
- * Scan pageviews in a window, using the environment-scoped index when the
- * caller narrowed to one env (faster + cheaper than scanning all rows then
- * filtering in-memory). Shared by top_pages, top_referrers, pageviews_count,
- * user_activity, and weekly_digest.
- */
-function scanPageviews(
-  ctx: QueryCtx,
-  writeKey: string,
-  since: number,
-  environment: string | undefined,
-  limit: number,
-) {
-  if (environment) {
-    return ctx.db
-      .query("pageviews")
-      .withIndex("by_writeKey_and_environment_and_timestamp", (q) =>
-        q
-          .eq("writeKey", writeKey)
-          .eq("environment", environment)
-          .gte("timestamp", since),
-      )
-      .order("desc")
-      .take(limit);
-  }
-  return ctx.db
-    .query("pageviews")
-    .withIndex("by_writeKey_and_timestamp", (q) =>
-      q.eq("writeKey", writeKey).gte("timestamp", since),
-    )
-    .order("desc")
-    .take(limit);
-}
-
-/** Same shape for events — keeps both tables' env-scoped indexes honored. */
-function scanEvents(
-  ctx: QueryCtx,
-  writeKey: string,
-  since: number,
-  environment: string | undefined,
-  limit: number,
-) {
-  if (environment) {
-    return ctx.db
-      .query("events")
-      .withIndex("by_writeKey_and_environment_and_timestamp", (q) =>
-        q
-          .eq("writeKey", writeKey)
-          .eq("environment", environment)
-          .gte("timestamp", since),
-      )
-      .order("desc")
-      .take(limit);
-  }
-  return ctx.db
-    .query("events")
-    .withIndex("by_writeKey_and_timestamp", (q) =>
-      q.eq("writeKey", writeKey).gte("timestamp", since),
-    )
-    .order("desc")
-    .take(limit);
-}
-
-/**
- * Match a stored row against the `user` argument an agent passed. Emails are
- * case-insensitive (users don't think in case); visitorId is exact because
- * it's an opaque identifier. `visitorId` is what the ingest handler stores
- * the track()-time `userId` argument as — the rename happens at
- * http.ts:284.
- */
-function matchesUser(
-  row: { visitorId?: string; userEmail?: string },
-  user: string,
-): boolean {
-  if (!user) return true;
-  if (row.visitorId && row.visitorId === user) return true;
-  if (
-    row.userEmail &&
-    row.userEmail.toLowerCase() === user.toLowerCase()
-  )
-    return true;
-  return false;
-}
 
 /** list_projects — all projects on the token's team. */
 export const listProjects = internalQuery({
@@ -758,5 +665,199 @@ export const userActivity = internalQuery({
         events: eventRows.length >= MAX_SCAN,
       },
     };
+  },
+});
+
+// ---------------------------------------------------------------------------
+// Funnel tools — list/get/create/update/delete/compute. Mutations are the
+// first writes exposed over MCP; previous tools are all read-only.
+//
+// Team scoping: every query takes teamId and verifies the target funnel
+// belongs to it before returning data. Defense in depth against a bug in
+// dispatchTool — even if the HTTP layer somehow routes a tool call with the
+// wrong team, we won't leak rows.
+// ---------------------------------------------------------------------------
+
+async function requireActiveFunnel(
+  ctx: QueryCtx,
+  teamId: Id<"teams">,
+  funnelId: Id<"funnels">,
+) {
+  const funnel = await ctx.db.get(funnelId);
+  if (!funnel || funnel.teamId !== teamId || funnel.status === "deleted") {
+    throw new Error("Funnel not found");
+  }
+  return funnel;
+}
+
+/** list_funnels — active funnels on a project. */
+export const listFunnels = internalQuery({
+  args: { teamId: v.id("teams"), writeKey: v.string() },
+  handler: async (ctx, args) => {
+    const project = await ctx.db
+      .query("projects")
+      .withIndex("by_writeKey", (q) => q.eq("writeKey", args.writeKey))
+      .unique();
+    if (!project || project.teamId !== args.teamId) {
+      throw new Error("Project not found for this team");
+    }
+
+    const rows = await ctx.db
+      .query("funnels")
+      .withIndex("by_projectId", (q) => q.eq("projectId", project._id))
+      .collect();
+
+    return rows
+      .filter((f) => f.status !== "deleted")
+      .sort((a, b) => b.updatedAt - a.updatedAt)
+      .map((f) => ({
+        id: f._id,
+        name: f.name,
+        description: f.description ?? null,
+        stepCount: f.steps.length,
+        conversionWindowMs:
+          f.conversionWindowMs ?? DEFAULT_CONVERSION_WINDOW_MS,
+        createdAt: f.createdAt,
+        updatedAt: f.updatedAt,
+      }));
+  },
+});
+
+/** get_funnel — full definition of one funnel. */
+export const getFunnel = internalQuery({
+  args: { teamId: v.id("teams"), funnelId: v.id("funnels") },
+  handler: async (ctx, args) => {
+    const funnel = await requireActiveFunnel(ctx, args.teamId, args.funnelId);
+    return {
+      id: funnel._id,
+      projectId: funnel.projectId,
+      name: funnel.name,
+      description: funnel.description ?? null,
+      steps: funnel.steps,
+      conversionWindowMs:
+        funnel.conversionWindowMs ?? DEFAULT_CONVERSION_WINDOW_MS,
+      createdAt: funnel.createdAt,
+      updatedAt: funnel.updatedAt,
+    };
+  },
+});
+
+/** create_funnel — insert a new funnel. createdBy is the token's owner. */
+export const createFunnel = internalMutation({
+  args: {
+    teamId: v.id("teams"),
+    createdBy: v.id("users"),
+    writeKey: v.string(),
+    name: v.string(),
+    description: v.optional(v.string()),
+    steps: v.array(funnelStepValidator),
+    conversionWindowMs: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const project = await ctx.db
+      .query("projects")
+      .withIndex("by_writeKey", (q) => q.eq("writeKey", args.writeKey))
+      .unique();
+    if (!project || project.teamId !== args.teamId) {
+      throw new Error("Project not found for this team");
+    }
+    if (args.steps.length < 2 || args.steps.length > 10) {
+      throw new Error("A funnel needs 2–10 steps");
+    }
+    for (const [i, s] of args.steps.entries()) {
+      if (!s.match || !s.match.trim()) {
+        throw new Error(`Step ${i + 1}: match cannot be empty`);
+      }
+    }
+
+    const now = Date.now();
+    const id = await ctx.db.insert("funnels", {
+      projectId: project._id,
+      teamId: args.teamId,
+      name: args.name.trim(),
+      description: args.description?.trim() || undefined,
+      steps: args.steps,
+      conversionWindowMs: args.conversionWindowMs,
+      createdBy: args.createdBy,
+      createdAt: now,
+      updatedAt: now,
+    });
+    return { id };
+  },
+});
+
+/** update_funnel — patch name/description/steps/conversionWindow. */
+export const updateFunnel = internalMutation({
+  args: {
+    teamId: v.id("teams"),
+    funnelId: v.id("funnels"),
+    name: v.optional(v.string()),
+    description: v.optional(v.string()),
+    steps: v.optional(v.array(funnelStepValidator)),
+    conversionWindowMs: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const funnel = await ctx.db.get(args.funnelId);
+    if (!funnel || funnel.teamId !== args.teamId) {
+      throw new Error("Funnel not found");
+    }
+    if (funnel.status === "deleted") {
+      throw new Error("Cannot update a deleted funnel");
+    }
+
+    const patch: Record<string, unknown> = { updatedAt: Date.now() };
+    if (args.name !== undefined) patch.name = args.name.trim();
+    if (args.description !== undefined)
+      patch.description = args.description.trim() || undefined;
+    if (args.steps !== undefined) {
+      if (args.steps.length < 2 || args.steps.length > 10) {
+        throw new Error("A funnel needs 2–10 steps");
+      }
+      patch.steps = args.steps;
+    }
+    if (args.conversionWindowMs !== undefined) {
+      patch.conversionWindowMs = args.conversionWindowMs;
+    }
+
+    await ctx.db.patch(args.funnelId, patch);
+    return { ok: true };
+  },
+});
+
+/**
+ * delete_funnel — soft delete. Idempotent: calling twice is a no-op. The row
+ * is retained; list/get/compute filter it out.
+ */
+export const deleteFunnel = internalMutation({
+  args: { teamId: v.id("teams"), funnelId: v.id("funnels") },
+  handler: async (ctx, args) => {
+    const funnel = await ctx.db.get(args.funnelId);
+    if (!funnel || funnel.teamId !== args.teamId) {
+      throw new Error("Funnel not found");
+    }
+    if (funnel.status === "deleted") return { ok: true };
+
+    const now = Date.now();
+    await ctx.db.patch(args.funnelId, {
+      status: "deleted",
+      deletedAt: now,
+      updatedAt: now,
+    });
+    return { ok: true };
+  },
+});
+
+/** compute_funnel — run the analysis and return step-by-step conversion. */
+export const funnelCompute = internalQuery({
+  args: {
+    teamId: v.id("teams"),
+    funnelId: v.id("funnels"),
+    since: v.optional(v.number()),
+    until: v.optional(v.number()),
+    environment: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const funnel = await requireActiveFunnel(ctx, args.teamId, args.funnelId);
+    return computeFunnel(ctx, funnel, args.since, args.until, args.environment);
   },
 });

@@ -137,6 +137,7 @@ export function Sidebar({
         <NavItem label="Pages" active={pathname === "/pages"} onClick={() => { void navigate("/pages"); }} />
         <SectionLabel>Product Analytics</SectionLabel>
         <NavItem label="Events" active={pathname === "/events"} onClick={() => { void navigate("/events"); }} />
+        <NavItem label="Funnels" active={pathname === "/funnels"} onClick={() => { void navigate("/funnels"); }} />
         <SectionLabel>Settings</SectionLabel>
         <NavItem label="Members" active={pathname === "/members"} onClick={() => { void navigate("/members"); }} />
         <NavItem label="Tokens" active={pathname === "/tokens"} onClick={() => { void navigate("/tokens"); }} />

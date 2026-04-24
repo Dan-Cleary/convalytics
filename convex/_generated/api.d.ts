@@ -8,12 +8,14 @@
  * @module
  */
 
+import type * as _analytics from "../_analytics.js";
 import type * as apiTokens from "../apiTokens.js";
 import type * as auth from "../auth.js";
 import type * as authHelpers from "../authHelpers.js";
 import type * as billing from "../billing.js";
 import type * as crons from "../crons.js";
 import type * as deploymentTypes from "../deploymentTypes.js";
+import type * as devSeed from "../devSeed.js";
 import type * as emailConfig from "../emailConfig.js";
 import type * as emails_AccountWelcomeEmail from "../emails/AccountWelcomeEmail.js";
 import type * as emails_Base from "../emails/Base.js";
@@ -21,6 +23,7 @@ import type * as emails_InviteEmail from "../emails/InviteEmail.js";
 import type * as emails_QuotaEmail from "../emails/QuotaEmail.js";
 import type * as emails_WelcomeEmail from "../emails/WelcomeEmail.js";
 import type * as events from "../events.js";
+import type * as funnels from "../funnels.js";
 import type * as health from "../health.js";
 import type * as http from "../http.js";
 import type * as invites from "../invites.js";
@@ -45,12 +48,14 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  _analytics: typeof _analytics;
   apiTokens: typeof apiTokens;
   auth: typeof auth;
   authHelpers: typeof authHelpers;
   billing: typeof billing;
   crons: typeof crons;
   deploymentTypes: typeof deploymentTypes;
+  devSeed: typeof devSeed;
   emailConfig: typeof emailConfig;
   "emails/AccountWelcomeEmail": typeof emails_AccountWelcomeEmail;
   "emails/Base": typeof emails_Base;
@@ -58,6 +63,7 @@ declare const fullApi: ApiFromModules<{
   "emails/QuotaEmail": typeof emails_QuotaEmail;
   "emails/WelcomeEmail": typeof emails_WelcomeEmail;
   events: typeof events;
+  funnels: typeof funnels;
   health: typeof health;
   http: typeof http;
   invites: typeof invites;

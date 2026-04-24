@@ -32,6 +32,7 @@ const LAST_USED_DEBOUNCE_MS = 60_000;
 export type ValidatedApiToken = {
   tokenId: Id<"apiTokens">;
   teamId: Id<"teams">;
+  createdBy: Id<"users">;
   scope: Doc<"apiTokens">["scope"];
   plan: Doc<"teams">["plan"];
 };
@@ -76,6 +77,7 @@ export const validate = internalQuery({
     return {
       tokenId: token._id,
       teamId: token.teamId,
+      createdBy: token.createdBy,
       scope: token.scope,
       plan: team.plan,
     };

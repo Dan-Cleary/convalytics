@@ -9,6 +9,7 @@
     { "source": "/mcp", "destination": "/mcp/index.html" },
     { "source": "/.well-known/mcp", "destination": "/.well-known/mcp/server-card.json" },
     { "source": "/events", "destination": "/index.html" },
+    { "source": "/funnels", "destination": "/index.html" },
     { "source": "/pages", "destination": "/index.html" },
     { "source": "/billing", "destination": "/index.html" },
     { "source": "/members", "destination": "/index.html" },

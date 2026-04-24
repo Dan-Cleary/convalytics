@@ -13,6 +13,7 @@ import { Sidebar } from "./components/Sidebar";
 import { BillingSuccessModal } from "./components/BillingSuccessModal";
 import { Overview } from "./pages/Overview";
 import { EventsPage } from "./pages/EventsPage";
+import { FunnelsPage } from "./pages/FunnelsPage";
 import { PagesPage } from "./pages/PagesPage";
 import { ProjectSetup } from "./pages/ProjectSetup";
 import { OAuthCallback } from "./pages/OAuthCallback";
@@ -278,6 +279,7 @@ function Dashboard() {
           <Route path="/overview" element={<Overview {...sharedProps} />} />
           <Route path="/pages" element={<PagesPage {...sharedProps} />} />
           <Route path="/events" element={<EventsPage {...sharedProps} />} />
+          <Route path="/funnels" element={<FunnelsPage {...sharedProps} />} />
           <Route path="/billing" element={<BillingPage />} />
           <Route path="/members" element={<MembersPage />} />
           <Route path="/tokens" element={<TokensPage />} />
