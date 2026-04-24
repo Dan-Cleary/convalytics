@@ -281,8 +281,13 @@ function FunnelEditor({
   const handleDelete = async () => {
     if (!funnelId) return;
     if (!confirm("Delete this funnel? It's soft-deleted and can be recovered from the database.")) return;
-    await removeFn({ funnelId });
-    onDone(null);
+    setErr(null);
+    try {
+      await removeFn({ funnelId });
+      onDone(null);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : String(e));
+    }
   };
 
   return (

@@ -76,7 +76,11 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
         onMouseEnter?.(e);
       }}
       onMouseLeave={(e) => {
-        if (!e.currentTarget.disabled) e.currentTarget.style.background = palette.bg;
+        if (!e.currentTarget.disabled) {
+          e.currentTarget.style.background = palette.bg;
+          e.currentTarget.style.transform = "translate(0, 0)";
+          e.currentTarget.style.boxShadow = BASE_SHADOW;
+        }
         onMouseLeave?.(e);
       }}
       onMouseDown={(e) => {
