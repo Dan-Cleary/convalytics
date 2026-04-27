@@ -103,11 +103,7 @@ export default function App() {
         />
         <Route
           path="/live"
-          element={
-            <MarketingPage>
-              <LiveContent />
-            </MarketingPage>
-          }
+          element={<LiveContent />}
         />
         {/* Home — sign-in OR redirect to dashboard */}
         <Route

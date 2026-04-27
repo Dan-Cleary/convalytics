@@ -26,7 +26,7 @@ export function LiveContent() {
         <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest" style={{ color: "#9b9488" }}>
           <span
             aria-hidden
-            className="inline-block w-2 h-2"
+            className="inline-block w-2 h-2 rounded-full"
             style={{ background: "#e8651c", animation: "convPulse 1.4s ease-in-out infinite" }}
           />
           Live · updating in real time
