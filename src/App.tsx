@@ -8,6 +8,7 @@ import { AboutContent } from "./marketing/AboutContent";
 import { PrivacyContent } from "./marketing/PrivacyContent";
 import { ContactContent } from "./marketing/ContactContent";
 import { McpContent } from "./marketing/McpContent";
+import { LiveContent } from "./marketing/LiveContent";
 import { MarketingPage } from "./marketing/MarketingPage";
 import { Sidebar } from "./components/Sidebar";
 import { BillingSuccessModal } from "./components/BillingSuccessModal";
@@ -97,6 +98,14 @@ export default function App() {
           element={
             <MarketingPage>
               <McpContent />
+            </MarketingPage>
+          }
+        />
+        <Route
+          path="/live"
+          element={
+            <MarketingPage>
+              <LiveContent />
             </MarketingPage>
           }
         />

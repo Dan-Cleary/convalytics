@@ -27,6 +27,7 @@ import type * as funnels from "../funnels.js";
 import type * as health from "../health.js";
 import type * as http from "../http.js";
 import type * as invites from "../invites.js";
+import type * as live from "../live.js";
 import type * as mcp from "../mcp.js";
 import type * as notifications from "../notifications.js";
 import type * as oauth from "../oauth.js";
@@ -67,6 +68,7 @@ declare const fullApi: ApiFromModules<{
   health: typeof health;
   http: typeof http;
   invites: typeof invites;
+  live: typeof live;
   mcp: typeof mcp;
   notifications: typeof notifications;
   oauth: typeof oauth;
