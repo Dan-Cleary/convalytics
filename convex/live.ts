@@ -35,11 +35,26 @@ export const stats = query({
     }
 
     const sortedDays = [...dayBuckets.entries()].sort((a, b) => a[0] - b[0]);
+    // Fill missing days with count=0 so a long quiet stretch shows as a
+    // flat plateau on the chart instead of a misleading diagonal between
+    // the two days that did have data.
+    const daily: { day: number; count: number; cumulative: number }[] = [];
     let running = 0;
-    const daily = sortedDays.map(([day, count]) => {
-      running += count;
-      return { day, count, cumulative: running };
-    });
+    if (sortedDays.length > 0) {
+      const firstDay = sortedDays[0][0];
+      const lastDay = sortedDays[sortedDays.length - 1][0];
+      let cursor = 0;
+      for (let day = firstDay; day <= lastDay; day += DAY_MS) {
+        const next = sortedDays[cursor];
+        let count = 0;
+        if (next && next[0] === day) {
+          count = next[1];
+          cursor++;
+        }
+        running += count;
+        daily.push({ day, count, cumulative: running });
+      }
+    }
 
     return {
       total: events.length + pageviews.length,
