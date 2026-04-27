@@ -61,11 +61,16 @@ export const stats = query({
       }
     }
 
+    const truncated =
+      events.length === MAX_ROWS_PER_TABLE ||
+      pageviews.length === MAX_ROWS_PER_TABLE;
+
     return {
       total: events.length + pageviews.length,
       eventsTotal: events.length,
       pageviewsTotal: pageviews.length,
       daily,
+      truncated,
     };
   },
 });
