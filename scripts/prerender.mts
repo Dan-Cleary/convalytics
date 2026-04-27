@@ -1,10 +1,17 @@
 // Prerender marketing components into dist/index.html's #seo-content slot so
 // crawlers and no-JS clients see text-rich HTML. Runs after `vite build`.
+//
+// Also emits a markdown sibling (dist/<route>.md) for each non-root route so
+// middleware.ts can serve markdown when agents send `Accept: text/markdown`.
+// The root markdown (/index.md) is hand-authored in public/ and intentionally
+// not regenerated here — it's the agent-facing front door and benefits from
+// curation.
 
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { renderToStaticMarkup } from "react-dom/server";
+import TurndownService from "turndown";
 import { SEOContent } from "../src/marketing/SEOContent.js";
 import { AboutContent } from "../src/marketing/AboutContent.js";
 import { PrivacyContent } from "../src/marketing/PrivacyContent.js";
@@ -75,6 +82,28 @@ if (!template.includes(SEO_SLOT)) {
   );
 }
 
+const turndown = new TurndownService({
+  headingStyle: "atx",
+  codeBlockStyle: "fenced",
+  bulletListMarker: "-",
+  emDelimiter: "*",
+});
+
+// Default turndown only fences <pre><code> pairs. Our JSX uses plain <pre> for
+// install snippets, so add a rule that fences any <pre> as an unlabeled block.
+turndown.addRule("preBlock", {
+  filter: (node) => node.nodeName === "PRE",
+  replacement: (_content, node) => {
+    const text = (node as { textContent?: string }).textContent ?? "";
+    return `\n\n\`\`\`\n${text.replace(/\n+$/, "")}\n\`\`\`\n\n`;
+  },
+});
+
+// emDelimiter is "*", so underscores are unambiguous in prose. The default
+// escape mangles identifiers like payment_succeeded into payment\_succeeded.
+const baseEscape = turndown.escape.bind(turndown);
+turndown.escape = (s: string) => baseEscape(s).replace(/\\_/g, "_");
+
 for (const route of ROUTES) {
   const markup = renderToStaticMarkup(route.component());
   let html = template.replace(
@@ -101,5 +130,16 @@ for (const route of ROUTES) {
       : resolve(distDir, route.path.replace(/^\//, ""), "index.html");
   mkdirSync(dirname(outPath), { recursive: true });
   writeFileSync(outPath, html);
-  console.log(`prerendered ${route.path} → ${outPath}`);
+
+  // Skip / — public/index.md is hand-curated and copied through by Vite.
+  if (route.path !== "/") {
+    const mdOutPath = resolve(
+      distDir,
+      `${route.path.replace(/^\//, "")}.md`,
+    );
+    writeFileSync(mdOutPath, turndown.turndown(markup) + "\n");
+    console.log(`prerendered ${route.path} → ${outPath} + ${mdOutPath}`);
+  } else {
+    console.log(`prerendered ${route.path} → ${outPath}`);
+  }
 }
