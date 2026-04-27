@@ -94,7 +94,9 @@ function CumulativeChart({
 
   const W = 800;
   const H = 220;
-  const PAD_X = 4;
+  // PAD_X must be ≥ the end-marker circle's radius (5) so the dot at the
+  // right edge of the series isn't clipped by the viewBox.
+  const PAD_X = 8;
   const PAD_Y = 12;
 
   const minTs = points[0].day;
