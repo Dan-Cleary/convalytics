@@ -1,6 +1,6 @@
 import { useQuery } from "convex/react";
-import { useEffect, useRef, useState } from "react";
 import { api } from "../../convex/_generated/api";
+import { useAnimatedNumber } from "../lib/useAnimatedNumber";
 
 const CARD_STYLE = {
   background: "#fff",
@@ -18,43 +18,63 @@ export function LiveContent() {
 
   // Tween the displayed number toward the real total so the live ticks
   // feel like a counter rolling up rather than a jump-cut.
-  const displayed = useTweenedNumber(total);
+  const displayed = useAnimatedNumber(total, 600);
 
   return (
     <main className="flex-1 flex flex-col items-center justify-center px-6 py-12">
       <div className="w-full max-w-3xl flex flex-col gap-6">
-        <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest" style={{ color: "#9b9488" }}>
+        <div
+          className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest"
+          style={{ color: "#9b9488" }}
+        >
           <span
             aria-hidden
             className="inline-block w-2 h-2 rounded-full"
-            style={{ background: "#e8651c", animation: "convPulse 1.4s ease-in-out infinite" }}
+            style={{
+              background: "#e8651c",
+              animation: "convPulse 1.4s ease-in-out infinite",
+            }}
           />
           Live · updating in real time
         </div>
 
         <div style={CARD_STYLE} className="px-6 py-8 flex flex-col gap-2">
-          <p className="text-[10px] font-bold uppercase tracking-widest" style={{ color: "#9b9488" }}>
+          <p
+            className="text-[10px] font-bold uppercase tracking-widest"
+            style={{ color: "#9b9488" }}
+          >
             Total events tracked
           </p>
           <p
             className="font-bold tabular-nums"
-            style={{ color: "#1a1814", fontSize: "clamp(48px, 9vw, 96px)", lineHeight: 1 }}
+            style={{
+              color: "#1a1814",
+              fontSize: "clamp(48px, 9vw, 96px)",
+              lineHeight: 1,
+            }}
           >
             {displayed.toLocaleString()}
           </p>
           <p className="text-xs" style={{ color: "#6b6456" }}>
-            Page views and custom product events sent to Convalytics across every project, all time.
+            Page views and custom product events sent to Convalytics across
+            every project, all time.
           </p>
         </div>
 
         <div style={CARD_STYLE} className="p-6">
-          <p className="text-[10px] font-bold uppercase tracking-widest mb-4" style={{ color: "#9b9488" }}>
+          <p
+            className="text-[10px] font-bold uppercase tracking-widest mb-4"
+            style={{ color: "#9b9488" }}
+          >
             Cumulative since launch
           </p>
           <CumulativeChart points={stats?.daily} />
         </div>
 
-        <div className="flex items-center justify-between text-[10px] uppercase tracking-widest" style={{ color: "#9b9488" }}>
+        <div
+          className="flex items-center justify-between text-[10px] uppercase tracking-widest"
+          style={{ color: "#9b9488" }}
+        >
           <span>
             {stats === undefined
               ? "Connecting…"
@@ -82,11 +102,21 @@ function CumulativeChart({
   points: { day: number; cumulative: number }[] | undefined;
 }) {
   if (points === undefined) {
-    return <div className="h-48 flex items-center justify-center text-xs" style={{ color: "#c4bfb2" }}>Loading…</div>;
+    return (
+      <div
+        className="h-48 flex items-center justify-center text-xs"
+        style={{ color: "#c4bfb2" }}
+      >
+        Loading…
+      </div>
+    );
   }
   if (points.length < 2) {
     return (
-      <div className="h-48 flex items-center justify-center text-xs" style={{ color: "#9b9488" }}>
+      <div
+        className="h-48 flex items-center justify-center text-xs"
+        style={{ color: "#9b9488" }}
+      >
         Not enough data yet — check back after a couple of days of ingest.
       </div>
     );
@@ -110,7 +140,9 @@ function CumulativeChart({
     return { x, y, point: p };
   });
 
-  const linePath = xy.map((p, i) => `${i === 0 ? "M" : "L"} ${p.x.toFixed(1)} ${p.y.toFixed(1)}`).join(" ");
+  const linePath = xy
+    .map((p, i) => `${i === 0 ? "M" : "L"} ${p.x.toFixed(1)} ${p.y.toFixed(1)}`)
+    .join(" ");
   const fillPath =
     `M ${xy[0].x.toFixed(1)} ${(H - PAD_Y).toFixed(1)} ` +
     xy.map((p) => `L ${p.x.toFixed(1)} ${p.y.toFixed(1)}`).join(" ") +
@@ -127,10 +159,27 @@ function CumulativeChart({
         style={{ height: H, display: "block" }}
       >
         <path d={fillPath} fill="#e8651c" opacity="0.12" />
-        <path d={linePath} fill="none" stroke="#1a1814" strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
-        <circle cx={last.x} cy={last.y} r="5" fill="#e8651c" stroke="#1a1814" strokeWidth="2" />
+        <path
+          d={linePath}
+          fill="none"
+          stroke="#1a1814"
+          strokeWidth="2"
+          strokeLinejoin="round"
+          strokeLinecap="round"
+        />
+        <circle
+          cx={last.x}
+          cy={last.y}
+          r="5"
+          fill="#e8651c"
+          stroke="#1a1814"
+          strokeWidth="2"
+        />
       </svg>
-      <div className="flex justify-between text-[10px] uppercase tracking-widest" style={{ color: "#9b9488" }}>
+      <div
+        className="flex justify-between text-[10px] uppercase tracking-widest"
+        style={{ color: "#9b9488" }}
+      >
         <span>{formatAxisDate(minTs)}</span>
         <span>{formatAxisDate(maxTs)}</span>
       </div>
@@ -141,35 +190,18 @@ function CumulativeChart({
 function formatAxisDate(ts: number): string {
   const d = new Date(ts);
   const months = [
-    "Jan", "Feb", "Mar", "Apr", "May", "Jun",
-    "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+    "Jan",
+    "Feb",
+    "Mar",
+    "Apr",
+    "May",
+    "Jun",
+    "Jul",
+    "Aug",
+    "Sep",
+    "Oct",
+    "Nov",
+    "Dec",
   ];
   return `${months[d.getUTCMonth()]} ${d.getUTCDate()}, ${d.getUTCFullYear()}`;
-}
-
-function useTweenedNumber(target: number, ms = 600): number {
-  const [value, setValue] = useState(target);
-  const fromRef = useRef(target);
-  const startRef = useRef(0);
-  const targetRef = useRef(target);
-
-  useEffect(() => {
-    if (target === targetRef.current) return;
-    fromRef.current = value;
-    targetRef.current = target;
-    startRef.current = performance.now();
-    let raf = 0;
-    const tick = (now: number) => {
-      const t = Math.min(1, (now - startRef.current) / ms);
-      const eased = 1 - Math.pow(1 - t, 3);
-      const next = Math.round(fromRef.current + (target - fromRef.current) * eased);
-      setValue(next);
-      if (t < 1) raf = requestAnimationFrame(tick);
-    };
-    raf = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(raf);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [target, ms]);
-
-  return value;
 }
