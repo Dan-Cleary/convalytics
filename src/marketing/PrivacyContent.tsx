@@ -30,7 +30,7 @@ export function PrivacyContent() {
           <a href="mailto:dan@prompthub.us">dan@prompthub.us</a>
           <br />
           Product support:{" "}
-          <a href="mailto:hello@convalytics.dev">hello@convalytics.dev</a>
+          <a href="mailto:dancleary54@gmail.com">dancleary54@gmail.com</a>
         </p>
       </section>
 
@@ -165,7 +165,7 @@ export function PrivacyContent() {
           <li>
             <strong>Account deletion.</strong> Request deletion of your
             account and all associated data by emailing{" "}
-            <a href="mailto:hello@convalytics.dev">hello@convalytics.dev</a>.
+            <a href="mailto:dancleary54@gmail.com">dancleary54@gmail.com</a>.
           </li>
         </ul>
         <p>
@@ -199,7 +199,7 @@ export function PrivacyContent() {
           Privacy and data-controller questions:{" "}
           <a href="mailto:dan@prompthub.us">dan@prompthub.us</a>. General
           product support:{" "}
-          <a href="mailto:hello@convalytics.dev">hello@convalytics.dev</a>.
+          <a href="mailto:dancleary54@gmail.com">dancleary54@gmail.com</a>.
         </p>
       </section>
 

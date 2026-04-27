@@ -66,4 +66,4 @@ Page views are unlimited and free on every plan.
 - Source: https://github.com/Dan-Cleary/convalytics
 - Convex component: https://github.com/Dan-Cleary/convalytics-convex-component
 - npm: https://www.npmjs.com/package/convalytics
-- Contact: hello@convalytics.dev
+- Contact: dancleary54@gmail.com

@@ -234,4 +234,4 @@ See https://convalytics.dev/pricing.md for full details including overage behavi
 ## Support
 
 - GitHub issues: https://github.com/Dan-Cleary/convalytics/issues
-- Email: hello@convalytics.dev
+- Email: dancleary54@gmail.com

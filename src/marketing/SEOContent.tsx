@@ -244,7 +244,7 @@ export function SEOContent() {
       <footer>
         <p>
           Questions? Email{" "}
-          <a href="mailto:hello@convalytics.dev">hello@convalytics.dev</a> or
+          <a href="mailto:dancleary54@gmail.com">dancleary54@gmail.com</a> or
           file an issue at{" "}
           <a href="https://github.com/Dan-Cleary/convalytics/issues">
             github.com/Dan-Cleary/convalytics/issues

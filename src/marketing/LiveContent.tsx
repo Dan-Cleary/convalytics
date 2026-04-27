@@ -117,17 +117,32 @@ function CumulativeChart({
   const last = xy[xy.length - 1];
 
   return (
-    <svg
-      viewBox={`0 0 ${W} ${H}`}
-      preserveAspectRatio="none"
-      className="w-full"
-      style={{ height: H, display: "block" }}
-    >
-      <path d={fillPath} fill="#e8651c" opacity="0.12" />
-      <path d={linePath} fill="none" stroke="#1a1814" strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
-      <circle cx={last.x} cy={last.y} r="5" fill="#e8651c" stroke="#1a1814" strokeWidth="2" />
-    </svg>
+    <div className="flex flex-col gap-2">
+      <svg
+        viewBox={`0 0 ${W} ${H}`}
+        preserveAspectRatio="none"
+        className="w-full"
+        style={{ height: H, display: "block" }}
+      >
+        <path d={fillPath} fill="#e8651c" opacity="0.12" />
+        <path d={linePath} fill="none" stroke="#1a1814" strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
+        <circle cx={last.x} cy={last.y} r="5" fill="#e8651c" stroke="#1a1814" strokeWidth="2" />
+      </svg>
+      <div className="flex justify-between text-[10px] uppercase tracking-widest" style={{ color: "#9b9488" }}>
+        <span>{formatAxisDate(minTs)}</span>
+        <span>{formatAxisDate(maxTs)}</span>
+      </div>
+    </div>
   );
+}
+
+function formatAxisDate(ts: number): string {
+  const d = new Date(ts);
+  const months = [
+    "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+    "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+  ];
+  return `${months[d.getUTCMonth()]} ${d.getUTCDate()}, ${d.getUTCFullYear()}`;
 }
 
 function useTweenedNumber(target: number, ms = 600): number {
