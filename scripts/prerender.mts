@@ -58,6 +58,11 @@ const ROUTES: Route[] = [
     description:
       "Convalytics MCP server exposes read-only analytics tools to Claude Desktop, Claude Code, Cursor, Windsurf, and other MCP-capable AI assistants.",
   },
+  // /live is a fully reactive Convex-backed page (uses `useQuery` against
+  // api.live.stats), so it can't be statically prerendered without a
+  // ConvexProvider in the SSR pass. Served via the SPA fallback in
+  // vercel.json instead — Twitter / OG crawlers still get the meta tags
+  // from index.html, the body just hydrates client-side.
 ];
 
 const SEO_SLOT = '<div id="seo-content"></div>';

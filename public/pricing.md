@@ -47,4 +47,4 @@ All plans share the same per-write-key rate limit: **1000 events per minute**. E
 
 ## Questions
 
-Contact hello@convalytics.dev or open an issue at https://github.com/Dan-Cleary/convalytics.
+Contact dancleary54@gmail.com or open an issue at https://github.com/Dan-Cleary/convalytics.

@@ -91,4 +91,4 @@ claude mcp add --transport http convalytics https://api.convalytics.dev/mcp \
 **Docs / full product manual:** https://convalytics.dev/llms-full.txt
 
 **Author:** Dan Cleary, Tethered Software Inc.
-**Contact:** hello@convalytics.dev
+**Contact:** dancleary54@gmail.com

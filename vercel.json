@@ -7,6 +7,7 @@
     { "source": "/privacy", "destination": "/privacy/index.html" },
     { "source": "/contact", "destination": "/contact/index.html" },
     { "source": "/mcp", "destination": "/mcp/index.html" },
+    { "source": "/live", "destination": "/index.html" },
     { "source": "/.well-known/mcp", "destination": "/.well-known/mcp/server-card.json" },
     { "source": "/events", "destination": "/index.html" },
     { "source": "/funnels", "destination": "/index.html" },

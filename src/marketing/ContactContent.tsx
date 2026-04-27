@@ -15,7 +15,7 @@ export function ContactContent() {
       <section>
         <h2>General questions and support</h2>
         <p>
-          <a href="mailto:hello@convalytics.dev">hello@convalytics.dev</a>
+          <a href="mailto:dancleary54@gmail.com">dancleary54@gmail.com</a>
         </p>
       </section>
 
@@ -39,7 +39,7 @@ export function ContactContent() {
         </p>
         <ul>
           <li>
-            <a href="mailto:hello@convalytics.dev">hello@convalytics.dev</a>{" "}
+            <a href="mailto:dancleary54@gmail.com">dancleary54@gmail.com</a>{" "}
             (email, PGP on request)
           </li>
           <li>

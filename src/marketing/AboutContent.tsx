@@ -92,7 +92,7 @@ export function AboutContent() {
         <h2>Contact</h2>
         <ul>
           <li>
-            General: <a href="mailto:hello@convalytics.dev">hello@convalytics.dev</a>
+            General: <a href="mailto:dancleary54@gmail.com">dancleary54@gmail.com</a>
           </li>
           <li>
             Security disclosure: see{" "}
