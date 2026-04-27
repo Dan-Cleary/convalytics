@@ -69,11 +69,11 @@ Content-Type: application/json
 
 Batch endpoint (up to 100 events per request): `POST /ingest/batch` with `{ writeKey, events: [...] }`.
 
-## MCP server (read-only queries for AI assistants)
+## MCP server (read + funnel-write tools for AI assistants)
 
-Convalytics exposes a Model Context Protocol server at `POST https://api.convalytics.dev/mcp` so Claude Desktop, Claude Code, Cursor, Windsurf, and other MCP-capable clients can answer questions about analytics data in chat. Protocol: JSON-RPC 2.0.
+Convalytics exposes a Model Context Protocol server at `POST https://api.convalytics.dev/mcp` so Claude Desktop, Claude Code, Cursor, Windsurf, and other MCP-capable clients can answer questions about analytics data in chat, and with a write-scoped token can also create/update/delete saved conversion funnels. Protocol: JSON-RPC 2.0.
 
-**Auth.** Bearer token, not the write key. Users generate a read-scoped API token at https://convalytics.dev/tokens, then pass it as `Authorization: Bearer cnv_...`. Tokens bind to one team and grant read access to every project on that team.
+**Auth.** Bearer token, not the write key. Users generate an API token at https://convalytics.dev/tokens with `scope="read"` (default; the nine analytics queries and the three funnel read tools) or `scope="write"` (also unlocks the three funnel-mutating tools). Pass as `Authorization: Bearer cnv_...`. Tokens bind to one team and grant access to every project on that team.
 
 **Plan requirement.** The MCP endpoint is gated to the Solo ($29/mo) and Pro ($99/mo) plans. API-token creation itself is free on every plan, but the `/mcp` endpoint returns `402 plan_required` for Free-tier teams.
 
@@ -81,7 +81,7 @@ Convalytics exposes a Model Context Protocol server at `POST https://api.convaly
 
 **Rate limit.** 120 requests per minute per team. Exceeding returns `429 rate_limit_exceeded` with `Retry-After` and `resetAt`.
 
-**Tools (9).** The project-scoped tools all take `project` (the project's case-insensitive name or its id from `list_projects`).
+**Tools (15).** The project-scoped tools all take `project` (the project's case-insensitive name or its id from `list_projects`). Funnel-scoped tools take `funnelId`.
 
 Page views (the automatic hits from the browser script) and custom product events (emitted by `analytics.track()`) live in separate tables. `pageviews_count`, `top_pages`, and `top_referrers` query page views. `events_count` and `recent_events` query custom events. `weekly_digest` combines both at a project level; `user_activity` combines both at a user level.
 
@@ -96,6 +96,18 @@ User identification: four of the tools (`top_pages`, `pageviews_count`, `events_
 - `recent_events({ project, name?, limit?, redact?, user? })`: most recent custom events. Default `redact: true` nulls `userEmail`, `userName`, and `props` for PII hygiene; set `redact: false` to include them.
 - `user_activity({ project, user, since?, until? })`: composite per-user snapshot — identity block, total pageviews, total events, session count, top pages visited, top event names, and the user's 20 most recent events with props. Prefer this over chaining tools with `user` filters when the agent just wants "how is X using the app?"
 - `weekly_digest({ project, days?, compare? })`: composite "how did we do this window?" snapshot. Returns visitors, pageviews, sessions, bounce rate, avg session duration, top 5 pages, top 5 referrers, custom-events total, top 5 event names, plus period-over-period deltas. Default `days: 7`, `compare: true`. Prefer this when the agent just wants to summarize a period rather than chain multiple tools.
+
+**Funnel tools.** A funnel is a saved, ordered sequence of 2–10 event or pageview steps with a per-funnel `conversionWindowMs` (max gap between consecutive steps, default 7 days, bounded 1 min–90 days). `compute_funnel` walks each visitor through the steps in order and returns per-step visitor counts + conversion-from-previous + conversion-from-start + avg time to convert.
+
+Read tools (any scope):
+- `list_funnels({ project })`: active funnels on a project; excludes soft-deleted.
+- `get_funnel({ funnelId })`: full definition of one funnel.
+- `compute_funnel({ funnelId, since?, until? })`: run the analysis over a time window.
+
+Write tools (require `scope="write"` token):
+- `create_funnel({ project, name, steps, description?, conversionWindowMs? })`: insert a new funnel. Each step is `{ kind: "event" | "pageview", match: string, label? }`.
+- `update_funnel({ funnelId, name?, description?, steps?, conversionWindowMs? })`: patch an existing funnel.
+- `delete_funnel({ funnelId })`: soft delete. Retained with status='deleted', filtered from list/get/compute. Idempotent.
 
 Full tool schemas live in the `tools/list` response and at https://convalytics.dev/.well-known/mcp/server-card.json.
 
@@ -116,7 +128,7 @@ claude mcp add --transport http convalytics https://api.convalytics.dev/mcp --he
 }
 ```
 
-Not in v1: `funnel` tool, write/admin tools, OAuth, MCP Apps UI resources, stdio transport. See https://convalytics.dev/mcp for latest details.
+Not in v1: retention/trends tools, OAuth, MCP Apps UI resources, stdio transport. See https://convalytics.dev/mcp for latest details.
 
 ## Authentication
 

@@ -598,7 +598,7 @@ On sign-out, call reset() to revert to anonymous tracking:
 Identity persists in localStorage across page reloads until reset() is called.
 The dashboard shows email > name > anonymous ID with cascading priority.
 
-## MCP server (read-only queries for AI assistants)
+## MCP server (read + funnel-write tools for AI assistants)
 
 Once events are flowing, developers can query their analytics conversationally
 via Claude Desktop, Claude Code, Cursor, Windsurf, or any MCP-capable client.
@@ -610,6 +610,11 @@ Nine read-only tools: list_projects, get_usage, top_pages, top_referrers,
 pageviews_count, events_count, recent_events, weekly_digest (project summary
 with period-over-period comparison), user_activity (per-user snapshot —
 matches by userEmail or visitorId).
+
+Six funnel tools: list_funnels, get_funnel, compute_funnel (read), plus
+create_funnel, update_funnel, delete_funnel (write — require a token minted
+with scope="write" at /tokens; default scope="read" tokens can only call the
+read side). delete_funnel is a soft delete.
 
 Gated to Solo+ plans. Tokens are team-scoped; each MCP tool takes an explicit
 project argument. Full docs at https://convalytics.dev/mcp and
@@ -1495,16 +1500,59 @@ const UNTIL_DESC = "End of window as unix milliseconds. Defaults to now.";
 const USER_DESC =
   "Optional. Filter to one visitor/user. Accepts userEmail (case-insensitive) or visitorId (exact). For the full per-user snapshot prefer user_activity.";
 
-// Annotations on every tool (MCP spec 2025-06-18). All Convalytics tools are
-// read-only (no writes), deterministic for the same inputs within a scan
-// window, and closed-world (only read from Convalytics's own DB, no external
-// calls). These hints let MCP clients display appropriate UI and optimize
-// planning — registry-quality scanners also give credit for having them.
+// Annotations per MCP spec 2025-06-18. Read tools are deterministic and
+// closed-world; funnel writes (create/update/delete) are state-changing.
+// These hints let MCP clients display appropriate UI + let registry
+// scanners credit the server for having them.
 const READ_ONLY_ANNOTATIONS = {
   readOnlyHint: true,
   destructiveHint: false,
   idempotentHint: true,
   openWorldHint: false,
+} as const;
+
+const WRITE_ANNOTATIONS = {
+  readOnlyHint: false,
+  destructiveHint: false,
+  idempotentHint: false,
+  openWorldHint: false,
+} as const;
+
+const IDEMPOTENT_WRITE_ANNOTATIONS = {
+  readOnlyHint: false,
+  destructiveHint: false,
+  idempotentHint: true,
+  openWorldHint: false,
+} as const;
+
+const DESTRUCTIVE_ANNOTATIONS = {
+  readOnlyHint: false,
+  destructiveHint: true,
+  idempotentHint: true,
+  openWorldHint: false,
+} as const;
+
+const STEP_SCHEMA = {
+  type: "object",
+  properties: {
+    kind: {
+      type: "string",
+      enum: ["event", "pageview"],
+      description:
+        "'event' for a custom analytics.track() event, 'pageview' for a page-path match.",
+    },
+    match: {
+      type: "string",
+      description:
+        "Event name (for kind='event') or exact pageview path (for kind='pageview').",
+    },
+    label: {
+      type: "string",
+      description: "Optional friendly display name.",
+    },
+  },
+  required: ["kind", "match"],
+  additionalProperties: false,
 } as const;
 
 const MCP_TOOLS = [
@@ -1675,6 +1723,110 @@ const MCP_TOOLS = [
       required: ["project"],
       additionalProperties: false,
     },
+  },
+  {
+    name: "list_funnels",
+    description:
+      "List active funnels defined on a project. A funnel is a saved ordered sequence of steps (events or pageview paths) that Convalytics computes step-by-step conversion for. Soft-deleted funnels are excluded.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        project: { type: "string", description: PROJECT_DESC },
+      },
+      required: ["project"],
+      additionalProperties: false,
+    },
+    annotations: { ...READ_ONLY_ANNOTATIONS, title: "List funnels" },
+  },
+  {
+    name: "get_funnel",
+    description:
+      "Return the full definition of one funnel by id: name, description, ordered steps, and conversion window.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        funnelId: { type: "string", description: "Funnel id from list_funnels or create_funnel." },
+      },
+      required: ["funnelId"],
+      additionalProperties: false,
+    },
+    annotations: { ...READ_ONLY_ANNOTATIONS, title: "Get funnel" },
+  },
+  {
+    name: "create_funnel",
+    description:
+      "Create a new funnel on a project. Steps are 2–10 ordered events or pageview paths. conversionWindowMs caps how long a visitor has between consecutive steps (default 7 days); this is the step-to-step limit, without which a funnel is just event co-occurrence. Returns { id } on success.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        project: { type: "string", description: PROJECT_DESC },
+        name: { type: "string", description: "Human-readable name." },
+        description: { type: "string", description: "Optional longer description." },
+        steps: {
+          type: "array",
+          minItems: 2,
+          maxItems: 10,
+          items: STEP_SCHEMA,
+          description: "Ordered list of 2–10 steps. Visitors must hit them in order.",
+        },
+        conversionWindowMs: {
+          type: "number",
+          description:
+            "Max ms between consecutive steps. Default 7 days (604800000). Bounds: 60000 (1 min) to 7776000000 (90 days).",
+        },
+      },
+      required: ["project", "name", "steps"],
+      additionalProperties: false,
+    },
+    annotations: { ...WRITE_ANNOTATIONS, title: "Create funnel" },
+  },
+  {
+    name: "update_funnel",
+    description:
+      "Patch an existing funnel. Any subset of name/description/steps/conversionWindowMs. Refuses updates on deleted funnels.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        funnelId: { type: "string" },
+        name: { type: "string" },
+        description: { type: "string" },
+        steps: { type: "array", minItems: 2, maxItems: 10, items: STEP_SCHEMA },
+        conversionWindowMs: { type: "number" },
+      },
+      required: ["funnelId"],
+      additionalProperties: false,
+    },
+    annotations: { ...IDEMPOTENT_WRITE_ANNOTATIONS, title: "Update funnel" },
+  },
+  {
+    name: "delete_funnel",
+    description:
+      "Soft delete a funnel. The row is retained with status='deleted' and excluded from list/get/compute. Idempotent — calling twice is a no-op. Use if the funnel is obsolete; the record is kept for audit and cannot be undone from MCP.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        funnelId: { type: "string" },
+      },
+      required: ["funnelId"],
+      additionalProperties: false,
+    },
+    annotations: { ...DESTRUCTIVE_ANNOTATIONS, title: "Delete funnel" },
+  },
+  {
+    name: "compute_funnel",
+    description:
+      "Run a funnel over a time window and return per-step visitor count, conversion from previous step, conversion from start, and average time to convert between steps. Returns `truncated` flags if the scan cap was hit.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        funnelId: { type: "string" },
+        since: { type: "number", description: SINCE_DESC },
+        until: { type: "number", description: UNTIL_DESC },
+      },
+      required: ["funnelId"],
+      additionalProperties: false,
+    },
+    annotations: { ...READ_ONLY_ANNOTATIONS, title: "Compute funnel" },
   },
 ] as const;
 
@@ -1943,6 +2095,12 @@ http.route({
   }),
 });
 
+const WRITE_SCOPED_TOOLS = new Set([
+  "create_funnel",
+  "update_funnel",
+  "delete_funnel",
+]);
+
 async function dispatchTool(
   ctx: ActionCtx,
   token: ValidatedApiToken,
@@ -1950,6 +2108,11 @@ async function dispatchTool(
   args: Record<string, unknown>,
   environment: string | undefined,
 ) {
+  if (WRITE_SCOPED_TOOLS.has(name) && token.scope !== "write") {
+    throw new Error(
+      `Tool "${name}" requires a token with scope="write". The token in use is read-only — mint a write-scoped token at https://convalytics.dev/tokens.`,
+    );
+  }
   switch (name) {
     case "list_projects":
       return ctx.runQuery(internal.mcp.listProjects, { teamId: token.teamId });
@@ -2033,9 +2196,84 @@ async function dispatchTool(
         environment,
       });
     }
+    case "list_funnels": {
+      const { writeKey } = await resolveProject(ctx, token.teamId, args);
+      return ctx.runQuery(internal.mcp.listFunnels, {
+        teamId: token.teamId,
+        writeKey,
+      });
+    }
+    case "get_funnel": {
+      const funnelId = requireFunnelId(args);
+      return ctx.runQuery(internal.mcp.getFunnel, {
+        teamId: token.teamId,
+        funnelId,
+      });
+    }
+    case "create_funnel": {
+      const { writeKey } = await resolveProject(ctx, token.teamId, args);
+      const name = strOrUndefined(args.name);
+      if (!name) {
+        throw new Error("Missing required parameter: name.");
+      }
+      const steps = args.steps;
+      if (!Array.isArray(steps)) {
+        throw new Error("Missing required parameter: steps (array).");
+      }
+      return ctx.runMutation(internal.mcp.createFunnel, {
+        teamId: token.teamId,
+        createdBy: token.createdBy,
+        writeKey,
+        name,
+        description: strOrUndefined(args.description),
+        steps: steps as FunnelStepArg[],
+        conversionWindowMs: numOrUndefined(args.conversionWindowMs),
+      });
+    }
+    case "update_funnel": {
+      const funnelId = requireFunnelId(args);
+      const steps = args.steps;
+      return ctx.runMutation(internal.mcp.updateFunnel, {
+        teamId: token.teamId,
+        funnelId,
+        name: strOrUndefined(args.name),
+        description: strOrUndefined(args.description),
+        steps: Array.isArray(steps) ? (steps as FunnelStepArg[]) : undefined,
+        conversionWindowMs: numOrUndefined(args.conversionWindowMs),
+      });
+    }
+    case "delete_funnel": {
+      const funnelId = requireFunnelId(args);
+      return ctx.runMutation(internal.mcp.deleteFunnel, {
+        teamId: token.teamId,
+        funnelId,
+      });
+    }
+    case "compute_funnel": {
+      const funnelId = requireFunnelId(args);
+      return ctx.runQuery(internal.mcp.funnelCompute, {
+        teamId: token.teamId,
+        funnelId,
+        since: numOrUndefined(args.since),
+        until: numOrUndefined(args.until),
+        environment,
+      });
+    }
     default:
       throw new Error(`Unknown tool: ${name}`);
   }
+}
+
+type FunnelStepArg = { kind: "event" | "pageview"; match: string; label?: string };
+
+function requireFunnelId(args: Record<string, unknown>): Id<"funnels"> {
+  const raw = strOrUndefined(args.funnelId);
+  if (!raw) {
+    throw new Error(
+      "Missing required parameter: funnelId. Call list_funnels to see available ids.",
+    );
+  }
+  return raw as unknown as Id<"funnels">;
 }
 
 async function resolveProject(

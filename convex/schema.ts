@@ -172,6 +172,42 @@ export default defineSchema({
   }).index("by_key_and_window", ["key", "window"]),
 
   // -------------------------------------------------------------------------
+  // Funnels — saved ordered-step conversion analyses over events + pageviews.
+  //
+  // First saved-analytics primitive in Convalytics. Creatable from the
+  // dashboard or agents via the MCP server. `conversionWindowMs` is a
+  // correctness requirement: without it a funnel is just event co-occurrence
+  // over the query window (step i must happen within cw of step i-1).
+  // `status` + `deletedAt` is a soft-delete — removing a funnel someone has
+  // been tracking for weeks is unrecoverable, so delete_funnel from both
+  // MCP and UI patches status instead of calling ctx.db.delete.
+  // -------------------------------------------------------------------------
+  funnels: defineTable({
+    projectId: v.id("projects"),
+    teamId: v.id("teams"),
+    name: v.string(),
+    description: v.optional(v.string()),
+    steps: v.array(
+      v.object({
+        kind: v.union(v.literal("event"), v.literal("pageview")),
+        // Event name for kind="event", pageview path for kind="pageview".
+        match: v.string(),
+        label: v.optional(v.string()),
+      }),
+    ),
+    conversionWindowMs: v.optional(v.number()),
+    status: v.optional(
+      v.union(v.literal("active"), v.literal("deleted")),
+    ),
+    createdBy: v.id("users"),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+    deletedAt: v.optional(v.number()),
+  })
+    .index("by_projectId", ["projectId"])
+    .index("by_teamId", ["teamId"]),
+
+  // -------------------------------------------------------------------------
   // API tokens — user-generated credentials scoped to one project.
   //
   // First consumer is MCP (Convalytics MCP server gated to Solo+). Intentionally
@@ -188,7 +224,11 @@ export default defineSchema({
     teamId: v.id("teams"),
     createdBy: v.id("users"),
     name: v.string(),
-    scope: v.literal("read"),
+    // "read" tokens can call every read-only MCP tool (the nine analytics
+    // queries). "write" tokens additionally unlock create_funnel /
+    // update_funnel / delete_funnel. Existing tokens created before this
+    // union existed keep their "read" value and remain read-only.
+    scope: v.union(v.literal("read"), v.literal("write")),
     createdAt: v.number(),
     lastUsedAt: v.optional(v.number()),
     revokedAt: v.optional(v.number()),

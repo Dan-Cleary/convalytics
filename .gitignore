@@ -26,3 +26,7 @@ dist-ssr
 .vercel
 *.tsbuildinfo
 .claude/scheduled_tasks.lock
+
+# Project-scoped MCP config — typically holds bearer tokens for dev
+# deployments, not safe to commit.
+.mcp.json

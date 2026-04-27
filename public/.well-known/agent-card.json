@@ -57,12 +57,14 @@
     {
       "id": "query_analytics_mcp",
       "name": "Query analytics via MCP",
-      "description": "Convalytics also exposes a Model Context Protocol server for AI assistants (Claude Desktop, Claude Code, Cursor, Windsurf) to ask natural-language questions about a project's analytics. Nine read-only tools cover traffic, custom events, per-user activity, and a period-over-period digest. Uses a separate auth model (team-scoped API token) and is gated to paid plans. See https://convalytics.dev/.well-known/mcp/server-card.json for the MCP capability list and https://convalytics.dev/mcp for install instructions.",
-      "tags": ["analytics", "mcp", "query", "read"],
+      "description": "Convalytics exposes a Model Context Protocol server for AI assistants (Claude Desktop, Claude Code, Cursor, Windsurf). Nine read-only tools cover traffic, custom events, per-user activity, and a period-over-period digest. Six funnel tools list/read/compute saved conversion funnels; with a write-scoped token, agents can also create/update/delete funnels. Uses a separate auth model (team-scoped API token with read or write scope) and is gated to paid plans. See https://convalytics.dev/.well-known/mcp/server-card.json for the capability list and https://convalytics.dev/mcp for install instructions.",
+      "tags": ["analytics", "mcp", "query", "funnels", "read", "write"],
       "examples": [
         "What are the top 10 pages on my site this week?",
         "How is dan@example.com using my app?",
-        "Give me a weekly digest of my project with period-over-period comparison"
+        "Give me a weekly digest of my project with period-over-period comparison",
+        "Compute the Signup funnel for the last 7 days and show step-by-step conversion",
+        "Create a funnel: pageview /pricing, then event signup_completed"
       ]
     }
   ]

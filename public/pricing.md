@@ -12,11 +12,13 @@ Billing is by monthly event volume. Page views are always free and do not count 
 - 90-day data retention
 - All dashboards and exports
 - All integrations (Convex component, browser script, HTTP API, CLI)
+- API tokens for agent provisioning (MCP server itself is Solo+)
 
 ### Solo — $29 / month
 - 500,000 custom events per month
 - Unlimited page views
 - 365-day data retention
+- **Convalytics MCP server** (read + write) for AI assistants
 - Everything in Free
 
 ### Pro — $99 / month

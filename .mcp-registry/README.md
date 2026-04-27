@@ -10,7 +10,7 @@ registries, so a human can run through them in ~10 minutes.
 1. Visit https://smithery.ai/new
 2. Paste `https://api.convalytics.dev/mcp`
 3. Smithery auto-fetches `/.well-known/mcp/server-card.json` and lists the
-   6 tools. No further metadata needed.
+   15 tools (9 analytics + 6 funnel). No further metadata needed.
 
 If it asks for additional copy, paste from the **Description and copy** section at
 the bottom of this doc.
@@ -70,12 +70,12 @@ otherwise:
 ## Description and copy (copy/paste into any form)
 
 **Short (<140 chars):**
-> Read-only analytics tools for AI assistants. Query top pages, events, usage for your Convalytics Convex-app analytics via MCP.
+> Analytics + conversion funnels for AI assistants. Query traffic, events, usage; list/compute/build funnels for your Convalytics Convex-app via MCP.
 
 **Medium (~300 chars):**
-> Convalytics is analytics built for Convex apps. The MCP server exposes six read-only tools — list_projects, get_usage, top_pages, top_referrers, events_count, recent_events — so Claude Desktop, Cursor, Windsurf, and other MCP clients can answer "how did my app do this week?" in natural language.
+> Convalytics is analytics built for Convex apps. The MCP server exposes 15 tools: 9 read-only analytics queries (top pages, referrers, events, per-user activity, weekly digest) plus 6 funnel tools to list, compute, and (with a write-scoped token) create/update/delete saved conversion funnels. For Claude Desktop, Cursor, Windsurf, and other MCP clients.
 
-**Tags / categories:** analytics, monitoring, developer-tools, convex, saas, read-only
+**Tags / categories:** analytics, monitoring, funnels, developer-tools, convex, saas
 
 **Install snippet (if asked):**
 

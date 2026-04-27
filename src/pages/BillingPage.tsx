@@ -1,6 +1,7 @@
 import { useQuery, useAction } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { useState } from "react";
+import { Button } from "../components/Button";
 import { formatEventLimit, formatRetention } from "../lib/timeRange";
 import { PLANS as PLAN_DEFS, type PlanId } from "../../convex/plans";
 
@@ -12,6 +13,7 @@ const PLANS = PLAN_ORDER.map((id) => ({
   price: PLAN_DEFS[id].priceMonthly,
   events: `${formatEventLimit(PLAN_DEFS[id].eventsPerMonth)} events/mo`,
   retention: `${formatRetention(PLAN_DEFS[id].retentionDays)} retention`,
+  mcp: id === "free" ? "No MCP" : "MCP included",
 }));
 
 export function BillingPage() {
@@ -156,6 +158,18 @@ export function BillingPage() {
                   >
                     {plan.retention}
                   </span>
+                  <span
+                    className="text-[10px]"
+                    style={{
+                      color:
+                        plan.id === "free"
+                          ? (isCurrent ? "#6b6456" : "#9b9488")
+                          : "#e8651c",
+                      fontWeight: plan.id === "free" ? 400 : 600,
+                    }}
+                  >
+                    {plan.mcp}
+                  </span>
                 </div>
               </div>
 
@@ -197,21 +211,8 @@ export function BillingPage() {
                     (usage.plan === "solo" &&
                       plan.id === "pro" &&
                       usage.hasStripeSubscription)) && (
-                    <button
-                      className="px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider cursor-pointer transition-all"
-                      style={{
-                        background: "#e8651c",
-                        color: "#fff",
-                        border: "2px solid #e8651c",
-                      }}
-                      onMouseEnter={(e) => {
-                        e.currentTarget.style.background = "#c9581a";
-                        e.currentTarget.style.borderColor = "#c9581a";
-                      }}
-                      onMouseLeave={(e) => {
-                        e.currentTarget.style.background = "#e8651c";
-                        e.currentTarget.style.borderColor = "#e8651c";
-                      }}
+                    <Button
+                      size="sm"
                       disabled={
                         loading === (usage.plan === "free" ? plan.id : "portal")
                       }
@@ -224,7 +225,7 @@ export function BillingPage() {
                       {loading === (usage.plan === "free" ? plan.id : "portal")
                         ? "Opening…"
                         : "Upgrade"}
-                    </button>
+                    </Button>
                   )}
 
                 {!isCurrent && isDowngrade && usage.hasStripeSubscription && (

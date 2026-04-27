@@ -2,6 +2,7 @@ import { useMutation, useQuery } from "convex/react";
 import { useState } from "react";
 import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
+import { Button } from "../components/Button";
 
 export function TokensPage() {
   const usage = useQuery(api.usage.getMyUsage, {});
@@ -11,6 +12,7 @@ export function TokensPage() {
   const revokeToken = useMutation(api.apiTokens.revoke);
 
   const [newName, setNewName] = useState("");
+  const [newScope, setNewScope] = useState<"read" | "write">("read");
   const [creating, setCreating] = useState(false);
   const [justCreatedToken, setJustCreatedToken] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
@@ -27,9 +29,10 @@ export function TokensPage() {
     setCreating(true);
     setError(null);
     try {
-      const { token } = await createToken({ name });
+      const { token } = await createToken({ name, scope: newScope });
       setJustCreatedToken(token);
       setNewName("");
+      setNewScope("read");
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -64,9 +67,11 @@ export function TokensPage() {
         API Tokens
       </h1>
       <p className="text-xs mb-6" style={{ color: "#6b6456" }}>
-        Read-only credentials scoped to this team. Used by the Convalytics MCP
-        server so AI assistants can query analytics across any project on the
-        team. Each tool call picks the project explicitly.
+        Team-scoped credentials for the Convalytics MCP server. Default{" "}
+        <strong>read</strong> tokens let AI assistants query analytics across
+        any project on the team. <strong>Write</strong> tokens additionally
+        unlock funnel create/update/delete. Each tool call picks the project
+        explicitly.
       </p>
 
       {isFreePlan && (
@@ -167,37 +172,59 @@ export function TokensPage() {
             </details>
           </div>
         ) : (
-          <div className="flex gap-2 flex-wrap">
-            <input
-              type="text"
-              placeholder="Token name (e.g. Claude Desktop)"
-              value={newName}
-              onChange={(e) => {
-                setNewName(e.target.value);
-                setError(null);
-              }}
-              disabled={creating}
-              maxLength={100}
-              className="flex-1 min-w-[200px] px-3 py-2 text-sm"
-              style={{
-                border: "2px solid #1a1814",
-                background: "#fff",
-                color: "#1a1814",
-              }}
-            />
-            <button
-              onClick={() => void handleCreate()}
-              disabled={creating || !newName.trim()}
-              className="px-4 py-2 text-xs font-bold uppercase tracking-wider cursor-pointer"
-              style={{
-                background: "#1a1814",
-                color: "#fff",
-                border: "2px solid #1a1814",
-                opacity: creating || !newName.trim() ? 0.5 : 1,
-              }}
-            >
-              {creating ? "Creating…" : "Create token"}
-            </button>
+          <div className="flex flex-col gap-3">
+            <div className="flex gap-2 flex-wrap">
+              <input
+                type="text"
+                placeholder="Token name (e.g. Claude Desktop)"
+                value={newName}
+                onChange={(e) => {
+                  setNewName(e.target.value);
+                  setError(null);
+                }}
+                disabled={creating}
+                maxLength={100}
+                className="flex-1 min-w-[200px] px-3 py-2 text-sm"
+                style={{
+                  border: "2px solid #1a1814",
+                  background: "#fff",
+                  color: "#1a1814",
+                }}
+              />
+              <Button
+                variant="dark"
+                onClick={() => void handleCreate()}
+                disabled={creating || !newName.trim()}
+              >
+                {creating ? "Creating…" : "Create token"}
+              </Button>
+            </div>
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-[10px] uppercase tracking-widest" style={{ color: "#9b9488" }}>
+                Scope
+              </span>
+              {(["read", "write"] as const).map((s) => (
+                <button
+                  key={s}
+                  type="button"
+                  className="px-3 py-1 text-[11px] font-medium cursor-pointer"
+                  style={
+                    newScope === s
+                      ? { background: "#1a1814", color: "#fff", border: "2px solid #1a1814" }
+                      : { background: "#fff", color: "#1a1814", border: "2px solid #1a1814" }
+                  }
+                  onClick={() => setNewScope(s)}
+                  disabled={creating}
+                >
+                  {s}
+                </button>
+              ))}
+              <span className="text-[10px]" style={{ color: "#9b9488" }}>
+                {newScope === "read"
+                  ? "Analytics queries only."
+                  : "Analytics queries + funnel create/update/delete."}
+              </span>
+            </div>
           </div>
         )}
         {error && (
