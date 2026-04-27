@@ -122,7 +122,7 @@ function CumulativeChart({
     <div className="flex flex-col gap-2">
       <svg
         viewBox={`0 0 ${W} ${H}`}
-        preserveAspectRatio="none"
+        preserveAspectRatio="xMidYMid meet"
         className="w-full"
         style={{ height: H, display: "block" }}
       >
