@@ -1,28 +1,33 @@
 /**
  * Public live stats — the unauthenticated `/live` page reads from here.
  *
- * Reads every event + pageview row, buckets by UTC day, returns the
- * cumulative running total over time plus the all-time grand total.
+ * Reads a bounded window of recent event + pageview rows, buckets by UTC day,
+ * and returns a cumulative running total for the sampled data.
  *
  * Convex queries are reactive: each ingest invalidates this query and
  * pushes a fresh result down the websocket, so the live counter ticks up
  * on the page in real time without polling.
  *
- * Trade-off: at scale this scan gets expensive. If row counts grow large
- * enough that the query latency or read budget becomes a problem, swap
- * to `@convex-dev/aggregate` for incremental aggregates — drop-in. For v1
- * we accept the simple version.
+ * We intentionally cap the number of scanned rows per table so this query
+ * never hits Convex's per-function read limit.
  */
 
 import { query } from "./_generated/server";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
+const MAX_ROWS_PER_TABLE = 8_000;
 
 export const stats = query({
   args: {},
   handler: async (ctx) => {
-    const events = await ctx.db.query("events").collect();
-    const pageviews = await ctx.db.query("pageviews").collect();
+    const events = await ctx.db
+      .query("events")
+      .order("desc")
+      .take(MAX_ROWS_PER_TABLE);
+    const pageviews = await ctx.db
+      .query("pageviews")
+      .order("desc")
+      .take(MAX_ROWS_PER_TABLE);
 
     const dayBuckets = new Map<number, number>();
     for (const e of events) {

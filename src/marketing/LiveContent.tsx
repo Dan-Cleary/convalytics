@@ -14,7 +14,7 @@ const CARD_STYLE = {
 // ticks up live and the chart's right edge extends without polling.
 export function LiveContent() {
   const stats = useQuery(api.live.stats);
-  const total = stats?.total ?? 0;
+  const total = stats?.total;
 
   // Tween the displayed number toward the real total so the live ticks
   // feel like a counter rolling up rather than a jump-cut.
@@ -53,7 +53,11 @@ export function LiveContent() {
               lineHeight: 1,
             }}
           >
-            {displayed.toLocaleString()}
+            {displayed === undefined ? (
+              <span style={{ color: "#c4bfb2" }}>—</span>
+            ) : (
+              displayed.toLocaleString()
+            )}
           </p>
           <p className="text-xs" style={{ color: "#6b6456" }}>
             Page views and custom product events sent to Convalytics across
