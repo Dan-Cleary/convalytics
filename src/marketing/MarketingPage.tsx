@@ -61,10 +61,21 @@ export function MarketingPage({ children }: { children: ReactNode }) {
           .marketing-article h3 { font-size: 0.875rem; font-weight: 600; margin-top: 1.25rem; margin-bottom: 0.25rem; }
           .marketing-article p { margin-bottom: 0.75rem; }
           .marketing-article ul, .marketing-article ol { margin-bottom: 0.75rem; padding-left: 1.25rem; }
+          .marketing-article ul { list-style: disc; }
+          .marketing-article ol { list-style: decimal; }
           .marketing-article li { margin-bottom: 0.25rem; }
           .marketing-article a { color: #e8651c; text-decoration: underline; }
           .marketing-article a:hover { color: #c9581a; }
           .marketing-article code { background: #d5d0c8; padding: 0 0.25rem; font-size: 0.8em; }
+          .marketing-article pre { background: #1a1814; color: #f5f1e8; padding: 1rem 1.25rem; margin: 1rem 0; overflow-x: auto; border: 2px solid #1a1814; box-shadow: 4px 4px 0 #1a1814; font-size: 0.75rem; line-height: 1.55; }
+          .marketing-article pre code { background: transparent; color: inherit; padding: 0; font-size: inherit; }
+          .marketing-article details { margin: 1rem 0; padding: 0.75rem 1rem; background: #f5f1e8; border: 2px solid #1a1814; box-shadow: 4px 4px 0 #1a1814; }
+          .marketing-article details > summary { cursor: pointer; font-weight: 700; }
+          .marketing-article details[open] > summary { margin-bottom: 0.75rem; }
+          .marketing-article details pre { margin: 0; }
+          .marketing-article .copy-btn { display: inline-block; background: #1a1814; color: #fff; padding: 0.4rem 0.85rem; font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; border: 2px solid #1a1814; box-shadow: 3px 3px 0 #e8651c; cursor: pointer; margin-bottom: 0.75rem; font-family: inherit; }
+          .marketing-article .copy-btn:hover { background: #e8651c; box-shadow: 3px 3px 0 #1a1814; }
+          .marketing-article .copy-btn:active { transform: translate(2px, 2px); box-shadow: 1px 1px 0 #1a1814; }
           .marketing-article header p { color: #6b6456; }
           .marketing-article nav[aria-label="Site navigation"] { margin-top: 2.5rem; padding-top: 1rem; border-top: 1px solid #d5d0c8; color: #9b9488; font-size: 0.75rem; }
           .marketing-article nav[aria-label="Site navigation"] a { color: #9b9488; text-decoration: none; }

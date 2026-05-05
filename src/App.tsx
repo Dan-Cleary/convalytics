@@ -8,6 +8,9 @@ import { AboutContent } from "./marketing/AboutContent";
 import { PrivacyContent } from "./marketing/PrivacyContent";
 import { ContactContent } from "./marketing/ContactContent";
 import { McpContent } from "./marketing/McpContent";
+import { BlogIndexContent } from "./marketing/BlogIndexContent";
+import { BlogPostContent } from "./marketing/BlogPostContent";
+import { loadPostsFromGlob } from "./lib/blog";
 import { LiveContent } from "./marketing/LiveContent";
 import { MarketingPage } from "./marketing/MarketingPage";
 import { Sidebar } from "./components/Sidebar";
@@ -35,6 +38,34 @@ import {
 } from "react-router-dom";
 
 type Environment = "all" | "production" | "development";
+
+// Eager raw glob: every .md in /content/blog gets bundled at build time.
+// Vite's glob signature returns Record<string, unknown>; the `?raw` query
+// guarantees strings at runtime, so cast through unknown to satisfy the
+// loadPostsFromGlob signature.
+const BLOG_RAW = import.meta.glob("/content/blog/*.md", {
+  eager: true,
+  query: "?raw",
+  import: "default",
+}) as unknown as Record<string, string>;
+const CLIENT_POSTS = loadPostsFromGlob(BLOG_RAW);
+
+function BlogPostRoute() {
+  const { slug } = useParams<{ slug: string }>();
+  const post = CLIENT_POSTS.find((p) => p.meta.slug === slug);
+  if (!post) {
+    return (
+      <MarketingPage>
+        <p>Post not found. <a href="/blog">Back to blog</a>.</p>
+      </MarketingPage>
+    );
+  }
+  return (
+    <MarketingPage>
+      <BlogPostContent post={post} />
+    </MarketingPage>
+  );
+}
 
 class PageErrorBoundary extends Component<
   { children: ReactNode },
@@ -101,6 +132,15 @@ export default function App() {
             </MarketingPage>
           }
         />
+        <Route
+          path="/blog"
+          element={
+            <MarketingPage>
+              <BlogIndexContent posts={CLIENT_POSTS} />
+            </MarketingPage>
+          }
+        />
+        <Route path="/blog/:slug" element={<BlogPostRoute />} />
         <Route
           path="/live"
           element={<LiveContent />}
