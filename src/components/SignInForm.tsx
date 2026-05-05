@@ -55,10 +55,10 @@ export function SignInForm() {
 
   return (
     <div
-      className="min-h-screen w-full flex flex-col items-center justify-center pb-6"
+      className="min-h-screen w-full flex flex-col items-center justify-center px-4 pb-6"
       style={{ background: "#e9e6db" }}
     >
-      <div className="w-full max-w-md mx-4 flex flex-col gap-5 flex-1 justify-center">
+      <div className="w-full max-w-md flex flex-col gap-5 flex-1 justify-center">
         {/* Main card — agent-first */}
         <div
           className="bg-white p-8"
@@ -155,7 +155,7 @@ export function SignInForm() {
       </div>
 
       {/* Footer — pinned to bottom */}
-      <div className="w-full max-w-md mx-4 flex items-center justify-between mt-auto pt-4">
+      <div className="w-full max-w-md flex items-center justify-between mt-auto pt-4">
         <span className="text-[10px]" style={{ color: "#9b9488" }}>© 2026 Tethered Software Inc.</span>
         <div className="flex items-center gap-4">
           <a
