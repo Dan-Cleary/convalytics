@@ -73,6 +73,11 @@ export function MarketingPage({ children }: { children: ReactNode }) {
           .marketing-article details > summary { cursor: pointer; font-weight: 700; }
           .marketing-article details[open] > summary { margin-bottom: 0.75rem; }
           .marketing-article details pre { margin: 0; }
+          .marketing-article table { width: 100%; border-collapse: collapse; margin: 1rem 0; font-size: 0.75rem; border: 2px solid #1a1814; box-shadow: 4px 4px 0 #1a1814; background: #f5f1e8; }
+          .marketing-article th, .marketing-article td { padding: 0.5rem 0.75rem; border-bottom: 1px solid #d5d0c8; text-align: left; vertical-align: top; }
+          .marketing-article th { background: #1a1814; color: #f5f1e8; font-weight: 700; text-transform: uppercase; font-size: 0.65rem; letter-spacing: 0.05em; }
+          .marketing-article tr:last-child td { border-bottom: none; }
+          .marketing-article td[align="center"], .marketing-article th[align="center"] { text-align: center; }
           .marketing-article .copy-btn { display: inline-block; background: #1a1814; color: #fff; padding: 0.4rem 0.85rem; font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; border: 2px solid #1a1814; box-shadow: 3px 3px 0 #e8651c; cursor: pointer; margin-bottom: 0.75rem; font-family: inherit; }
           .marketing-article .copy-btn:hover { background: #e8651c; box-shadow: 3px 3px 0 #1a1814; }
           .marketing-article .copy-btn:active { transform: translate(2px, 2px); box-shadow: 1px 1px 0 #1a1814; }
