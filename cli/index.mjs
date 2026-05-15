@@ -3,10 +3,10 @@ import { execSync } from "child_process";
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from "fs";
 import { join, dirname } from "path";
 import { fileURLToPath } from "url";
+import { createInterface } from "readline";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const CLI_VERSION = JSON.parse(readFileSync(join(__dirname, "package.json"), "utf8")).version;
-import { createInterface } from "readline";
 
 // ─── Config ─────────────────────────────────────────────────────────────────
 
