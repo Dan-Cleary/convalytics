@@ -19,7 +19,7 @@ Everything flows into a single dashboard. Projects auto-provision on first event
 npx convalytics init
 ```
 
-This auto-provisions a project, installs the Convex component, patches your config, and inserts the browser script tag. Works with Cursor, Claude Code, and other AI coding agents out of the box.
+This auto-provisions a project, installs the Convex component, patches `convex/convex.config.ts`, creates `convex/analytics.ts` with the write key inlined, inserts the browser script tag into `index.html`, and installs a skill file for AI agents. Works with Cursor, Claude Code, and other AI coding agents out of the box.
 
 ## Packages
 

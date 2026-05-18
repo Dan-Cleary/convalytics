@@ -3,9 +3,10 @@ import { execSync } from "child_process";
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from "fs";
 import { join, dirname } from "path";
 import { fileURLToPath } from "url";
+import { createInterface } from "readline";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-import { createInterface } from "readline";
+const CLI_VERSION = JSON.parse(readFileSync(join(__dirname, "package.json"), "utf8")).version;
 
 // ─── Config ─────────────────────────────────────────────────────────────────
 
@@ -328,7 +329,7 @@ async function verify() {
     userId: `cli-verify-${Date.now()}`,
     sessionId: crypto.randomUUID(),
     timestamp: Date.now(),
-    props: { source: "cli", version: "0.2.0" },
+    props: { source: "cli", version: CLI_VERSION },
   };
 
   step(`Sending test event "convalytics_verify" to ${INGEST_URL}...`);
