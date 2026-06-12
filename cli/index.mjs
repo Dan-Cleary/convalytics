@@ -189,6 +189,7 @@ async function init() {
       `// ships in the browser script tag too.`,
       `export const analytics = new Convalytics(components.convalytics, {`,
       `  writeKey: ${JSON.stringify(writeKey)},`,
+      `  ingestUrl: "https://api.convalytics.dev/ingest",`,
       `});`,
       ``,
     ].join("\n"));
