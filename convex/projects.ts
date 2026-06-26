@@ -541,7 +541,7 @@ export const sendWelcomeEmail = internalAction({
 
       const dashboardUrl = "https://convalytics.dev/overview";
       await resend.sendEmail(
-        ctx,
+        ctx as any,
         FROM,
         ownerEmail,
         `${args.projectName} is now tracking with Convalytics`,

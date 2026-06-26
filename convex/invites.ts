@@ -347,7 +347,7 @@ export const sendInviteEmail = internalAction({
   handler: async (ctx, args) => {
     const inviteUrl = `https://convalytics.dev/invite/${args.token}`;
     await resend.sendEmail(
-      ctx,
+      ctx as any,
       FROM,
       args.toEmail,
       `You've been invited to ${args.teamName} on Convalytics`,

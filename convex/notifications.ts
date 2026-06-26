@@ -52,7 +52,7 @@ export const checkAndNotify = internalAction({
 
     if (threshold === "100") {
       await resend.sendEmail(
-        ctx,
+        ctx as any,
         FROM,
         reservation.ownerEmail,
         "You've hit your Convalytics event limit",
@@ -69,7 +69,7 @@ export const checkAndNotify = internalAction({
       );
     } else {
       await resend.sendEmail(
-        ctx,
+        ctx as any,
         FROM,
         reservation.ownerEmail,
         "You've used 80% of your Convalytics event quota",
@@ -95,7 +95,7 @@ export const sendAccountWelcomeEmail = internalAction({
 
     await Promise.allSettled([
       resend.sendEmail(
-        ctx,
+        ctx as any,
         FROM,
         args.email,
         "Welcome to Convalytics",
