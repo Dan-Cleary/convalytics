@@ -229,14 +229,18 @@ async function init() {
   const skillSrc = join(process.cwd(), "node_modules", "convalytics-dev", "SKILL.md");
   const skillDst = join(process.cwd(), ".claude", "skills", "convalytics", "SKILL.md");
   try {
-    if (existsSync(skillSrc) && !existsSync(skillDst)) {
-      mkdirSync(join(process.cwd(), ".claude", "skills", "convalytics"), { recursive: true });
-      writeFileSync(skillDst, readFileSync(skillSrc, "utf8"));
-      ok("Installed SKILL.md → .claude/skills/convalytics/SKILL.md");
-    } else if (!existsSync(skillSrc)) {
-      ok("Skill file: see https://github.com/Dan-Cleary/convalytics-convex-component/blob/main/SKILL.md");
+    if (existsSync(skillSrc)) {
+      const srcContent = readFileSync(skillSrc, "utf8");
+      const dstContent = existsSync(skillDst) ? readFileSync(skillDst, "utf8") : null;
+      if (srcContent !== dstContent) {
+        mkdirSync(join(process.cwd(), ".claude", "skills", "convalytics"), { recursive: true });
+        writeFileSync(skillDst, srcContent);
+        ok(dstContent ? "Updated SKILL.md → .claude/skills/convalytics/SKILL.md" : "Installed SKILL.md → .claude/skills/convalytics/SKILL.md");
+      } else {
+        ok("Agent skill already up to date");
+      }
     } else {
-      ok("Agent skill already installed");
+      ok("Skill file: see https://github.com/Dan-Cleary/convalytics-convex-component/blob/main/SKILL.md");
     }
   } catch {
     warn("Could not install skill file — add it manually from the docs");
