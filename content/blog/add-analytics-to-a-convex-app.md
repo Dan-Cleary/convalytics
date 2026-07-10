@@ -24,7 +24,7 @@ I just wanted something simple. So I built [Convalytics](https://convalytics.dev
 
 ## The fastest path: paste a prompt
 
-If you don't want to read the rest of this, the homepage at [convalytics.dev](https://convalytics.dev) has a **Copy agent prompt** button. Copy it, paste it into Claude Code, Cursor, or any AI coding agent, and it does the install for you. Page views, the Convex component, the env var, and the first event get wired up while you make coffee.
+If you don't want to read the rest of this, the homepage at [convalytics.dev](https://convalytics.dev) has a **Copy agent prompt** button. Copy it, paste it into Claude Code, Cursor, or any AI coding agent, and it does the install for you. Page views, the Convex component, the analytics singleton, and the first event get wired up while you make coffee.
 
 Or just copy the prompt right here:
 
@@ -83,7 +83,7 @@ The rest of this post is the manual reference, in case you want to know exactly 
 npx convalytics init
 ```
 
-That hits `POST /api/provision`, gets a write key back, and writes it to your `.env.local`. The project is unclaimed. You can link it to a Convalytics account later from the URL the CLI prints. No signup needed first.
+That hits `POST /api/provision`, gets a write key back, and inlines it into `convex/analytics.ts` (the write key is a public ingest identifier, safe to commit). The project is unclaimed. You can link it to a Convalytics account later from the URL the CLI prints. No signup needed first.
 
 ## 2. Drop in the browser script
 
@@ -102,42 +102,51 @@ Custom events from server functions are the more interesting ones. You know who 
 If you used the agent prompt above, this is already done. The agent reads your `convex/schema.ts`, scans every mutation and action, and proposes a tracking plan as a numbered list before instrumenting anything. You either approve, edit, or just say "track everything that touches the users table."
 
 ```
-npm i @convalytics/convex-component
+npm i convalytics-dev
 ```
 
 Register it in `convex/convex.config.ts`:
 
 ```ts
 import { defineApp } from "convex/server";
-import convalytics from "@convalytics/convex-component/convex.config";
+import analytics from "convalytics-dev/convex.config";
 
 const app = defineApp();
-app.use(convalytics);
+app.use(analytics);
 export default app;
 ```
 
-Set the write key as a Convex env var:
+Create a singleton in `convex/analytics.ts` with the write key inlined:
 
+```ts
+import { components } from "./_generated/api";
+import { Convalytics } from "convalytics-dev";
+
+export const analytics = new Convalytics(components.convalytics, {
+  writeKey: "wk_...",
+});
 ```
-npx convex env set CONVALYTICS_WRITE_KEY wk_...
-```
+
+The write key is a public ingest identifier — safe to commit. No environment
+variable is required: the component auto-detects the deployment (dev / prod)
+from Convex's injected `CONVEX_CLOUD_URL` at runtime.
 
 ## 4. Track an event from a mutation
 
 In any Convex mutation, action, or scheduled function:
 
 ```ts
-import { internal } from "./_generated/api";
 import { mutation } from "./_generated/server";
+import { analytics } from "./analytics";
 
 export const completeSignup = mutation({
   args: { /* ... */ },
   handler: async (ctx, args) => {
     const userId = await ctx.db.insert("users", { /* ... */ });
 
-    await ctx.runAction(internal.convalytics.track, {
+    await analytics.track(ctx, {
       name: "signup_completed",
-      userId,
+      userId: String(userId),
       props: { plan: "free", source: args.referrer },
     });
 
@@ -146,7 +155,7 @@ export const completeSignup = mutation({
 });
 ```
 
-That's the whole integration. The component batches events server-side and posts them to ingest. Your write key never reaches the browser.
+That's the whole integration. `track()` schedules a fire-and-forget delivery from your Convex deployment — it never throws and never blocks the caller. Your write key never reaches the browser.
 
 ## 5. Identify users so the dashboard shows names
 
@@ -155,9 +164,9 @@ By default an event row stores a `userId` like `j5742w...`. Useful for joining, 
 Server-side, pass `userEmail` and `userName` to `track()`:
 
 ```ts
-await ctx.runAction(internal.convalytics.track, {
+await analytics.track(ctx, {
   name: "feature_used",
-  userId: user._id,
+  userId: String(user._id),
   userEmail: user.email,
   userName: user.name,
   props: { feature: "export_csv" },

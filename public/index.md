@@ -22,7 +22,7 @@ One dashboard for marketing-site page views, in-app product events, user identif
 npx convalytics init
 ```
 
-Auto-provisions a project, installs the SDK, patches config, sets the env var, adds the browser script tag. No write key needed up-front.
+Auto-provisions a project, installs the component, patches config, writes the write key inlined into `convex/analytics.ts`, and adds the browser script tag. No write key needed up-front and no environment variables to set.
 
 ## Ingest (for agents)
 
