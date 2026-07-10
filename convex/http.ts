@@ -529,8 +529,10 @@ Events flow immediately — no need to wait for claiming.
 
     npx convalytics init
 
-Auto-provisions a project, installs the SDK, patches config, sets the env var,
-adds the browser script tag, and installs the agent skill file.
+Auto-provisions a project, installs the component, patches config, writes the
+write key inlined into convex/analytics.ts, adds the browser script tag, and
+installs the agent skill file. No environment variables are set — the write key
+is a public ingest identifier that is safe to commit.
 
 If the user already has a write key:
 
@@ -696,21 +698,19 @@ Creates an unclaimed project. No auth required. Human claims via claimUrl later.
 
 Events are automatically tagged as "development" or "production":
 
-- Server-side events: reads CONVALYTICS_DEPLOYMENT_NAME env var, resolves
+- Server-side events: the component reads the deployment slug from CONVEX_CLOUD_URL
+  (injected by Convex into every deployment) at track-time and resolves the
   deployment type (dev → development, prod → production) via cached metadata.
 - Browser-side events: script includes page origin in each payload (localhost → development).
 
-The CLI sets CONVALYTICS_DEPLOYMENT_NAME automatically during init.
+This is fully automatic — no environment variables are set and no per-deployment
+configuration is needed. Pass \`deploymentName\` to the Convalytics constructor
+only if you need to override the auto-detected value (custom domains, self-hosted).
 
-If events show under "All" but not under Dev/Prod filters, check:
-
-    npx convex env list
-
-Set it manually if missing:
-
-    npx convex env set CONVALYTICS_DEPLOYMENT_NAME YOUR_DEPLOYMENT_SLUG
-
-The deployment slug is from .env.local (e.g. "colorful-capybara-119").
+If events show under "All" but not under Dev/Prod filters, the deployment-type
+cache hasn't been populated yet. Make sure the project has been claimed via the
+link printed by \`npx convalytics init\` — the cache is keyed on the live
+CONVEX_CLOUD_URL slug and populated from the Convex Management API on claim.
 
 ## CLI
 
